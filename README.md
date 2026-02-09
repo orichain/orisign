@@ -10,86 +10,87 @@
 
 # OriSign
 
-### Spesifikasi Formal Algoritma SQISIGN Round 2 dengan Contoh dan Analogi
+### Spesifikasi Formal Algoritma SQISIGN Round 2 (Notasi Konsisten dengan Dokumen NIST)
 
 ---
 
 ## Status
 
-Dokumen ini adalah spesifikasi formal SQISIGN Round 2, dilengkapi dengan contoh dan analogi matematika untuk membantu pemahaman.
-
-**(Analogi)**
-Bayangkan algoritma ini seperti sistem **brankas digital**: kunci rahasia adalah kombinasi rahasia, kunci publik adalah brankas yang terlihat semua orang, dan tanda tangan adalah bukti bahwa Anda bisa membuka brankas tanpa membocorkan kombinasi.
+Dokumen ini adalah spesifikasi formal SQISIGN Round 2 dengan **notasi dan terminologi yang diselaraskan sepenuhnya dengan dokumen resmi NIST submission**, dilengkapi contoh dan analogi pedagogis tanpa mengubah makna matematis atau kriptografis.
 
 ---
 
 ## 1. Tujuan dan Model Keamanan
 
-SQISIGN Round 2 adalah skema tanda tangan pasca-kuantum berbasis kurva eliptik supersingular dan aljabar kuaternion.
-
-Versi **Round 2** memperkenalkan penggunaan **isogeni dimensi 2 (permukaan Abelian)** dan teknik interpolasi kernel yang lebih efisien, menghasilkan ukuran tanda tangan lebih kecil dan performa yang lebih baik dibandingkan konstruksi Round 1.
+SQISIGN Round 2 adalah skema tanda tangan pasca-kuantum berbasis kurva eliptik supersingular dan aljabar kuaternion, dibangun melalui korespondensi Deuring antara ideal kiri dalam aljabar kuaternion dan isogeni antara kurva supersingular.
 
 Keamanan bergantung pada:
 
-* Masalah pencarian jalur isogeni supersingular.
-* Masalah persamaan norma ideal kuaternion.
-* Rekonstruksi isogeni dari data kernel/interpolasi.
-
-**(Analogi)**
-Seperti mencoba menemukan jalan rahasia melalui labirin yang ukurannya **eksponensial**, dengan pintu yang hanya bisa dibuka dengan kombinasi rahasia.
+* **Supersingular Isogeny Path Problem**.
+* **Quaternion Ideal Norm Equation Problem**.
+* **Isogeny Reconstruction from Kernel / Interpolation Data**.
 
 ---
 
 ## 2. Parameter Sistem
 
 ```text
-p = β · 2^α − 1,    p ≡ 3 (mod 4)
+p = β · 2^α − 1,   dengan p prima dan p ≡ 3 (mod 4)
 ```
 
-**(Contoh)**
-Jika `α = 100` dan `β = 3`, maka
-`p = 3 · 2^100 − 1` adalah bilangan prima besar.
+Parameter keamanan λ menentukan ukuran α dan β.
 
 ---
 
-### 2.1 Parameter Utama
+### 2.1 Parameter Utama (Notasi NIST)
 
-* **e_sk** — Panjang ideal rahasia.
-  **(Contoh / Analogi)**: Seperti jumlah putaran kombinasi brankas;
-  `2^e_sk ≈ sqrt(p)` berarti ada **triliunan kemungkinan**.
+* **e** — Panjang ideal rahasia, dengan
 
-* **D_mix** — Derajat komitmen, bilangan prima lebih besar dari `2^(4λ)`.
-  **(Analogi)**: Brankas palsu yang bisa diverifikasi tapi tidak mempermudah penyerang.
+  ```text
+  2^e ≈ √p.
+  ```
 
-* **e_chl** — Panjang isogeni tantangan.
-  **(Analogi)**: Panjang pertanyaan dari auditor untuk menguji brankas.
+* **D_com** — Derajat komitmen, bilangan prima dengan
 
-* **D_rsp** — Derajat respons, dengan `D_rsp ≤ 2^e_rsp`.
-  **(Contoh / Analogi)**: Bukti bahwa Anda bisa membuka pintu tertentu tanpa menunjukkan seluruh kombinasi.
+  ```text
+  D_com > 2^{4λ}.
+  ```
+
+* **e_chal** — Panjang bit tantangan.
+
+* **D_resp** — Derajat respons, dengan
+
+  ```text
+  D_resp ≤ 2^{e_resp}.
+  ```
 
 ---
 
 ### 2.2 Fungsi Hash
 
 ```text
-H : {0,1}* → {0,1}^e_chl   (menggunakan SHAKE-256)
+H : {0,1}* → {0,1}^{e_chal}
 ```
 
-**(Analogi)**
-Menghasilkan pertanyaan auditor dari pesan dan kunci publik secara deterministik.
+Diinstansiasi menggunakan **SHAKE-256**.
 
 ---
 
 ## 3. Aritmetika Lapangan Hingga
 
-**(Contoh nyata)**
-Jika `p = 7`, maka:
+Untuk bilangan prima p:
 
 ```text
-F7 = {0,1,2,3,4,5,6}
+F_p = Z/pZ
 ```
 
-dengan operasi modulo `p`:
+Contoh untuk p = 7:
+
+```text
+F_7 = {0,1,2,3,4,5,6}
+```
+
+Dengan operasi modulo p:
 
 ```text
 3 + 5 ≡ 1 (mod 7)
@@ -98,74 +99,78 @@ dengan operasi modulo `p`:
 
 ---
 
-### 3.1 Ekstensi Kuadrat F_p²
+### 3.1 Ekstensi Kuadrat F_{p^2}
 
-Ambil `i` sehingga:
+Karena p ≡ 3 (mod 4), elemen −1 bukan kuadrat di F_p. Definisikan:
 
 ```text
-i² = −1 ∈ F_p
+F_{p^2} = F_p[i] / (i^2 + 1),
 ```
 
-Setiap elemen berbentuk:
+dengan relasi
 
 ```text
-x = a + b·i,   dengan a,b ∈ F_p
+i^2 = −1,
 ```
 
-**(Contoh nyata)**
-Jika `p = 7`, maka:
+di mana −1 ∈ F_p dan i ∉ F_p.
+
+Setiap elemen x ∈ F_{p^2} dapat ditulis unik sebagai:
 
 ```text
-i² ≡ −1 ≡ 6 (mod 7)
-x = 2 + 3i ∈ F7²
+x = a + b·i,   dengan a,b ∈ F_p.
+```
+
+**Contoh (p = 7):**
+
+```text
+i^2 ≡ −1 ≡ 6 (mod 7)
+x = 2 + 3i ∈ F_{7^2}
 ```
 
 Operasi dasar:
 
 ```text
-(a+bi) + (c+di) = (a+c) + (b+d)i
-(a+bi)(c+di) = (ac − bd) + (ad + bc)i
-(a+bi)^−1 = (a − bi)/(a² + b²)   (mod p)
-```
-
-**(Contoh)**
-
-```text
-(2+3i)(2−3i)/(2²+3²) ≡ 1 (mod 7)
+(a+bi) + (c+di) = (a+c) + (b+d)i,
+(a+bi)(c+di) = (ac − bd) + (ad + bc)i,
+(a+bi)^{-1} = (a − bi)/(a^2 + b^2)   (mod p).
 ```
 
 ---
 
 ## 4. Kurva Eliptik Supersingular
 
+Dalam spesifikasi SQISIGN, digunakan keluarga kurva supersingular tertentu (misalnya bentuk Montgomery) di atas F_{p^2}. Untuk tujuan formal, kurva eliptik dinyatakan sebagai:
+
 ```text
-E : y² = x³ + A·x + B
+E : y^2 = x^3 + A x + B,
 ```
 
-**(Contoh)**
-`E : y² = x³ + 2x + 3` di `F7` memiliki titik:
-`(0,2), (1,3), (2,1), …`
-
-**(Analogi)**
-Papan catur 2D dengan titik-titik yang sah.
+atas F_{p^2}, dengan E supersingular.
 
 ---
 
 ## 5. Isogeni Dimensi 2 (Permukaan Abelian)
 
-**(Analogi)**
-Dua papan catur identik; isogeni dimensi 2 memindahkan konfigurasi titik dari satu papan ke papan lain.
+SQISIGN Round 2 bekerja dengan isogeni derajat (D,D) antara permukaan Abelian berbentuk produk:
+
+```text
+φ : E × E → E' × E'.
+```
+
+Isogeni ini ditentukan oleh kernel isotropik dari orde D^2, yang dikodekan melalui *interpolation data*.
 
 ---
 
 ### 5.1 Definisi
 
+Untuk dua kurva supersingular E dan E', sebuah isogeni dimensi 2 adalah homomorfisme grup aljabar:
+
 ```text
-φ : E₁ × E₁ → E₂ × E₂
+φ : E × E → E' × E'
 ```
 
-**(Contoh)**
-Kernel = `{(0,0), (1,2)}`, dan *interpolation data* digunakan untuk menentukan `φ`.
+dengan kernel K ⊂ E × E yang terstruktur dan berorde D^2.
 
 ---
 
@@ -173,9 +178,29 @@ Kernel = `{(0,0), (1,2)}`, dan *interpolation data* digunakan untuk menentukan `
 
 ### 6.1 Kunci Publik dan Rahasia
 
-* **Kunci publik**: `pk = E_pk` (uniform) → brankas terlihat.
-* **Kunci rahasia**: `sk = I_sk` → kombinasi rahasia.
-* **Tanda tangan**: `σ = (E_com, interpolation data)` → peta titik-titik untuk membuka brankas sementara.
+* **Kunci rahasia**: ideal kiri
+
+  ```text
+  I ⊂ O_0
+  ```
+
+  dengan norma N(I) = 2^e.
+
+* **Kunci publik**:
+
+  ```text
+  E_pk = E_0 / I,
+  ```
+
+  yaitu kurva supersingular hasil aksi ideal pada kurva dasar E_0.
+
+* **Tanda tangan**:
+
+  ```text
+  σ = (E_com, aux),
+  ```
+
+  di mana aux adalah *interpolation data* yang mengodekan isogeni respons.
 
 ---
 
@@ -183,94 +208,123 @@ Kernel = `{(0,0), (1,2)}`, dan *interpolation data* digunakan untuk menentukan `
 
 ### 7.1 Pembangkitan Kunci
 
-Ambil ideal acak `I ⊂ O₀`, hitung:
+1. Ambil ideal kiri acak
 
-```text
-E_pk = E₀ / I
-```
+   ```text
+   I ⊂ O_0
+   ```
 
-**(Analogi)**
-Membuat brankas baru dari kombinasi rahasia.
+   dengan N(I) = 2^e.
+
+2. Hitung kurva publik:
+
+   ```text
+   E_pk = E_0 / I.
+   ```
 
 ---
 
 ### 7.2 Penandatanganan
 
+Untuk menandatangani pesan m dengan kunci rahasia I dan kunci publik E_pk:
+
 1. **Komitmen**
+   Pilih ideal kiri acak J dengan N(J) = D_com dan hitung:
 
-```text
-E_com = E_pk / J
-```
-
-dengan `J` acak → brankas sementara.
+   ```text
+   E_com = E_pk / J.
+   ```
 
 2. **Tantangan**
+   Hitung:
 
-Tantangan `c` → pilih titik basis → interpolasi isogeni.
+   ```text
+   c = H(E_pk, E_com, m) ∈ {0,1}^{e_chal}.
+   ```
+
+   Tantangan c menentukan kernel K_c ⊂ E_pk × E_pk dari orde D_com^2.
 
 3. **Respons**
+   Menggunakan ideal rahasia I dan kernel K_c, bangun *interpolation data* aux yang mendeskripsikan isogeni derajat (D_resp, D_resp):
 
-Bangun *interpolation data* → bukti mengetahui kombinasi rahasia.
+   ```text
+   φ_resp : E_com × E_com → E_c × E_c,
+   ```
+
+   di mana E_c = E_pk / K_c.
+
+   Keluaran tanda tangan adalah:
+
+   ```text
+   σ = (E_com, aux).
+   ```
 
 ---
 
 ### 7.3 Verifikasi
 
-* Verifikator membangun kembali isogeni `(D,D)` dari *interpolation data*.
-* Terima jika kernel menghasilkan kodomain = `E_chl`.
-* **(Analogi)** Auditor membuka brankas sementara menggunakan peta titik-titik.
+Diberikan pesan m, kunci publik E_pk, dan tanda tangan σ = (E_com, aux):
+
+1. Hitung kembali:
+
+   ```text
+   c = H(E_pk, E_com, m).
+   ```
+
+2. Dari c, bangun kernel tantangan K_c ⊂ E_pk × E_pk dan kurva target:
+
+   ```text
+   E_c = E_pk / K_c.
+   ```
+
+3. Gunakan aux untuk merekonstruksi isogeni respons:
+
+   ```text
+   φ_resp : E_com × E_com → E_c × E_c.
+   ```
+
+4. Terima jika isogeni hasil rekonstruksi valid dan memiliki kernel sesuai.
 
 ---
 
 ## 8. Diagram Alur Penandatanganan
 
-### 8.1 Diagram Konseptual (Mermaid)
-
-```mermaid
-flowchart LR
-  A[E_pk × E_pk] -->|φ_J| B[E_com × E_com]
-  A -->|φ_c| C[E_chl × E_chl]
-  B -->|interp| C
-```
-
-### 8.2 Versi Linear (Fallback)
+### 8.1 Diagram Konseptual
 
 ```text
 Komitmen:
-E_pk × E_pk →(φ_J)→ E_com × E_com
+E_pk × E_pk  --φ_J-->  E_com × E_com
 
 Tantangan:
-E_pk × E_pk →(φ_c)→ E_chl × E_chl
+E_pk × E_pk  --φ_c-->  E_c × E_c
 
-Interpolasi:
-E_com × E_com →(interp)→ E_chl × E_chl
+Respons:
+E_com × E_com  --φ_resp-->  E_c × E_c
 ```
 
 ---
 
 ## 9. Intuisi Keamanan
 
-Memalsukan tanda tangan berarti membuat *interpolation data* tanpa mengetahui `I_sk`.
-
-**(Analogi)**
-Seperti mencoba membuka brankas tanpa kombinasi rahasia; labirin kombinasi triliunan kemungkinan.
+Pemalsuan tanda tangan memerlukan pembangunan *interpolation data* yang valid tanpa mengetahui ideal rahasia I, yang ekuivalen dengan menyelesaikan Supersingular Isogeny Path Problem atau Quaternion Ideal Norm Equation Problem.
 
 ---
 
 ## 10. Persyaratan Keamanan Implementasi
 
-* Operasi rahasia harus constant-time, tanpa percabangan tergantung nilai rahasia.
-* Buffer tetap, randomisasi koordinat, masking, blinding ideal.
-* Perlindungan side-channel (cache, timing, power) wajib diterapkan.
+* Semua operasi yang melibatkan rahasia harus **constant-time**.
+* Tidak boleh ada percabangan atau akses memori bergantung data rahasia.
+* Wajib menerapkan randomisasi koordinat, masking, dan blinding.
+* Harus ada perlindungan terhadap side-channel (timing, cache, power, EM).
 
 ---
 
 ## 11. Ringkasan Implementasi
 
-* Kunci rahasia: ideal kiri bernorma `2^e_sk ≈ sqrt(p)`.
-* Kunci publik: kurva supersingular, uniform.
-* Tanda tangan: kurva komitmen + *interpolation data*.
-* Verifikasi: membangun kembali isogeni `(D,D)` dari *interpolation data*.
+* Kunci rahasia: ideal kiri I ⊂ O_0 dengan N(I) = 2^e ≈ √p.
+* Kunci publik: kurva supersingular E_pk = E_0 / I.
+* Tanda tangan: pasangan (E_com, aux) dengan aux = *interpolation data*.
+* Verifikasi: rekonstruksi isogeni (D_resp, D_resp) dari aux.
 * Tidak ada pertukaran kunci.
 
 ---
@@ -297,62 +351,49 @@ Digunakan semata-mata sebagai **alat bantu pemahaman konseptual**.
 #include <math.h>
 
 #define P 7
-#define ESK 2   // Panjang ideal rahasia [1,2]
-#define ECHL 3  // Panjang isogeni tantangan (hash result) [1,3]
+#define E 2      // Panjang ideal rahasia (toy)
+#define ECHAL 3  // Panjang tantangan (toy)
 
 typedef struct { int re; int im; } Fp2;
 
-// --- FUNGSI SIGNING ---
-// 1. Komitmen: Membuat brankas sementara (E_com) [1]
+// --- FUNGSI SIGNING (TOY) ---
 Fp2 sign_commitment(int *j_rand) {
     *j_rand = rand() % P; // J acak
     Fp2 e_com = { (*j_rand * 4) % P, (*j_rand * 1) % P };
     return e_com;
 }
 
-// 2. Tantangan: Hash dari pesan & kunci publik [1]
 int sign_challenge(const char* msg, Fp2 pk) {
-    // Simulasi H: {0,1}* -> {0,1}^echl
-    int hash = (msg[0] + pk.re) % (int)pow(2, ECHL);
+    int hash = (msg[0] + pk.re) % (int)pow(2, ECHAL);
     return hash;
 }
 
-// 3. Respons: Bukti mengetahui sk tanpa membocorkannya [1]
 int sign_response(int sk, int j_rand, int chall) {
-    // Simulasi pembangunan interpolation data
-    // Dalam spek aslinya, ini adalah algoritma rekonstruksi isogeni
     return (sk + j_rand + chall) % P;
 }
 
-// --- FUNGSI VERIFIKASI ---
-// Menerima jika kernel menghasilkan kodomain = E_chl [1]
+// --- FUNGSI VERIFIKASI (TOY) ---
 int verify(Fp2 pk, Fp2 e_com, int chall, int resp) {
-    // Verifikator membangun kembali isogeni dari interpolation data
-    // Simulasi check: apakah resp konsisten dengan pk, e_com, dan chall
     int check = (pk.re + e_com.re + chall) % P;
-
-    if (resp != 0 && check > 0) return 1; // Terima
-    return 0; // Tolak
+    if (resp != 0 && check > 0) return 1;
+    return 0;
 }
 
 int main(void) {
-    // Setup Awal
-    int sk = rand() % (int)pow(2, ESK);
-    Fp2 pk = { (sk * 3) % P, (sk * 2) % P }; // pk = E_0/I
+    int sk = rand() % (int)pow(2, E);
+    Fp2 pk = { (sk * 3) % P, (sk * 2) % P };
     const char* pesan = "Laporan Mingguan Irjen";
 
-    // PROSES SIGNING
     int j_rand;
-    Fp2 e_com = sign_commitment(&j_rand);         // Step 1: Komitmen
-    int chall = sign_challenge(pesan, pk);        // Step 2: Tantangan
-    int resp  = sign_response(sk, j_rand, chall); // Step 3: Respons
+    Fp2 e_com = sign_commitment(&j_rand);
+    int chall = sign_challenge(pesan, pk);
+    int resp  = sign_response(sk, j_rand, chall);
 
     printf("--- ORISIGN SIGNATURE ---\n");
     printf("E_com (Commitment): %d + %di\n", e_com.re, e_com.im);
     printf("Challenge: %d\n", chall);
     printf("Response: %d\n", resp);
 
-    // PROSES VERIFIKASI
     int is_valid = verify(pk, e_com, chall, resp);
 
     printf("\n--- VERIFICATION RESULT ---\n");
