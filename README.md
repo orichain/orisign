@@ -261,3 +261,90 @@ Seperti mencoba membuka brankas tanpa kombinasi rahasia; labirin kombinasi trili
 
 ---
 
+## Appendix A — Analogi Implementasi (Toy Model, Non-Kriptografis)
+
+⚠️ **Catatan penting**  
+Kode berikut **bukan implementasi SQISIGN yang aman** dan **tidak merepresentasikan operasi kriptografi sesungguhnya**.
+Ini hanya *toy model* untuk menjelaskan alur:
+komitmen → tantangan → respons → verifikasi.
+
+Digunakan semata-mata sebagai **alat bantu pemahaman konseptual**.
+
+---
+
+### Contoh: Simulasi Signing & Verification
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#define P 7
+#define ESK 2   // Panjang ideal rahasia [cite: 21, 78]
+#define ECHL 3  // Panjang isogeni tantangan (hash result) [cite: 23, 26]
+
+typedef struct { int re; int im; } Fp2;
+
+// --- FUNGSI SIGNING ---
+// 1. Komitmen: Membuat brankas sementara (E_com) [cite: 59]
+Fp2 sign_commitment(int *j_rand) {
+    *j_rand = rand() % P; // J acak [cite: 59]
+    Fp2 e_com = { (*j_rand * 4) % P, (*j_rand * 1) % P };
+    return e_com;
+}
+
+// 2. Tantangan: Hash dari pesan & kunci publik [cite: 26, 27, 60]
+int sign_challenge(const char* msg, Fp2 pk) {
+    // Simulasi H: {0,1}* -> {0,1}^echl [cite: 26]
+    int hash = (msg[0] + pk.re) % (int)pow(2, ECHL);
+    return hash;
+}
+
+// 3. Respons: Bukti mengetahui sk tanpa membocorkannya [cite: 24, 61]
+int sign_response(int sk, int j_rand, int chall) {
+    // Simulasi pembangunan interpolation data [cite: 61]
+    // Dalam spek aslinya, ini adalah algoritma rekonstruksi isogeni [cite: 14]
+    return (sk + j_rand + chall) % P;
+}
+
+// --- FUNGSI VERIFIKASI ---
+// Menerima jika kernel menghasilkan kodomain = E_chl [cite: 64]
+int verify(Fp2 pk, Fp2 e_com, int chall, int resp) {
+    // Verifikator membangun kembali isogeni dari interpolation data [cite: 63, 82]
+    // Simulasi check: apakah resp konsisten dengan pk, e_com, dan chall
+    int check = (pk.re + e_com.re + chall) % P;
+
+    if (resp != 0 && check > 0) return 1; // Terima [cite: 64]
+    return 0; // Tolak
+}
+
+int main() {
+    // Setup Awal
+    int sk = rand() % (int)pow(2, ESK);
+    Fp2 pk = { (sk * 3) % P, (sk * 2) % P }; // pk = E_0/I [cite: 57]
+    const char* pesan = "Laporan Mingguan Irjen";
+
+    // PROSES SIGNING [cite: 58]
+    int j_rand;
+    Fp2 e_com = sign_commitment(&j_rand);      // Step 1: Komitmen [cite: 59]
+    int chall = sign_challenge(pesan, pk);     // Step 2: Tantangan [cite: 60]
+    int resp  = sign_response(sk, j_rand, chall); // Step 3: Respons [cite: 61]
+
+    printf("--- ORISIGN SIGNATURE ---\n");
+    printf("E_com (Commitment): %d + %di\n", e_com.re, e_com.im);
+    printf("Challenge: %d\n", chall);
+    printf("Response: %d\n", resp);
+
+    // PROSES VERIFIKASI [cite: 62]
+    int is_valid = verify(pk, e_com, chall, resp);
+
+    printf("\n--- VERIFICATION RESULT ---\n");
+    if (is_valid) {
+        printf("Status: VALID (Auditor menerima bukti) [cite: 65]\n");
+    } else {
+        printf("Status: INVALID (Kombinasi salah) [cite: 72]\n");
+    }
+
+    return 0;
+}
+
