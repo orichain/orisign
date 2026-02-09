@@ -336,13 +336,28 @@ Check resp == 3 -> valid
 
 ## 8. Diagram Alur Penandatanganan (Pedagogis)
 
-```text
-E_pk × E_pk  --φ_J-->  E_com × E_com   [secret → public]
-E_pk × E_pk  --φ_c-->  E_c × E_c     [public → public]
-E_com × E_com  --φ_resp-->  E_c × E_c [secret → public]
+```mermaid
+flowchart LR
+    %% Nodes
+    E_pk["E_pk × E_pk"]
+    E_com["E_com × E_com"]
+    E_c["E_c × E_c"]
+
+    %% Edges
+    E_pk -->|φ_J| E_com
+    E_pk -->|φ_c| E_c
+    E_com -->|φ_resp| E_c
+
+    %% Styling edges
+    linkStyle 0 stroke:#f00, stroke-width:2px   %% φ_J secret → public
+    linkStyle 1 stroke:#0f0, stroke-width:2px   %% φ_c public → public
+    linkStyle 2 stroke:#f00, stroke-width:2px   %% φ_resp secret → public
 ```
 
-Panah berwarna hijau untuk operasi publik, merah untuk data rahasia.
+**Keterangan warna:**
+
+* **Merah** → operasi **mengandung data rahasia**
+* **Hijau** → operasi **publik / aman terlihat semua**
 
 ---
 
