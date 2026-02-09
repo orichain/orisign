@@ -1,7 +1,7 @@
 # OriSign — SQISIGN Round 2 Specification (with Examples & Analogies)
 
-> Spesifikasi formal SQISIGN Round 2 dengan contoh matematis dan analogi
-> untuk membantu pemahaman implementasi dan keamanan.
+Spesifikasi formal SQISIGN Round 2 dengan contoh matematis dan analogi
+untuk membantu pemahaman implementasi dan keamanan.
 
 ---
 
@@ -36,28 +36,25 @@ dengan kombinasi rahasia.
 
 ## Parameter Sistem
 
-\[
-p = \beta \cdot 2^\alpha - 1, \quad p \equiv 3 \pmod{4}.
-\]
+p = β · 2^α − 1, dengan p ≡ 3 (mod 4).
 
-**(Contoh)**: Jika $\alpha=100$ dan $\beta=3$, maka
-$p = 3 \cdot 2^{100}-1$ adalah bilangan prima besar.
+**(Contoh)**: Jika α = 100 dan β = 3, maka  
+p = 3 · 2^100 − 1 adalah bilangan prima besar.
 
 ### Parameter Utama
 
-- **$e_{\text{sk}}$** — Panjang ideal rahasia  
-  *(Analogi)*: Seperti jumlah putaran kombinasi brankas;
-  $2^{e_{\text{sk}}} \approx \sqrt{p}$ berarti ada **triliunan kemungkinan**.
+- **e_sk** — Panjang ideal rahasia.  
+  *(Analogi)*: Seperti jumlah putaran kombinasi brankas;  
+  2^e_sk ≈ √p berarti ada **triliunan kemungkinan**.
 
-- **$D_{\text{mix}}$** — Derajat komitmen, bilangan prima lebih besar dari
-  $2^{4\lambda}$  
+- **D_mix** — Derajat komitmen, bilangan prima lebih besar dari 2^(4λ).  
   *(Analogi)*: Brankas palsu yang bisa diverifikasi tapi tidak
   mempermudah penyerang.
 
-- **$e_{\text{chl}}$** — Panjang isogeni tantangan  
+- **e_chl** — Panjang isogeni tantangan.  
   *(Analogi)*: Panjang pertanyaan dari auditor untuk menguji brankas.
 
-- **$D_{\text{rsp}}$** — Derajat respons, $\le 2^{e_{\text{rsp}}}$  
+- **D_rsp** — Derajat respons, ≤ 2^e_rsp.  
   *(Analogi)*: Bukti bahwa Anda bisa membuka pintu tertentu tanpa
   menunjukkan seluruh kombinasi.
 
@@ -65,9 +62,7 @@ $p = 3 \cdot 2^{100}-1$ adalah bilangan prima besar.
 
 ## Fungsi Hash
 
-\[
-H: \{0,1\}^\ast \to \{0,1\}^{e_{\text{chl}}}, \quad \text{SHAKE-256}.
-\]
+H : {0,1}* → {0,1}^e_chl, menggunakan SHAKE-256.
 
 **(Analogi)**: Menghasilkan pertanyaan auditor dari pesan dan kunci publik
 secara deterministik.
@@ -76,60 +71,40 @@ secara deterministik.
 
 ## Aritmetika Lapangan Hingga
 
-**(Contoh nyata)**: Jika $p=7$, maka
-\[
-\mathbb{F}_7 = \{0,1,2,3,4,5,6\},
-\]
-dengan operasi modulo $p$:
-\[
-3+5 \equiv 1 \pmod{7}, \quad 2\cdot 4 \equiv 1 \pmod{7}.
-\]
+**(Contoh nyata)**: Jika p = 7, maka  
+F₇ = {0,1,2,3,4,5,6}, dengan operasi modulo p:
 
-### Ekstensi Kuadrat $\mathbb{F}_{p^2}$
+3 + 5 ≡ 1 (mod 7),  
+2 · 4 ≡ 1 (mod 7).
 
-Ambil $i$ sehingga $i^2 = -1 \in \mathbb{F}_p$.
+### Ekstensi Kuadrat F_{p²}
 
-\[
-x = a + bi, \quad a,b \in \mathbb{F}_p.
-\]
+Ambil i sehingga i² = −1 ∈ F_p.
 
-**(Contoh nyata)**: Jika $p=7$, maka $i^2 \equiv -1 \equiv 6 \pmod{7}$, dan
-\[
-x = 2 + 3i \in \mathbb{F}_{7^2}.
-\]
+x = a + b i, dengan a,b ∈ F_p.
+
+**(Contoh nyata)**: Jika p = 7, maka  
+i² ≡ −1 ≡ 6 (mod 7), dan  
+x = 2 + 3i ∈ F_{7²}.
 
 Operasi dasar:
 
-\[
-(a+bi) + (c+di) = (a+c) + (b+d)i,
-\]
+(a+bi) + (c+di) = (a+c) + (b+d)i  
+(a+bi)(c+di) = (ac−bd) + (ad+bc)i  
+(a+bi)⁻¹ = (a−bi)/(a²+b²) (mod p)
 
-\[
-(a+bi)(c+di) = (ac-bd) + (ad+bc)i,
-\]
-
-\[
-(a+bi)^{-1} = \frac{a-bi}{a^2+b^2} \pmod{p}.
-\]
-
-**(Contoh)**:
-\[
-x \cdot x^{-1}
-= (2+3i)(2-3i)/(2^2+3^2)
-\equiv 1 \pmod{7}.
-\]
+**(Contoh)**:  
+x · x⁻¹ = (2+3i)(2−3i)/(2²+3²) ≡ 1 (mod 7)
 
 ---
 
 ## Kurva Eliptik Supersingular
 
-\[
-E: y^2 = x^3 + Ax + B.
-\]
+E : y² = x³ + A x + B.
 
 **(Contoh)**:  
-$E: y^2 = x^3 + 2x + 3$ di $\mathbb{F}_7$ memiliki titik
-$(0,2),(1,3),(2,1),\dots$
+E : y² = x³ + 2x + 3 di F₇ memiliki titik  
+(0,2), (1,3), (2,1), …
 
 **(Analogi)**: Papan catur 2D dengan titik-titik yang sah.
 
@@ -142,12 +117,10 @@ konfigurasi titik dari satu papan ke papan lain.
 
 ### Definisi
 
-\[
-\phi: E_1 \times E_1 \to E_2 \times E_2.
-\]
+φ : E₁ × E₁ → E₂ × E₂.
 
-**(Contoh)**: Kernel $= \{(0,0),(1,2)\}$, *interpolation data* digunakan
-untuk menentukan $\phi$.
+**(Contoh)**: Kernel = {(0,0),(1,2)}, *interpolation data* digunakan
+untuk menentukan φ.
 
 ---
 
@@ -155,9 +128,9 @@ untuk menentukan $\phi$.
 
 ### Kunci Publik dan Rahasia
 
-- **Kunci publik**: $pk = E_{pk}$ → brankas terlihat
-- **Kunci rahasia**: $sk = I_{sk}$ → kombinasi rahasia
-- **Tanda tangan**: $\sigma = (E_{com}, \text{interpolation data})$ →
+- **Kunci publik**: pk = E_pk → brankas terlihat
+- **Kunci rahasia**: sk = I_sk → kombinasi rahasia
+- **Tanda tangan**: σ = (E_com, interpolation data) →
   peta titik-titik untuk membuka brankas sementara
 
 ---
@@ -166,10 +139,8 @@ untuk menentukan $\phi$.
 
 ### Pembangkitan Kunci
 
-Ambil ideal acak $I \subset \mathcal{O}_0$, hitung
-\[
-E_{pk} = E_0/I.
-\]
+Ambil ideal acak I ⊂ O₀, hitung  
+E_pk = E₀ / I.
 
 *(Analogi)*: Membuat brankas baru dari kombinasi rahasia.
 
@@ -178,13 +149,10 @@ E_{pk} = E_0/I.
 ### Penandatanganan
 
 1. **Komitmen**  
-   \[
-   E_{com} = E_{pk}/J,
-   \]
-   dengan $J$ acak → brankas sementara.
+   E_com = E_pk / J, dengan J acak → brankas sementara.
 
 2. **Tantangan**  
-   $c$ → pilih titik basis → interpolasi isogeni.
+   c → pilih titik basis → interpolasi isogeni.
 
 3. **Respons**  
    Bangun *interpolation data* → bukti mengetahui kombinasi rahasia.
@@ -193,30 +161,26 @@ E_{pk} = E_0/I.
 
 ### Verifikasi
 
-- Verifikator membangun kembali isogeni $(D,D)$ dari *interpolation data*
-- Terima jika kernel menghasilkan kodomain $= E_{chl}$
-- *(Analogi)*: Auditor membuka brankas sementara menggunakan peta
-  titik-titik
+- Verifikator membangun kembali isogeni (D,D) dari *interpolation data*
+- Terima jika kernel menghasilkan kodomain = E_chl
+- *(Analogi)*: Auditor membuka brankas sementara menggunakan peta titik-titik
 
 ---
 
 ## Diagram Alur Penandatanganan
 
-\[
-\begin{tikzcd}[row sep=large, column sep=large]
-E_{pk}\times E_{pk} \arrow[r,"\phi_J"] \arrow[d,"\phi_c"'] &
-E_{com}\times E_{com} \arrow[d,"\text{interp}"] \\
-E_{chl}\times E_{chl} &
-E_{chl}\times E_{chl}
-\end{tikzcd}
-\]
+E_pk × E_pk --φ_J--> E_com × E_com  
+     |                     |  
+   φ_c                  interp  
+     |                     |  
+E_chl × E_chl -------> E_chl × E_chl  
 
 ---
 
 ## Intuisi Keamanan
 
 Memalsukan tanda tangan berarti membuat *interpolation data* tanpa
-mengetahui $I_{sk}$.
+mengetahui I_sk.
 
 *(Analogi)*: Seperti mencoba membuka brankas tanpa kombinasi rahasia —
 labirin kombinasi triliunan kemungkinan.
@@ -233,10 +197,9 @@ labirin kombinasi triliunan kemungkinan.
 
 ## Ringkasan Implementasi
 
-- Kunci rahasia: ideal kiri bernorma
-  $2^{e_{\text{sk}}} \approx \sqrt{p}$
+- Kunci rahasia: ideal kiri bernorma 2^e_sk ≈ √p
 - Kunci publik: kurva supersingular, uniform
 - Tanda tangan: kurva komitmen + *interpolation data*
-- Verifikasi: membangun kembali isogeni $(D,D)$ dari *interpolation data*
+- Verifikasi: membangun kembali isogeni (D,D) dari *interpolation data*
 - Tidak ada pertukaran kunci
 
