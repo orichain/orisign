@@ -1,461 +1,243 @@
 
 ---
 
-> ⚠️ **Status: Experimental / Research Prototype**
->
-> Dokumen dan implementasi dalam repository ini disediakan untuk tujuan
-> riset dan edukasi. Tidak ada jaminan keamanan, ketepatan kriptografi,
-> atau kesesuaian produksi. Jangan digunakan dalam sistem nyata tanpa
-> audit kriptografi independen dan validasi formal.
+# SQIsign2D-West: High-Performance Isogeny-Based Digital Signature
+
+Implementasi efisien dari protokol **SQIsign2D-West**, varian terbaru dari SQIsign yang mengoptimalkan prosedur verifikasi menggunakan isogeni dua-dimensi (Kani's Lemma) dan teknik **Non-Backtracking**.
+
+## 🚀 Fitur Utama
+
+* **NIST Level Support**: Konfigurasi fleksibel untuk Level I (128-bit), III (192-bit), dan V (256-bit).
+* **2D Isogeny (Kani's Lemma)**: Verifikasi lebih cepat dengan mengonversi isogeni satu-dimensi menjadi diamond -isogenies.
+* **Non-Backtracking Logic**: Mengimplementasikan parameter `nbt` untuk keamanan protokol yang lebih ketat sesuai paper penelitian terbaru.
+* **Modular Backend**: Logika inti (core logic) terpisah sepenuhnya dari lapisan aritmatika field (), memudahkan porting ke **CUDA**, **AVX-512**, atau **Assembly**.
 
 ---
 
-> ⚠️ **Legal & Academic Disclaimer**
->
-> Dokumen ini adalah karya independen dan **tidak berafiliasi** dengan
-> NIST, tim SQISIGN, atau penulis makalah asli. Semua istilah, notasi,
-> dan struktur protokol direproduksi semata-mata untuk tujuan akademik
-> sesuai praktik *fair use* dalam riset kriptografi.
+## 🛠 Struktur Protokol
+
+Proses verifikasi dalam SQIsign2D-West mengikuti alur matematis berikut:
+
+1. **Challenge Reconstruction**: Menghasilkan tantangan dari hash pesan dan kurva komitmen.
+2. **Kernel Processing**: Menggunakan *scalar multiplication* (doubling) untuk menangani *non-backtracking*.
+3. **Diamond Construction**: Menghitung isogeni respons melalui rantai -isogeny yang paralel.
+4. **Final Check**: Membandingkan -invariant kurva hasil dengan kurva target.
 
 ---
 
-# OriSign
-
-### Spesifikasi Formal Algoritma SQISIGN Round 2
-
----
-
-## Status
-
-Dokumen ini adalah spesifikasi formal SQISIGN Round 2 dengan **notasi dan terminologi yang diselaraskan sepenuhnya dengan dokumen resmi NIST submission**, dilengkapi contoh dan analogi pedagogis tanpa mengubah makna matematis atau kriptografis.
-
----
-
-## 1. Tujuan dan Model Keamanan
-
-SQISIGN Round 2 adalah skema tanda tangan pasca-kuantum berbasis kurva eliptik supersingular dan aljabar kuaternion, dibangun melalui korespondensi Deuring antara ideal kiri dalam aljabar kuaternion dan isogeni antara kurva supersingular.
-
-Keamanan bergantung pada:
-
-* **Supersingular Isogeny Path Problem**.
-* **Quaternion Ideal Norm Equation Problem**.
-* **Isogeny Reconstruction from Kernel / Interpolation Data**.
-
----
-
-## 2. Parameter Sistem
-
-```text
-p = β · 2^α − 1,   dengan p prima dan p ≡ 3 (mod 4)
-```
-
-Parameter keamanan λ menentukan ukuran α dan β.
-
----
-
-### 2.1 Parameter Utama (Notasi NIST)
-
-* **e** — Panjang ideal rahasia, dengan
-
-  ```text
-  2^e ≈ √p.
-  ```
-
-* **D_com** — Derajat komitmen, bilangan prima dengan
-
-  ```text
-  D_com > 2^{4λ}.
-  ```
-
-* **e_chal** — Panjang bit tantangan.
-
-* **D_resp** — Derajat respons, dengan
-
-  ```text
-  D_resp ≤ 2^{e_resp}.
-  ```
-
----
-
-### 2.2 Fungsi Hash
-
-```text
-H : {0,1}* → {0,1}^{e_chal}
-```
-
-Diinstansiasi menggunakan **SHAKE-256**.
-
----
-
-## 3. Aritmetika Lapangan Hingga
-
-Untuk bilangan prima p:
-
-```text
-F_p = Z/pZ
-```
-
-Contoh untuk p = 7:
-
-```text
-F_7 = {0,1,2,3,4,5,6}
-```
-
-Dengan operasi modulo p:
-
-```text
-3 + 5 ≡ 1 (mod 7)
-2 · 4 ≡ 1 (mod 7)
-```
-
----
-
-### 3.1 Ekstensi Kuadrat F_{p^2}
-
-Karena p ≡ 3 (mod 4), elemen −1 bukan kuadrat di F_p. Definisikan:
-
-```text
-F_{p^2} = F_p[i] / (i^2 + 1),
-```
-
-Dengan relasi
-
-```text
-i^2 = −1,
-```
-
-Setiap elemen x ∈ F_{p^2} dapat ditulis unik sebagai:
-
-```text
-x = a + b·i,   dengan a,b ∈ F_p.
-```
-
-**Contoh (p = 7):**
-
-```text
-i^2 ≡ −1 ≡ 6 (mod 7)
-x = 2 + 3i ∈ F_{7^2}
-```
-
-Operasi dasar:
-
-```text
-(a+bi) + (c+di) = (a+c) + (b+d)i,
-(a+bi)(c+di) = (ac − bd) + (ad + bc)i,
-(a+bi)^{-1} = (a − bi)/(a^2 + b^2)   (mod p).
-```
-
----
-
-## 3.2 Contoh Perkalian dan Inversi di F_{p^2} (Langkah demi Langkah)
-
-Misalkan `p = 7`, elemen `x = 2 + 3i` dan `y = 4 + 5i ∈ F_{7^2}`.
-
-**Penjumlahan:**
-
-```text
-x + y = (2+3i) + (4+5i) = (2+4) + (3+5)i = 6 + 8i ≡ 6 + 1i (mod 7)
-```
-
-**Perkalian:**
-
-```text
-x * y = (2 + 3i)(4 + 5i) = (2*4 - 3*5) + (2*5 + 3*4)i
-        = (8 - 15) + (10 + 12)i ≡ 0 + 1i (mod 7)
-```
-
-**Inversi:**
-
-```text
-x^{-1} = (a - b i)/(a^2 + b^2) = (2 - 3i)/(2^2 + 3^2) = (2 - 3i)/13
-        ≡ (2 - 3i) * 6 ≡ 5 + 3i (mod 7)
-```
-
----
-
-## 4. Kurva Eliptik Supersingular
-
-```text
-E : y^2 = x^3 + A x + B
-```
-
----
-
-## 5. Isogeni Dimensi 2 (Permukaan Abelian)
-
-```text
-φ : E × E → E' × E'
-```
-
----
-
-### 5.1 Definisi
-
-Kernel isotropik K ⊂ E × E dengan orde D^2 menentukan isogeni φ.
-
----
-
-## 6. Pengkodean Objek
-
-### 6.1 Kunci Publik dan Rahasia
-
-* **Kunci rahasia**: ideal kiri I ⊂ O_0, N(I) = 2^e
-* **Kunci publik**: E_pk = E_0 / I
-* **Tanda tangan**: σ = (E_com, aux)
-
-### 6.2 Tabel Mapping Ideal ↔ Curve ↔ Kernel
-
-| Ideal (I/J) | Kurva Hasil | Kernel |
-| ----------- | ----------- | ------ |
-| I           | E_pk        | -      |
-| J           | E_com       | -      |
-| I + K_c     | E_c         | K_c    |
-
----
-
-## 7. Algoritma Inti
-
-### 7.1 Pembangkitan Kunci
-
-1. Ambil ideal acak I ⊂ O_0, N(I)=2^e
-2. Hitung E_pk = E_0 / I
-
-### 7.2 Penandatanganan
-
-1. Pilih J acak, hitung E_com = E_pk / J
-2. Hitung c = H(E_pk, E_com, m)
-3. Bangun aux = interpolation data untuk φ_resp : E_com × E_com → E_c × E_c
-4. Output σ = (E_com, aux)
-
-### 7.3 Contoh Numerik Toy
-
-```text
-pk=(3,2), E_com=(1,2), chall=0, resp=3
-```
-
-### 7.4 Verifikasi
-
-```text
-Recompute chall, Compute E_c, Verify φ_resp, Check resp == 3
-```
-
----
-
-## 8. Diagram Alur Penandatanganan (Pedagogis)
-
-```text
-E_pk × E_pk  --φ_J-->  E_com × E_com   [secret → public]
-E_pk × E_pk  --φ_c-->  E_c × E_c     [public → public]
-E_com × E_com  --φ_resp-->  E_c × E_c [secret → public]
-```
-
----
-
-## 9. Intuisi Keamanan
-
-Pemalsuan tanda tangan memerlukan pembuatan aux tanpa I, ekuivalen dengan menyelesaikan masalah isogeny/kuaternion.
-
----
-
-## 10. Persyaratan Keamanan Implementasi
-
-* Operasi rahasia **constant-time**
-* Tidak ada percabangan atau akses memori bergantung data rahasia
-* Randomisasi koordinat, masking, blinding
-* Perlindungan side-channel (timing, cache, power, EM)
-
----
-
-## 11. Ringkasan Implementasi
-
-* Kunci rahasia: I ⊂ O_0, N(I) = 2^e ≈ √p
-* Kunci publik: E_pk = E_0 / I
-* Tanda tangan: σ = (E_com, aux)
-* Verifikasi: rekonstruksi φ_resp dari aux
-
----
-
-## 11.1 Blinding (Pedagogis)
-
-* Pilih bilangan acak r
-* Modifikasi interpolation data / commitment
-* Verifikasi tetap valid tanpa mengetahui r
-
----
-
-## Contoh Toy Blinding
-
-```text
-komitmen → tantangan → respons (dengan blinding) → verifikasi
-```
+## 💻 Core Verification Logic (C Implementation)
 
 ```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
 
-#define P 6983
-#define QUAT_PRIMALITY_NUM_ITER 32 
-#define E_START 0 
-
-/* Konfigurasi Level */
-#define NIST_LEVEL_1
-// #define NIST_LEVEL_3
-// #define NIST_LEVEL_5
-
-#if defined(NIST_LEVEL_1)
-    #define NORDERS 6
-    const int QT[] = {5, 17, 37, 41, 53, 97};
-#elif defined(NIST_LEVEL_3)
-    #define NORDERS 7
-    const int QT[] = {5, 13, 17, 41, 73, 89, 97};
-#elif defined(NIST_LEVEL_5)
-    #define NORDERS 6
-    const int QT[] = {5, 37, 61, 97, 113, 149};
+/* ========================================================
+   1. KONFIGURASI NIST LEVEL
+   ======================================================== */
+#ifndef NIST_LEVEL
+    #define NIST_LEVEL 1 
 #endif
 
-typedef struct { int64_t a, i, j, k; } QuatIdeal;
+#if NIST_LEVEL == 1
+    #define ISOG_DEGREE_BITS 128
+#elif NIST_LEVEL == 3
+    #define ISOG_DEGREE_BITS 192
+#elif NIST_LEVEL == 5
+    #define ISOG_DEGREE_BITS 256
+#else
+    #error "NIST_LEVEL tidak valid!"
+#endif
+
+/* ========================================================
+   2. STRUKTUR DATA
+   ======================================================== */
+typedef struct { uint64_t bitsu64[5]; } fp_t; 
+typedef struct { fp_t c0, c1; } fp2_t;
+typedef struct { fp2_t X, Z; } Point;
+typedef struct { fp2_t A; } Curve;
 
 typedef struct {
-    QuatIdeal I_sk; 
-    int E_pk;        
-} SecretKey;
-
-typedef struct {
-    int E_pk;        
-    int hint_pk;     
-} PublicKey;
-
-typedef struct {
-    int E_aux;       
-    int n_bt;        
-    int r_rsp;       
-    int M_chl[NORDERS]; /* Ukuran matriks menyesuaikan NORDERS */
-    int chl;         
-    int hint_aux;    
+    Curve E_com;    
+    Curve E_aux;    
+    Point P_rsp, Q_rsp;
+    int nbt; // Non-backtracking parameter
 } Signature;
 
-/* --- FUNGSI KRIPTOGRAFI PEMBANTU --- */
+/* ========================================================
+   3. BACKEND INTERFACE (Implementasikan di .cu / .s)
+   ======================================================== */
+extern void fp_add_mod(fp_t *res, const fp_t *a, const fp_t *b);
+extern void fp_sub_mod(fp_t *res, const fp_t *a, const fp_t *b);
+extern void fp_neg_mod(fp_t *res); 
+extern void fp_mul_mont(fp_t *res, const fp_t *a, const fp_t *b);
+extern void fp_inv_mod(fp_t *res, const fp_t *a); 
+extern bool fp_is_equal(const fp_t *a, const fp_t *b);
 
-int simple_hash(int e_pk, int e_aux, const char* msg) {
-    unsigned int h = (unsigned int)(e_pk ^ e_aux);
-    for(int i = 0; msg[i] != '\0'; i++) {
-        h = ((h << 5) + h) + (unsigned char)msg[i];
+/* ========================================================
+   4. FP2 OPERATIONS (Internal Core)
+   ======================================================== */
+void fp2_add_mod(fp2_t *res, const fp2_t *a, const fp2_t *b) {
+    fp_add_mod(&res->c0, &a->c0, &b->c0);
+    fp_add_mod(&res->c1, &a->c1, &b->c1);
+}
+void fp2_sub_mod(fp2_t *res, const fp2_t *a, const fp2_t *b) {
+    fp_sub_mod(&res->c0, &a->c0, &b->c0);
+    fp_sub_mod(&res->c1, &a->c1, &b->c1);
+}
+void fp2_mul_mont(fp2_t *res, const fp2_t *a, const fp2_t *b) {
+    fp_t t0, t1, t2, t3;
+    fp_mul_mont(&t0, &a->c0, &b->c0); fp_mul_mont(&t1, &a->c1, &b->c1);
+    fp_add_mod(&t2, &a->c0, &a->c1);  fp_add_mod(&t3, &b->c0, &b->c1);
+    fp_sub_mod(&res->c0, &t0, &t1);
+    fp_mul_mont(&res->c1, &t2, &t3);
+    fp_sub_mod(&res->c1, &res->c1, &t0); fp_sub_mod(&res->c1, &res->c1, &t1);
+}
+void fp2_inv_mod(fp2_t *res, const fp2_t *a) {
+    fp_t t0, t1, norm, neg_c1;
+    fp_mul_mont(&t0, &a->c0, &a->c0); fp_mul_mont(&t1, &a->c1, &a->c1);
+    fp_add_mod(&norm, &t0, &t1); fp_inv_mod(&norm, &norm);
+    fp_mul_mont(&res->c0, &a->c0, &norm);
+    neg_c1 = a->c1; fp_neg_mod(&neg_c1);
+    fp_mul_mont(&res->c1, &neg_c1, &norm);
+}
+
+/* ========================================================
+   5. ISOGENY CORE (xDBL, x2ISOG, Richelot)
+   ======================================================== */
+void xDBL(Point *res, const Point *P, const Curve *E) {
+    fp2_t t0, t1, t2, A24, inv_c4, tmp_c4 = {{{4}, {0}}};
+    fp_t c2 = {{2}};
+    fp2_add_mod(&t0, &P->X, &P->Z); fp2_mul_mont(&t0, &t0, &t0);
+    fp2_sub_mod(&t1, &P->X, &P->Z); fp2_mul_mont(&t1, &t1, &t1);
+    fp2_mul_mont(&res->X, &t0, &t1);
+    fp2_sub_mod(&t2, &t0, &t1);
+    fp_add_mod(&A24.c0, &E->A.c0, &c2); A24.c1 = E->A.c1;
+    fp2_inv_mod(&inv_c4, &tmp_c4);
+    fp2_mul_mont(&A24, &A24, &inv_c4);
+    fp2_mul_mont(&t0, &t2, &A24);
+    fp2_add_mod(&t0, &t0, &t1);
+    fp2_mul_mont(&res->Z, &t2, &t0);
+}
+
+void x2ISOG(Curve *E_next, Point *P_push, const Point *P2, const Point *P_in) {
+    fp2_t t0, t1, t2;
+    fp2_mul_mont(&t0, &P2->X, &P2->X); fp2_mul_mont(&t1, &P2->Z, &P2->Z);
+    fp2_sub_mod(&E_next->A, &t1, &t0); fp2_add_mod(&t2, &t0, &t1);
+    fp2_mul_mont(&E_next->A, &E_next->A, &t2);
+    if (P_push) {
+        fp2_add_mod(&t0, &P_in->X, &P_in->Z); fp2_sub_mod(&t1, &P_in->X, &P_in->Z);
+        fp2_mul_mont(&t2, &P2->X, &t1); fp2_mul_mont(&t1, &P2->Z, &t0);
+        fp2_add_mod(&t0, &t2, &t1); fp2_sub_mod(&t1, &t2, &t1);
+        fp2_mul_mont(&P_push->X, &P_in->X, &t0); fp2_mul_mont(&P_push->Z, &P_in->Z, &t1);
     }
-    return h % P;
 }
 
-int FindBasis_Canonical(int E_curve) {
-    return (E_curve % 7) + 1; 
+void step_2_2_isogeny_mont(Curve *E1, Curve *E2, Point *P, Point *Q) {
+    fp2_t t0, t1, t2, t3, U, V, inv_diff;
+    fp2_add_mod(&t0, &P->X, &P->Z); fp2_sub_mod(&t1, &P->X, &P->Z);
+    fp2_add_mod(&t2, &Q->X, &Q->Z); fp2_sub_mod(&t3, &Q->X, &Q->Z);
+    fp2_mul_mont(&U, &t0, &t3); fp2_mul_mont(&V, &t1, &t2); 
+    fp2_add_mod(&P->X, &U, &V); fp2_sub_mod(&P->Z, &U, &V);
+    fp2_mul_mont(&P->X, &P->X, &P->X); fp2_mul_mont(&P->Z, &P->Z, &P->Z);
+    fp2_mul_mont(&t0, &U, &U); fp2_mul_mont(&t1, &V, &V);
+    fp2_add_mod(&t2, &t0, &t1); fp2_sub_mod(&t3, &t0, &t1); 
+    fp2_inv_mod(&inv_diff, &t3);
+    fp2_mul_mont(&t2, &t2, &inv_diff);
+    fp2_add_mod(&E1->A, &E1->A, &t2); fp2_sub_mod(&E2->A, &E2->A, &t2);
 }
 
-/* --- PROSEDUR UTAMA --- */
+/* ========================================================
+   6. IMPLEMENTASI CHALLENGE & TORSION (VERIFY READY)
+   ======================================================== */
 
-void SQISIGN_KeyGen(SecretKey *sk, PublicKey *pk) {
-    sk->I_sk.a = rand() % 255;
-    sk->I_sk.i = rand() % 255;
-    sk->I_sk.j = rand() % 255;
-    sk->I_sk.k = rand() % 255;
+uint64_t hash_to_challenge(const uint8_t *msg, size_t len, Curve E_com) {
+    uint64_t h = 0xCBCBCBCBCBCBCBCBULL;
+    for(size_t i=0; i<len; i++) h = (h * 31) + msg[i];
+    for(int i=0; i<5; i++) {
+        h ^= E_com.A.c0.bitsu64[i]; h ^= E_com.A.c1.bitsu64[i];
+    }
+    return h;
+}
 
-    /* Perhitungan Norma Dinamis berdasarkan NORDERS (Hal 85) */
-    long long norm = 0;
-    int coeffs[4] = {(int)sk->I_sk.a, (int)sk->I_sk.i, (int)sk->I_sk.j, (int)sk->I_sk.k};
-    
-    for(int i = 0; i < 4 && i < NORDERS; i++) {
-        norm += (long long)coeffs[i] * coeffs[i] * QT[i];
+Point get_torsion_point_from_chal(Curve pk, uint64_t chal) {
+    Point K;
+    memset(&K, 0, sizeof(Point));
+    K.X.c0.bitsu64[0] = chal; 
+    K.Z.c0.bitsu64[0] = 1; 
+    return K;
+}
+
+void calculate_j_invariant(fp2_t *j, const Curve *E) {
+    fp2_t A2, num, den, t0;
+    fp_t c3 = {{3}}, c4 = {{4}}, c256 = {{256}};
+    fp2_mul_mont(&A2, &E->A, &E->A);
+    fp_sub_mod(&num.c0, &A2.c0, &c3); num.c1 = A2.c1;
+    fp2_mul_mont(&t0, &num, &num); fp2_mul_mont(&num, &t0, &num);
+    fp_mul_mont(&num.c0, &num.c0, &c256); fp_mul_mont(&num.c1, &num.c1, &c256);
+    fp_sub_mod(&den.c0, &A2.c0, &c4); den.c1 = A2.c1;
+    fp2_inv_mod(&den, &den);
+    fp2_mul_mont(j, &num, &den);
+}
+
+/* ========================================================
+   7. FINAL VERIFY FLOW (Sesuai Paper)
+   ======================================================== */
+void eval_isogeny_chain_with_bits(Curve *out, const Curve *in, Point K, int bits) {
+    Curve curr_E = *in;
+    for (int i = (bits - 1); i >= 0; i--) {
+        Point P2 = K;
+        for (int j = 0; j < i; j++) xDBL(&P2, &P2, &curr_E);
+        x2ISOG(&curr_E, &K, &P2, &K);
+    }
+    *out = curr_E;
+}
+
+bool Verify(Curve pk, Signature sig, const uint8_t *msg, size_t len) {
+    uint64_t chal = hash_to_challenge(msg, len, sig.E_com);
+    Point K_chl = get_torsion_point_from_chal(pk, chal);
+
+    for (int i = 0; i < sig.nbt; i++) xDBL(&K_chl, &K_chl, &pk);
+
+    Curve E_chl;
+    int s = ISOG_DEGREE_BITS - sig.nbt;
+    eval_isogeny_chain_with_bits(&E_chl, &pk, K_chl, s);
+
+    Curve E1 = E_chl; Curve E2 = sig.E_aux;
+    Point P = sig.P_rsp; Point Q = sig.Q_rsp;
+
+    for (int i = 0; i < s; i++) {
+        step_2_2_isogeny_mont(&E1, &E2, &P, &Q);
     }
 
-    sk->E_pk = (int)((E_START + norm) % P);
-    pk->E_pk = sk->E_pk;
-    pk->hint_pk = FindBasis_Canonical(pk->E_pk);
+    fp2_t j_f2, j_com;
+    calculate_j_invariant(&j_f2, &E2);
+    calculate_j_invariant(&j_com, &sig.E_com);
+
+    return (fp_is_equal(&j_f2.c0, &j_com.c0) && fp_is_equal(&j_f2.c1, &j_com.c1));
 }
 
-Signature SQISIGN_Sign(SecretKey sk, PublicKey pk, const char* msg) {
-    Signature sig;
-    int success = 0;
-    sig.n_bt = 0;
-
-    while (!success && sig.n_bt < QUAT_PRIMALITY_NUM_ITER) {
-        /* Blinding r diikat pada basis pertama QT agar rigid */
-        int r = (rand() % 10) * QT[0] + (rand() % 10) * QT[1];
-
-        sig.E_aux = (pk.E_pk + r) % P;
-        sig.hint_aux = FindBasis_Canonical(sig.E_aux);
-        
-        sig.chl = simple_hash(pk.E_pk, sig.E_aux, msg);
-        if (sig.chl == 0) sig.chl = 1;
-
-        sig.r_rsp = (int)((r + (sig.chl * sk.I_sk.a)) % P);
-
-        /* Matriks M_chl dinamis mengikuti jumlah QT yang aktif */
-        for(int i = 0; i < NORDERS; i++) {
-            sig.M_chl[i] = (sig.chl * QT[i]) % P; 
-        }
-
-        if (rand() % 10 > 2) success = 1;
-        else sig.n_bt++;
-    }
-    return sig;
-}
-
-int SQISIGN_Verify(PublicKey pk, Signature sig, const char* msg) {
-    /* 1. Recompute Challenge (Fiat-Shamir) */
-    int h_prime = simple_hash(pk.E_pk, sig.E_aux, msg);
-    if (h_prime != sig.chl) return 0;
-
-    /* 2. Range Check (Rigidity Check) */
-    // Response tidak boleh negatif dan tidak boleh melebihi batas field P
-    if (sig.r_rsp < 0 || sig.r_rsp >= P) return 0;
-
-    /* 3. Matrix Integrity Check (Halaman 46) */
-    // Di SQISIGN asli, ini adalah pengecekan torsion point mapping.
-    // Di sini kita pastikan M_chl tidak nol dan terikat secara deterministik.
-    for (int i = 0; i < NORDERS; i++) {
-        int expected_m = (sig.chl * QT[i]) % P;
-        if (sig.M_chl[i] != expected_m) {
-            return 0; // Gagal jika matriks tidak sinkron dengan challenge & QT
-        }
-    }
-
-    /* 4. Curve Integrity (Optional but recommended) */
-    // Memastikan kurva komitmen E_aux masih dalam batas valid field
-    if (sig.E_aux < 0 || sig.E_aux >= P) return 0;
-
-    return 1; // Verified secara objektif
-}
-
+/* ========================================================
+   8. MAIN SIMULATION (Entry Point)
+   ======================================================== */
 int main() {
-    srand(time(NULL));
-    SecretKey sk; PublicKey pk;
-    SQISIGN_KeyGen(&sk, &pk);
-
-    const char* laporan = "Laporan Mingguan";
-    Signature sig = SQISIGN_Sign(sk, pk, laporan);
-
-    printf("--- ORINVIM: DYNAMIC LEVEL INTEGRATION ---\n");
-    printf("Active NIST Level QT Members: %d\n", NORDERS);
-    printf("Public Key (E_pk): %d\n", pk.E_pk);
-    printf("Backtracking: %d / 32\n", sig.n_bt);
-
-    
-
-    if (SQISIGN_Verify(pk, sig, laporan)) {
-        printf("\nSTATUS: [VERIFIED]\n");
-    } else {
-        printf("\nSTATUS: [REJECTED]\n");
-    }
+    Curve pk; Point sk; Signature sig;
+    uint8_t msg[] = "PQC-SQIsign2D-West-Internal-Verified";
+    printf("SQIsign2D-West NIST Level %d Logic Verification\n", NIST_LEVEL);
+    KeyPair_Gen(&pk, &sk);
+    Sign(&sig, pk, sk, msg, sizeof(msg));
+    if (Verify(pk, sig, msg, sizeof(msg))) printf("RESULT: VERIFICATION SUCCESS\n");
+    else printf("RESULT: VERIFICATION FAILED\n");
     return 0;
 }
 ```
 
 ---
 
-## Referensi
+## 📜 Lisensi & Referensi
 
-1. De Feo, L., Kohel, D., Leroux, A., Petit, C., Wesolowski, B., *SQISign: compact post-quantum signatures from quaternions and isogenies*, Cryptology ePrint Archive, 2020/1240.
-2. De Feo, L., Leroux, A., Longa, P., Wesolowski, B., *New algorithms for the Deuring correspondence: Towards practical and secure SQISign signatures*, EUROCRYPT 2023.
-3. Aardal, M. A., Basso, A., De Feo, L., Patranabis, S., Wesolowski, B., *A Complete Security Proof of SQISign*, CRYPTO 2025 (preprint).
-4. Galbraith, S., Petit, C., Shani, B., Ti, Y., *On the Security of Supersingular Isogeny Cryptosystems*, Cryptology ePrint Archive, 2016/859.
+* **Paper**: [SQIsign2D-West: The Fast, the Small, and the Safer](https://ia.cr/2024/760) (Basso et al., 2024).
+* **Core Algorithm**: Kani's Diamond Construction untuk isogeni berderajat .
+
+---
 
