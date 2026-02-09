@@ -1,4 +1,4 @@
-````markdown
+
 ---
 
 > ⚠️ **Status: Experimental / Research Prototype**
@@ -18,7 +18,7 @@
 
 Dokumen ini adalah spesifikasi formal SQISIGN Round 2, dilengkapi dengan contoh dan analogi matematika untuk membantu pemahaman.
 
-**(Analogi)**  
+**(Analogi)**
 Bayangkan algoritma ini seperti sistem **brankas digital**: kunci rahasia adalah kombinasi rahasia, kunci publik adalah brankas yang terlihat semua orang, dan tanda tangan adalah bukti bahwa Anda bisa membuka brankas tanpa membocorkan kombinasi.
 
 ---
@@ -31,65 +31,65 @@ Versi **Round 2** memperkenalkan penggunaan **isogeni dimensi 2 (permukaan Abeli
 
 Keamanan bergantung pada:
 
-- Masalah pencarian jalur isogeni supersingular.
-- Masalah persamaan norma ideal kuaternion.
-- Rekonstruksi isogeni dari data kernel/interpolasi.
+* Masalah pencarian jalur isogeni supersingular.
+* Masalah persamaan norma ideal kuaternion.
+* Rekonstruksi isogeni dari data kernel/interpolasi.
 
-**(Analogi)**  
+**(Analogi)**
 Seperti mencoba menemukan jalan rahasia melalui labirin yang ukurannya **eksponensial**, dengan pintu yang hanya bisa dibuka dengan kombinasi rahasia.
 
 ---
 
 ## 2. Parameter Sistem
 
-\[
-p = \beta \cdot 2^\alpha - 1, \quad p \equiv 3 \pmod 4
-\]
+```text
+p = β · 2^α − 1,    p ≡ 3 (mod 4)
+```
 
-**(Contoh)**  
-Jika \(\alpha = 100\) dan \(\beta = 3\), maka  
-\(p = 3 \cdot 2^{100} - 1\) adalah bilangan prima besar.
+**(Contoh)**
+Jika `α = 100` dan `β = 3`, maka
+`p = 3 · 2^100 − 1` adalah bilangan prima besar.
 
 ---
 
 ### 2.1 Parameter Utama
 
-- **\(e_{\text{sk}}\)** — Panjang ideal rahasia.  
-  **(Contoh / Analogi)**: Seperti jumlah putaran kombinasi brankas;  
-  \(2^{e_{\text{sk}}} \approx \sqrt{p}\) berarti ada **triliunan kemungkinan**.
+* **e_sk** — Panjang ideal rahasia.
+  **(Contoh / Analogi)**: Seperti jumlah putaran kombinasi brankas;
+  `2^e_sk ≈ sqrt(p)` berarti ada **triliunan kemungkinan**.
 
-- **\(D_{\text{mix}}\)** — Derajat komitmen, bilangan prima lebih besar dari \(2^{4\lambda}\).  
+* **D_mix** — Derajat komitmen, bilangan prima lebih besar dari `2^(4λ)`.
   **(Analogi)**: Brankas palsu yang bisa diverifikasi tapi tidak mempermudah penyerang.
 
-- **\(e_{\text{chl}}\)** — Panjang isogeni tantangan.  
+* **e_chl** — Panjang isogeni tantangan.
   **(Analogi)**: Panjang pertanyaan dari auditor untuk menguji brankas.
 
-- **\(D_{\text{rsp}}\)** — Derajat respons, dengan \(D_{\text{rsp}} \le 2^{e_{\text{rsp}}}\).  
+* **D_rsp** — Derajat respons, dengan `D_rsp ≤ 2^e_rsp`.
   **(Contoh / Analogi)**: Bukti bahwa Anda bisa membuka pintu tertentu tanpa menunjukkan seluruh kombinasi.
 
 ---
 
 ### 2.2 Fungsi Hash
 
-\[
-H : \{0,1\}^* \to \{0,1\}^{e_{\text{chl}}} \quad \text{(menggunakan SHAKE-256)}
-\]
+```text
+H : {0,1}* → {0,1}^e_chl   (menggunakan SHAKE-256)
+```
 
-**(Analogi)**  
+**(Analogi)**
 Menghasilkan pertanyaan auditor dari pesan dan kunci publik secara deterministik.
 
 ---
 
 ## 3. Aritmetika Lapangan Hingga
 
-**(Contoh nyata)**  
-Jika \(p = 7\), maka:
+**(Contoh nyata)**
+Jika `p = 7`, maka:
 
 ```text
 F7 = {0,1,2,3,4,5,6}
-````
+```
 
-dengan operasi modulo (p):
+dengan operasi modulo `p`:
 
 ```text
 3 + 5 ≡ 1 (mod 7)
@@ -98,9 +98,9 @@ dengan operasi modulo (p):
 
 ---
 
-### 3.1 Ekstensi Kuadrat ( \mathbb{F}_p^2 )
+### 3.1 Ekstensi Kuadrat F_p²
 
-Ambil (i) sehingga:
+Ambil `i` sehingga:
 
 ```text
 i² = −1 ∈ F_p
@@ -113,7 +113,7 @@ x = a + b·i,   dengan a,b ∈ F_p
 ```
 
 **(Contoh nyata)**
-Jika (p = 7), maka:
+Jika `p = 7`, maka:
 
 ```text
 i² ≡ −1 ≡ 6 (mod 7)
@@ -143,8 +143,8 @@ E : y² = x³ + A·x + B
 ```
 
 **(Contoh)**
-(E : y^2 = x^3 + 2x + 3) di (\mathbb{F}_7) memiliki titik:
-((0,2), (1,3), (2,1), \ldots)
+`E : y² = x³ + 2x + 3` di `F7` memiliki titik:
+`(0,2), (1,3), (2,1), …`
 
 **(Analogi)**
 Papan catur 2D dengan titik-titik yang sah.
@@ -165,7 +165,7 @@ Dua papan catur identik; isogeni dimensi 2 memindahkan konfigurasi titik dari sa
 ```
 
 **(Contoh)**
-Kernel = {(0,0), (1,2)}, dan *interpolation data* digunakan untuk menentukan φ.
+Kernel = `{(0,0), (1,2)}`, dan *interpolation data* digunakan untuk menentukan `φ`.
 
 ---
 
@@ -173,9 +173,9 @@ Kernel = {(0,0), (1,2)}, dan *interpolation data* digunakan untuk menentukan φ.
 
 ### 6.1 Kunci Publik dan Rahasia
 
-* **Kunci publik**: (pk = E_{\text{pk}}) (uniform) → brankas terlihat.
-* **Kunci rahasia**: (sk = I_{\text{sk}}) → kombinasi rahasia.
-* **Tanda tangan**: (\sigma = (E_{\text{com}}, \text{interpolation data})) → peta titik-titik untuk membuka brankas sementara.
+* **Kunci publik**: `pk = E_pk` (uniform) → brankas terlihat.
+* **Kunci rahasia**: `sk = I_sk` → kombinasi rahasia.
+* **Tanda tangan**: `σ = (E_com, interpolation data)` → peta titik-titik untuk membuka brankas sementara.
 
 ---
 
@@ -183,7 +183,7 @@ Kernel = {(0,0), (1,2)}, dan *interpolation data* digunakan untuk menentukan φ.
 
 ### 7.1 Pembangkitan Kunci
 
-Ambil ideal acak (I \subset O_0), hitung:
+Ambil ideal acak `I ⊂ O₀`, hitung:
 
 ```text
 E_pk = E₀ / I
@@ -202,11 +202,11 @@ Membuat brankas baru dari kombinasi rahasia.
 E_com = E_pk / J
 ```
 
-dengan (J) acak → brankas sementara.
+dengan `J` acak → brankas sementara.
 
 2. **Tantangan**
 
-Tantangan (c) → pilih titik basis → interpolasi isogeni.
+Tantangan `c` → pilih titik basis → interpolasi isogeni.
 
 3. **Respons**
 
@@ -216,8 +216,8 @@ Bangun *interpolation data* → bukti mengetahui kombinasi rahasia.
 
 ### 7.3 Verifikasi
 
-* Verifikator membangun kembali isogeni ((D,D)) dari *interpolation data*.
-* Terima jika kernel menghasilkan kodomain = (E_{\text{chl}}).
+* Verifikator membangun kembali isogeni `(D,D)` dari *interpolation data*.
+* Terima jika kernel menghasilkan kodomain = `E_chl`.
 * **(Analogi)** Auditor membuka brankas sementara menggunakan peta titik-titik.
 
 ---
@@ -250,7 +250,7 @@ E_com × E_com →(interp)→ E_chl × E_chl
 
 ## 9. Intuisi Keamanan
 
-Memalsukan tanda tangan berarti membuat *interpolation data* tanpa mengetahui (I_{\text{sk}}).
+Memalsukan tanda tangan berarti membuat *interpolation data* tanpa mengetahui `I_sk`.
 
 **(Analogi)**
 Seperti mencoba membuka brankas tanpa kombinasi rahasia; labirin kombinasi triliunan kemungkinan.
@@ -267,10 +267,10 @@ Seperti mencoba membuka brankas tanpa kombinasi rahasia; labirin kombinasi trili
 
 ## 11. Ringkasan Implementasi
 
-* Kunci rahasia: ideal kiri bernorma (2^{e_{\text{sk}}} \approx \sqrt{p}).
+* Kunci rahasia: ideal kiri bernorma `2^e_sk ≈ sqrt(p)`.
 * Kunci publik: kurva supersingular, uniform.
 * Tanda tangan: kurva komitmen + *interpolation data*.
-* Verifikasi: membangun kembali isogeni ((D,D)) dari *interpolation data*.
+* Verifikasi: membangun kembali isogeni `(D,D)` dari *interpolation data*.
 * Tidak ada pertukaran kunci.
 
 ---
@@ -384,6 +384,4 @@ int main(void) {
 4. Galbraith, S., Petit, C., Shani, B., Ti, Y.
    *On the Security of Supersingular Isogeny Cryptosystems*,
    Cryptology ePrint Archive, Report 2016/859.
-
-```
 
