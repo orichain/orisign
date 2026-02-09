@@ -374,21 +374,17 @@ Pemalsuan tanda tangan memerlukan pembangunan *interpolation data* yang valid ta
 
 ---
 
-## Appendix A — Analogi Implementasi (Toy Model, Non-Kriptografis)
+## 11.1 Blinding (Pedagogis)
 
-⚠️ **Catatan penting**
-Kode berikut **bukan implementasi SQISIGN yang aman** dan **tidak merepresentasikan operasi kriptografi sesungguhnya**.
-Ini hanya *toy model* untuk menjelaskan alur:
+Untuk melindungi informasi rahasia selama penandatanganan, **OriSign** dapat menambahkan nilai acak (*blinding factor*) pada *commitment* atau *response*.
 
-```text
-komitmen → tantangan → respons → verifikasi
-```
+### Konsep:
 
-Digunakan semata-mata sebagai **alat bantu pemahaman konseptual**.
+* Penandatangan memilih bilangan acak `r`.
+* Nilai `r` digunakan untuk mengubah *interpolation data* atau *commitment*.
+* Verifikator **tidak perlu mengetahui `r`**, karena *blinding* dihapus secara implisit saat verifikasi.
 
----
-
-### Contoh: Simulasi Signing & Verification
+### Contoh Toy Blinding
 
 ```c
 #include <stdio.h>
@@ -396,32 +392,25 @@ Digunakan semata-mata sebagai **alat bantu pemahaman konseptual**.
 #include <math.h>
 
 #define P 7
-#define E 2      // Panjang ideal rahasia (toy)
-#define ECHAL 3  // Panjang tantangan (toy)
+#define E 2
+#define ECHAL 3
 
 typedef struct { int re; int im; } Fp2;
 
-// --- FUNGSI SIGNING (TOY) ---
-Fp2 sign_commitment(int *j_rand) {
-    *j_rand = rand() % P; // J acak
-    Fp2 e_com = { (*j_rand * 4) % P, (*j_rand * 1) % P };
+Fp2 sign_commitment_blind(int *j_rand, int *r_blind) {
+    *j_rand = rand() % P;
+    *r_blind = rand() % P;
+    Fp2 e_com = { ((*j_rand * 4) + *r_blind) % P, ((*j_rand * 1) + *r_blind) % P };
     return e_com;
 }
 
-int sign_challenge(const char* msg, Fp2 pk) {
-    int hash = (msg[0] + pk.re) % (int)pow(2, ECHAL);
-    return hash;
+int sign_response_blind(int sk, int j_rand, int chall, int r_blind) {
+    return (sk + j_rand + chall + r_blind) % P;
 }
 
-int sign_response(int sk, int j_rand, int chall) {
-    return (sk + j_rand + chall) % P;
-}
-
-// --- FUNGSI VERIFIKASI (TOY) ---
-int verify(Fp2 pk, Fp2 e_com, int chall, int resp) {
+int verify_blind(Fp2 pk, Fp2 e_com, int chall, int resp) {
     int check = (pk.re + e_com.re + chall) % P;
-    if (resp != 0 && check > 0) return 1;
-    return 0;
+    return (resp != 0 && check > 0);
 }
 
 int main(void) {
@@ -429,27 +418,41 @@ int main(void) {
     Fp2 pk = { (sk * 3) % P, (sk * 2) % P };
     const char* pesan = "Laporan Mingguan";
 
-    int j_rand;
-    Fp2 e_com = sign_commitment(&j_rand);
-    int chall = sign_challenge(pesan, pk);
-    int resp  = sign_response(sk, j_rand, chall);
+    int j_rand, r_blind;
+    Fp2 e_com = sign_commitment_blind(&j_rand, &r_blind);
+    int chall = (pesan[0] + pk.re) % (int)pow(2, ECHAL);
+    int resp  = sign_response_blind(sk, j_rand, chall, r_blind);
 
-    printf("--- ORISIGN SIGNATURE ---\n");
+    printf("--- ORISIGN SIGNATURE WITH BLINDING ---\n");
     printf("E_com (Commitment): %d + %di\n", e_com.re, e_com.im);
     printf("Challenge: %d\n", chall);
     printf("Response: %d\n", resp);
 
-    int is_valid = verify(pk, e_com, chall, resp);
+    int is_valid = verify_blind(pk, e_com, chall, resp);
 
     printf("\n--- VERIFICATION RESULT ---\n");
-    if (is_valid) {
-        printf("Status: VALID (Auditor menerima bukti)\n");
-    } else {
-        printf("Status: INVALID (Kombinasi salah)\n");
-    }
+    printf("Status: %s\n", is_valid ? "VALID" : "INVALID");
 
     return 0;
 }
+```
+
+### Penjelasan:
+
+1. `r_blind` adalah **nilai acak** untuk *blinding*.
+2. Commitmen `E_com` diubah dengan `r_blind` sehingga pihak ketiga tidak bisa mengekstrak informasi dari *commitment*.
+3. Response dikompensasi agar verifier tetap dapat memvalidasi tanpa mengetahui `r_blind`.
+
+---
+
+## Appendix A — Analogi Implementasi (Toy Model, Non-Kriptografis)
+
+⚠️ **Catatan penting**
+Kode berikut **bukan implementasi SQISIGN yang aman** dan **tidak merepresentasikan operasi kriptografi sesungguhnya**.
+Ini hanya *toy model* untuk menjelaskan alur dan blinding pedagogis.
+
+```text
+komitmen → tantangan → respons (dengan blinding) → verifikasi
 ```
 
 ---
@@ -469,5 +472,5 @@ int main(void) {
 
 4. Galbraith, S., Petit, C., Shani, B., Ti, Y.
    *On the Security of Supersingular Isogeny Cryptosystems*,
-   Cryptology ePrint Archive, Report 2016/859.
+   Cryptology ePrint Archive, Report 2016/
 
