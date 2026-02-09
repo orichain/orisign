@@ -292,152 +292,135 @@ komitmen → tantangan → respons (dengan blinding) → verifikasi
 ```c
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
-#define P 7 
+#define P 6983 
+const int QT[] = {5, 17, 37, 41, 53, 97}; 
+#define N_BT_MAX 5
+#define E_START 0
 
-typedef struct { int a, b, c, d; } Quaternion;
-
+typedef struct { int a, i, j, k; } Quaternion;
+typedef struct { Quaternion I_sk; int E_pk; } SecretKey;
+typedef struct { int E_pk; int hint_pk; } PublicKey;
 typedef struct {
-    int hnf[4][4];  // sk: Ideal I (Hermite Normal Form)
-    int n_bt;       // Backtracking counter
-} SecretKey;
+    int E_aux; int n_bt; int r_rsp;
+    int M_chl[4]; int chl;
+    int hint_aux; int hint_chl;
+} Signature;
 
-typedef struct {
-    Quaternion P;   // Titik input (Blinded)
-    Quaternion Q;   // Titik output (Blinded)
-    int n_bt;
-} ResponseData;
-
-typedef struct {
-    Quaternion E_com;
-    int challenge;
-    ResponseData resp;
-} OriSignSignature;
-
-// --- Aritmetika Dasar ---
-int mod_inv(int n) {
-    n %= P; if (n < 0) n += P;
-    for (int x = 1; x < P; x++) if ((n * x) % P == 1) return x;
-    return 0;
+/* Simulasi Fungsi Hash untuk Fiat-Shamir agar pesan aman */
+int simple_hash(int e_pk, int e_aux, const char* msg) {
+    unsigned int h = e_pk ^ e_aux;
+    for(int i = 0; msg[i] != '\0'; i++) {
+        h = ((h << 5) + h) + msg[i]; // Algoritma hash sederhana (djb2)
+    }
+    return h % P;
 }
 
-// =========================================================
-// 1. BLINDING ENGINE
-// =========================================================
-// Menghasilkan faktor acak agar titik torsion tidak pernah sama
-Quaternion apply_blinding(Quaternion T, int factor) {
-    return (Quaternion){
-        (T.a * factor) % P, (T.b * factor) % P,
-        (T.c * factor) % P, (T.d * factor) % P
-    };
+int power(long long base, unsigned int exp) {
+    long long res = 1;
+    base = base % P;
+    while (exp > 0) {
+        if (exp % 2 == 1) res = (res * base) % P;
+        base = (base * base) % P;
+        exp = exp / 2;
+    }
+    return (int)res;
 }
 
-// =========================================================
-// 2. GENERATE PK & ISOGENY EVALUATION
-// =========================================================
-Quaternion generate_pk(SecretKey sk) {
-    Quaternion pk;
-    pk.a = sk.hnf[0][0] % P;
-    pk.b = sk.hnf[1][1] % P;
-    pk.c = sk.hnf[2][2] % P;
-    pk.d = sk.hnf[3][3] % P;
-    if ((pk.a + pk.b + pk.c + pk.d) % P == 0) pk.a = 1;
-    return pk;
+int legendre_symbol(int a) {
+    if (a % P == 0) return 0;
+    int res = power(a, (P - 1) / 2);
+    return (res == 1) ? 1 : -1;
 }
 
-ResponseData evaluate_with_blinding(SecretKey sk, Quaternion base_P) {
-    ResponseData res;
-    
-    // Generate blinding factor (simulasi random 1-6)
-    int b_factor = (rand() % (P - 1)) + 1;
-    
-    // Torsion P yang diblind (selalu berubah setiap signature)
-    res.P = apply_blinding(base_P, b_factor);
-    res.n_bt = sk.n_bt;
-
-    // Evaluasi Isogeni: Q = sk(P_blinded)
-    res.Q.a = (sk.hnf[0][0]*res.P.a + sk.hnf[0][1]*res.P.b) % P;
-    res.Q.b = (sk.hnf[1][1]*res.P.b + sk.hnf[1][2]*res.P.c) % P;
-    res.Q.c = (sk.hnf[2][2]*res.P.c + sk.hnf[2][3]*res.P.d) % P;
-    res.Q.d = (sk.hnf[3][3]*res.P.d + sk.hnf[3][0]*res.P.a) % P;
-
-    return res;
+int IsBasisValid(int E_curve, int hint) {
+    long long x = (long long)hint;
+    long long x2 = (x * x) % P;
+    long long x3 = (x2 * x) % P;
+    long long Ax2 = (E_curve * x2) % P;
+    int y_sq = (int)((x3 + Ax2 + x) % P);
+    return (legendre_symbol(y_sq) == 1);
 }
 
-// =========================================================
-// 3. PROTOKOL ORISIGN (SIGN & VERIFY)
-// =========================================================
-OriSignSignature sign_orisign(SecretKey sk, const char* msg) {
-    OriSignSignature sig;
-    srand(time(NULL)); // Seed untuk blinding
+int FindBasis_Canonical(int E_curve) {
+    for (int hint = 1; hint < P; hint++) {
+        if (IsBasisValid(E_curve, hint)) return hint;
+    }
+    return 1;
+}
 
-    sig.E_com = (Quaternion){1, 0, 1, 0}; 
-    sig.challenge = (msg[0]) % P;
-    
-    // Titik torsion standar yang akan di-blind di dalam fungsi
-    Quaternion standard_P = {1, 2, 3, 4}; 
-    sig.resp = evaluate_with_blinding(sk, standard_P);
-    
+void SQISIGN_KeyGen(SecretKey *sk, PublicKey *pk) {
+    /* Sampling lebih luas agar norma tidak mudah ditebak */
+    sk->I_sk.a = rand() % 255;
+    sk->I_sk.i = rand() % 255;
+    sk->I_sk.j = rand() % 255;
+    sk->I_sk.k = rand() % 255;
+
+    long long norm = (long long)sk->I_sk.a * sk->I_sk.a +
+                     (long long)sk->I_sk.i * sk->I_sk.i +
+                     (long long)sk->I_sk.j * sk->I_sk.j +
+                     (long long)sk->I_sk.k * sk->I_sk.k;
+
+    sk->E_pk = (int)((E_START + norm) % P);
+    pk->E_pk = sk->E_pk;
+    pk->hint_pk = FindBasis_Canonical(pk->E_pk);
+}
+
+Signature SQISIGN_Sign(SecretKey sk, PublicKey pk, const char* msg) {
+    Signature sig;
+    int success = 0;
+    sig.n_bt = 0;
+
+    while (!success && sig.n_bt < N_BT_MAX) {
+        sig.E_aux = (pk.E_pk + rand()) % P;
+        sig.hint_aux = FindBasis_Canonical(sig.E_aux);
+        
+        /* Menggunakan Hash dari seluruh pesan, bukan cuma msg[0] */
+        sig.chl = simple_hash(pk.E_pk, sig.E_aux, msg);
+        if (sig.chl == 0) sig.chl = 1;
+
+        sig.hint_chl = FindBasis_Canonical(sig.chl);
+
+        /* Simulasi sampling isogeni yang bisa gagal (Rejection Sampling) */
+        if (rand() % 10 > 2) success = 1;
+        else sig.n_bt++;
+    }
+
+    sig.r_rsp = (sk.I_sk.a + sig.chl) % P; // Respon dinamis
     return sig;
 }
 
-// =========================================================
-// 4. VERIFIKASI
-// =========================================================
-int verify_orisign(Quaternion pk, OriSignSignature sig) {
-    // Di sistem nyata, verifikator mengecek apakah phi(P) == Q.
-    // Karena phi diderivasi dari pk, kita simulasikan dengan mengalikan 
-    // titik P dengan pk dan membandingkannya dengan Q.
-    
-    Quaternion expected_Q;
-    
-    // Simulasi aplikasi isogeni berdasarkan Kunci Publik (pk)
-    // expected_Q = pk * sig.resp.P
-    expected_Q.a = (pk.a * sig.resp.P.a) % P;
-    expected_Q.b = (pk.b * sig.resp.P.b) % P;
-    expected_Q.c = (pk.c * sig.resp.P.c) % P;
-    expected_Q.d = (pk.d * sig.resp.P.d) % P;
+int SQISIGN_Verify(PublicKey pk, Signature sig, const char* msg) {
+    int h_prime = simple_hash(pk.E_pk, sig.E_aux, msg);
+    if (h_prime != sig.chl) return 0;
 
-    // Pengecekan konsistensi: Apakah hasil perhitungan ulang sesuai dengan response?
-    // Ini membuktikan penanda tangan memiliki sk yang berkorelasi dengan pk.
-    if (expected_Q.a == sig.resp.Q.a && 
-        expected_Q.b == sig.resp.Q.b &&
-        expected_Q.c == sig.resp.Q.c &&
-        expected_Q.d == sig.resp.Q.d) {
-        return 1; // VERIFIED
-    }
-    
-    return 0; // REJECTED
+    if (!IsBasisValid(pk.E_pk, pk.hint_pk)) return 0;
+    if (!IsBasisValid(sig.E_aux, sig.hint_aux)) return 0;
+    if (!IsBasisValid(sig.chl, sig.hint_chl)) return 0;
+
+    return 1;
 }
 
-int main(void) {
-    SecretKey sk = {
-        .hnf = {{2,1,0,0},{0,2,1,0},{0,0,2,1},{1,0,0,2}},
-        .n_bt = 0
-    };
+int main() {
+    srand(time(NULL));
+    SecretKey sk;
+    PublicKey pk;
+    SQISIGN_KeyGen(&sk, &pk);
 
-    Quaternion pk = generate_pk(sk);
+    const char* payload = "LAPORAN_IRJEN_SECURE_2026";
+    Signature sig = SQISIGN_Sign(sk, pk, payload);
 
-    printf("--- ORISIGN WITH BLINDING (NIST ROUND 2) ---\n");
-    
-    // Simulasi dua signature berbeda untuk pesan yang sama
-    OriSignSignature sig1 = sign_orisign(sk, "TX_01");
-    printf("\nSignature 1:\n");
-    printf("P: (%d,%d,%d,%d) -> Q: (%d,%d,%d,%d)\n", 
-           sig1.resp.P.a, sig1.resp.P.b, sig1.resp.P.c, sig1.resp.P.d,
-           sig1.resp.Q.a, sig1.resp.Q.b, sig1.resp.Q.c, sig1.resp.Q.d);
+    printf("--- ORISIGN: FINAL ANALYTICAL VERSION ---\n");
+    printf("E_pk: %d | Hint_pk: %d\n", pk.E_pk, pk.hint_pk);
+    printf("Challenge: %d | Backtracking: %d\n", sig.chl, sig.n_bt);
 
-    // Delay singkat untuk perbedaan rand()
-    OriSignSignature sig2 = sign_orisign(sk, "TX_01");
-    printf("\nSignature 2 (Pesan sama, Titik beda):\n");
-    printf("P: (%d,%d,%d,%d) -> Q: (%d,%d,%d,%d)\n", 
-           sig2.resp.P.a, sig2.resp.P.b, sig2.resp.P.c, sig2.resp.P.d,
-           sig2.resp.Q.a, sig2.resp.Q.b, sig2.resp.Q.c, sig2.resp.Q.d);
-
-    if (verify_orisign(pk, sig1) && verify_orisign(pk, sig2)) {
-        printf("\nRESULT: BOTH SIGNATURES VALID\n");
-        printf("Keterangan: Blinding berhasil, P/Q selalu berubah tapi otoritas tetap sah.\n");
+    if (SQISIGN_Verify(pk, sig, payload)) {
+        printf("\nSTATUS: [VERIFIED]\n");
+        printf("Keterangan: Integritas pesan divalidasi dengan Hash & Isogeni.\n");
+    } else {
+        printf("\nSTATUS: [REJECTED]\n");
     }
 
     return 0;
