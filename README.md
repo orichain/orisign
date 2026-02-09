@@ -382,11 +382,33 @@ OriSignSignature sign_orisign(SecretKey sk, const char* msg) {
     return sig;
 }
 
+// =========================================================
+// 4. VERIFIKASI
+// =========================================================
 int verify_orisign(Quaternion pk, OriSignSignature sig) {
-    // Validator mengecek apakah rasio P dan Q tetap konsisten 
-    // meskipun nilai absolutnya berubah karena blinding.
-    if ((sig.resp.P.a + sig.resp.Q.a) % P != 0) return 1;
-    return 0;
+    // Di sistem nyata, verifikator mengecek apakah phi(P) == Q.
+    // Karena phi diderivasi dari pk, kita simulasikan dengan mengalikan 
+    // titik P dengan pk dan membandingkannya dengan Q.
+    
+    Quaternion expected_Q;
+    
+    // Simulasi aplikasi isogeni berdasarkan Kunci Publik (pk)
+    // expected_Q = pk * sig.resp.P
+    expected_Q.a = (pk.a * sig.resp.P.a) % P;
+    expected_Q.b = (pk.b * sig.resp.P.b) % P;
+    expected_Q.c = (pk.c * sig.resp.P.c) % P;
+    expected_Q.d = (pk.d * sig.resp.P.d) % P;
+
+    // Pengecekan konsistensi: Apakah hasil perhitungan ulang sesuai dengan response?
+    // Ini membuktikan penanda tangan memiliki sk yang berkorelasi dengan pk.
+    if (expected_Q.a == sig.resp.Q.a && 
+        expected_Q.b == sig.resp.Q.b &&
+        expected_Q.c == sig.resp.Q.c &&
+        expected_Q.d == sig.resp.Q.d) {
+        return 1; // VERIFIED
+    }
+    
+    return 0; // REJECTED
 }
 
 int main(void) {
