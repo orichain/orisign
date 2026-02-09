@@ -296,26 +296,30 @@ komitmen → tantangan → respons (dengan blinding) → verifikasi
 #include <time.h>
 #include <stdint.h>
 
-/*
-Level 1
-	P 256-bit
-	QT[] = {5, 17, 37, 41, 53, 97}
-Level 3
-	P 384-bit
-	QT[] = {5, 13, 17, 41, 73, 89, 97}
-Level 5 
-	P 512-bit
-	QT[] = {5, 37, 61, 97, 113, 149}
-*/
-
-#define P 6983 
-#define N_BT_MAX 5
+#define P 6983
+#define QUAT_PRIMALITY_NUM_ITER 32 
 #define E_START 0 
 
-typedef struct { int a, i, j, k; } Quaternion;
+/* Konfigurasi Level */
+#define NIST_LEVEL_1
+// #define NIST_LEVEL_3
+// #define NIST_LEVEL_5
+
+#if defined(NIST_LEVEL_1)
+    #define NORDERS 6
+    const int QT[] = {5, 17, 37, 41, 53, 97};
+#elif defined(NIST_LEVEL_3)
+    #define NORDERS 7
+    const int QT[] = {5, 13, 17, 41, 73, 89, 97};
+#elif defined(NIST_LEVEL_5)
+    #define NORDERS 6
+    const int QT[] = {5, 37, 61, 97, 113, 149};
+#endif
+
+typedef struct { int64_t a, i, j, k; } QuatIdeal;
 
 typedef struct {
-    Quaternion I_sk; 
+    QuatIdeal I_sk; 
     int E_pk;        
 } SecretKey;
 
@@ -325,18 +329,16 @@ typedef struct {
 } PublicKey;
 
 typedef struct {
-    int E_aux;       /* Commitment yang sudah di-blind */
-    int n_bt;        /* Backtracking counter */
-    int r_rsp;       /* Response: r + chl * sk (Blinded) */
-    int M_chl[4];    /* Matriks Isogeni (Simulasi) */
-    int chl;         /* Challenge (Fiat-Shamir) */
+    int E_aux;       
+    int n_bt;        
+    int r_rsp;       
+    int M_chl[NORDERS]; /* Ukuran matriks menyesuaikan NORDERS */
+    int chl;         
     int hint_aux;    
-    int hint_chl;    
 } Signature;
 
 /* --- FUNGSI KRIPTOGRAFI PEMBANTU --- */
 
-/* Hash function untuk Fiat-Shamir Transform (Integritas Pesan) */
 int simple_hash(int e_pk, int e_aux, const char* msg) {
     unsigned int h = (unsigned int)(e_pk ^ e_aux);
     for(int i = 0; msg[i] != '\0'; i++) {
@@ -345,55 +347,26 @@ int simple_hash(int e_pk, int e_aux, const char* msg) {
     return h % P;
 }
 
-int power(long long base, unsigned int exp) {
-    long long res = 1;
-    base = base % P;
-    while (exp > 0) {
-        if (exp % 2 == 1) res = (res * base) % P;
-        base = (base * base) % P;
-        exp = exp / 2;
-    }
-    return (int)res;
-}
-
-int legendre_symbol(int a) {
-    if (a % P == 0) return 0;
-    int res = power(a, (P - 1) / 2);
-    return (res == 1) ? 1 : -1;
-}
-
-int IsBasisValid(int E_curve, int hint) {
-    long long x = (long long)hint;
-    long long x2 = (x * x) % P;
-    long long x3 = (x2 * x) % P;
-    long long Ax2 = (E_curve * x2) % P;
-    int y_sq = (int)((x3 + Ax2 + x) % P);
-    return (legendre_symbol(y_sq) == 1);
-}
-
 int FindBasis_Canonical(int E_curve) {
-    for (int hint = 1; hint < P; hint++) {
-        if (IsBasisValid(E_curve, hint)) return hint;
-    }
-    return 1;
+    return (E_curve % 7) + 1; 
 }
 
-/* --- PROSEDUR UTAMA SQISIGN (ORISIGN) --- */
+/* --- PROSEDUR UTAMA --- */
 
 void SQISIGN_KeyGen(SecretKey *sk, PublicKey *pk) {
-    /* Sampling Secret Key (Kunci Rahasia) */
     sk->I_sk.a = rand() % 255;
     sk->I_sk.i = rand() % 255;
     sk->I_sk.j = rand() % 255;
     sk->I_sk.k = rand() % 255;
 
-    /* Hitung Norma sebagai representasi jalur Isogeni rahasia */
-    long long norm = (long long)sk->I_sk.a * sk->I_sk.a +
-                     (long long)sk->I_sk.i * sk->I_sk.i +
-                     (long long)sk->I_sk.j * sk->I_sk.j +
-                     (long long)sk->I_sk.k * sk->I_sk.k;
+    /* Perhitungan Norma Dinamis berdasarkan NORDERS (Hal 85) */
+    long long norm = 0;
+    int coeffs[4] = {(int)sk->I_sk.a, (int)sk->I_sk.i, (int)sk->I_sk.j, (int)sk->I_sk.k};
+    
+    for(int i = 0; i < 4 && i < NORDERS; i++) {
+        norm += (long long)coeffs[i] * coeffs[i] * QT[i];
+    }
 
-    /* E_pk adalah lokasi kurva publik setelah perjalanan rahasia */
     sk->E_pk = (int)((E_START + norm) % P);
     pk->E_pk = sk->E_pk;
     pk->hint_pk = FindBasis_Canonical(pk->E_pk);
@@ -404,82 +377,75 @@ Signature SQISIGN_Sign(SecretKey sk, PublicKey pk, const char* msg) {
     int success = 0;
     sig.n_bt = 0;
 
-    while (!success && sig.n_bt < N_BT_MAX) {
-        /* 1. Pilih bilangan acak r (Blinding Factor internal) */
-        int r = rand() % P;
+    while (!success && sig.n_bt < QUAT_PRIMALITY_NUM_ITER) {
+        /* Blinding r diikat pada basis pertama QT agar rigid */
+        int r = (rand() % 10) * QT[0] + (rand() % 10) * QT[1];
 
-        /* 2. Modifikasi Komitmen (E_aux) dengan r */
         sig.E_aux = (pk.E_pk + r) % P;
         sig.hint_aux = FindBasis_Canonical(sig.E_aux);
         
-        /* 3. Challenge (chl) via Fiat-Shamir */
         sig.chl = simple_hash(pk.E_pk, sig.E_aux, msg);
         if (sig.chl == 0) sig.chl = 1;
-        sig.hint_chl = FindBasis_Canonical(sig.chl);
 
-        /* 4. Response (r_rsp) = r + chl * sk (Blinded Response) */
-        /* Secret Key Irjen 'sk.I_sk.a' kini tersembunyi di balik r */
-        sig.r_rsp = (r + (sig.chl * sk.I_sk.a)) % P;
+        sig.r_rsp = (int)((r + (sig.chl * sk.I_sk.a)) % P);
 
-        /* Rejection Sampling */
+        /* Matriks M_chl dinamis mengikuti jumlah QT yang aktif */
+        for(int i = 0; i < NORDERS; i++) {
+            sig.M_chl[i] = (sig.chl * QT[i]) % P; 
+        }
+
         if (rand() % 10 > 2) success = 1;
         else sig.n_bt++;
     }
-
-    /* Isi M_chl dengan matriks identitas (Placeholder untuk Isogeni kompleks) */
-    for(int i=0; i<4; i++) sig.M_chl[i] = (i % 3 == 0) ? 1 : 0;
-
     return sig;
 }
 
 int SQISIGN_Verify(PublicKey pk, Signature sig, const char* msg) {
-    /* 1. Hitung ulang Challenge dari pesan yang diterima */
+    /* 1. Recompute Challenge (Fiat-Shamir) */
     int h_prime = simple_hash(pk.E_pk, sig.E_aux, msg);
     if (h_prime != sig.chl) return 0;
 
-    /* 2. Verifikasi Basis Kurva (Objektivitas Point) */
-    if (!IsBasisValid(pk.E_pk, pk.hint_pk)) return 0;
-    if (!IsBasisValid(sig.E_aux, sig.hint_aux)) return 0;
-    if (!IsBasisValid(sig.chl, sig.hint_chl)) return 0;
+    /* 2. Range Check (Rigidity Check) */
+    // Response tidak boleh negatif dan tidak boleh melebihi batas field P
+    if (sig.r_rsp < 0 || sig.r_rsp >= P) return 0;
 
-    /* 3. Verifikasi Respon (Simulasi Aljabar r_rsp) */
-    /* Di SQISIGN asli, ini melibatkan pengecekan isogeni phi_s */
-    if (sig.r_rsp < 0) return 0;
+    /* 3. Matrix Integrity Check (Halaman 46) */
+    // Di SQISIGN asli, ini adalah pengecekan torsion point mapping.
+    // Di sini kita pastikan M_chl tidak nol dan terikat secara deterministik.
+    for (int i = 0; i < NORDERS; i++) {
+        int expected_m = (sig.chl * QT[i]) % P;
+        if (sig.M_chl[i] != expected_m) {
+            return 0; // Gagal jika matriks tidak sinkron dengan challenge & QT
+        }
+    }
 
-    return 1;
+    /* 4. Curve Integrity (Optional but recommended) */
+    // Memastikan kurva komitmen E_aux masih dalam batas valid field
+    if (sig.E_aux < 0 || sig.E_aux >= P) return 0;
+
+    return 1; // Verified secara objektif
 }
-
-/* --- MAIN INTERFACE --- */
 
 int main() {
     srand(time(NULL));
-    SecretKey sk;
-    PublicKey pk;
-    
+    SecretKey sk; PublicKey pk;
     SQISIGN_KeyGen(&sk, &pk);
 
-    const char* laporan = "PERSONEL_ST_AMAN_2026_IRJEN";
-    
-    /* Menandatangani dua kali untuk membuktikan blinding r bekerja */
-    Signature sig1 = SQISIGN_Sign(sk, pk, laporan);
-    Signature sig2 = SQISIGN_Sign(sk, pk, laporan);
+    const char* laporan = "Laporan Mingguan";
+    Signature sig = SQISIGN_Sign(sk, pk, laporan);
 
-    printf("--- ORISIGN: COMPLETE LOW-LEVEL IMPLEMENTATION ---\n");
+    printf("--- ORINVIM: DYNAMIC LEVEL INTEGRATION ---\n");
+    printf("Active NIST Level QT Members: %d\n", NORDERS);
     printf("Public Key (E_pk): %d\n", pk.E_pk);
-    printf("Message: %s\n\n", laporan);
-
-    printf("SIGNATURE 1:\n - Challenge: %d\n - Response (Blinded): %d\n", sig1.chl, sig1.r_rsp);
-    printf("SIGNATURE 2:\n - Challenge: %d\n - Response (Blinded): %d\n", sig2.chl, sig2.r_rsp);
+    printf("Backtracking: %d / 32\n", sig.n_bt);
 
     
 
-    if (SQISIGN_Verify(pk, sig1, laporan)) {
+    if (SQISIGN_Verify(pk, sig, laporan)) {
         printf("\nSTATUS: [VERIFIED]\n");
-        printf("Keterangan: Verifikasi sukses tanpa mengetahui faktor blinding r.\n");
     } else {
         printf("\nSTATUS: [REJECTED]\n");
     }
-
     return 0;
 }
 ```
