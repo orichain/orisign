@@ -395,7 +395,7 @@ int verify(Fp2 pk, Fp2 e_com, int chall, int resp) {
 int main(void) {
     int sk = rand() % (int)pow(2, E);
     Fp2 pk = { (sk * 3) % P, (sk * 2) % P };
-    const char* pesan = "Laporan Mingguan Irjen";
+    const char* pesan = "Laporan Mingguan";
 
     int j_rand;
     Fp2 e_com = sign_commitment(&j_rand);
@@ -812,7 +812,7 @@ int verify(Fp2 pk, Fp2 e_com, int chall, int resp) {
 int main(void) {
     int sk = rand() % (int)pow(2, E);
     Fp2 pk = { (sk * 3) % P, (sk * 2) % P };
-    const char* pesan = "Weekly Inspector Report";
+    const char* pesan = "Weekly Report";
 
     int j_rand;
     Fp2 e_com = sign_commitment(&j_rand);
