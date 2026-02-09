@@ -253,7 +253,7 @@ Seperti mencoba membuka brankas tanpa kombinasi rahasia; labirin kombinasi trili
 
 ## 11 Ringkasan Implementasi
 
-* Kunci rahasia: ideal kiri bernorma 2^e_sk ≈ √p.
+* Kunci rahasia: ideal kiri bernorma 2^e_sk ≈ sqrt(p).
 * Kunci publik: kurva supersingular, uniform.
 * Tanda tangan: kurva komitmen + *interpolation data*.
 * Verifikasi: membangun kembali isogeni (D,D) dari *interpolation data*.
