@@ -384,7 +384,17 @@ Untuk melindungi informasi rahasia selama penandatanganan, **OriSign** dapat men
 * Nilai `r` digunakan untuk mengubah *interpolation data* atau *commitment*.
 * Verifikator **tidak perlu mengetahui `r`**, karena *blinding* dihapus secara implisit saat verifikasi.
 
-### Contoh Toy Blinding
+---
+
+## Contoh Toy Blinding
+
+⚠️ **Catatan penting**
+Kode berikut **bukan implementasi SQISIGN yang aman** dan **tidak merepresentasikan operasi kriptografi sesungguhnya**.
+Ini hanya *toy model* untuk menjelaskan alur dan blinding pedagogis.
+
+```text
+komitmen → tantangan → respons (dengan blinding) → verifikasi
+```
 
 ```c
 #include <stdio.h>
@@ -442,18 +452,6 @@ int main(void) {
 1. `r_blind` adalah **nilai acak** untuk *blinding*.
 2. Commitmen `E_com` diubah dengan `r_blind` sehingga pihak ketiga tidak bisa mengekstrak informasi dari *commitment*.
 3. Response dikompensasi agar verifier tetap dapat memvalidasi tanpa mengetahui `r_blind`.
-
----
-
-## Appendix A — Analogi Implementasi (Toy Model, Non-Kriptografis)
-
-⚠️ **Catatan penting**
-Kode berikut **bukan implementasi SQISIGN yang aman** dan **tidak merepresentasikan operasi kriptografi sesungguhnya**.
-Ini hanya *toy model* untuk menjelaskan alur dan blinding pedagogis.
-
-```text
-komitmen → tantangan → respons (dengan blinding) → verifikasi
-```
 
 ---
 
