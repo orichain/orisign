@@ -23,8 +23,6 @@
 
 ### Spesifikasi Formal Algoritma SQISIGN Round 2
 
-### *(Notasi Konsisten dengan Dokumen NIST)*
-
 ---
 
 ## Status
