@@ -1,6 +1,13 @@
 
 ---
 
+> ⚠️ **Status: Experimental / Research Prototype**
+>  
+> Dokumen dan implementasi dalam repository ini disediakan untuk tujuan
+> riset dan edukasi. Tidak ada jaminan keamanan, ketepatan kriptografi,
+> atau kesesuaian produksi. Jangan digunakan dalam sistem nyata tanpa
+> audit kriptografi independen dan validasi formal.
+
 # OriSign
 
 ### Spesifikasi Formal Algoritma SQISIGN Round 2 dengan Contoh dan Analogi
