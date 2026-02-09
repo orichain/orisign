@@ -292,51 +292,113 @@ komitmen → tantangan → respons (dengan blinding) → verifikasi
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 
-#define P 7
-#define E 2
-#define ECHAL 3
+#define P 7  // modulo kecil untuk toy example
 
-typedef struct { int re; int im; } Fp2;
+typedef struct {
+    int a, b, c, d; // Quaternion: a + b*i + c*j + d*k
+} Quaternion;
 
-// --- FUNGSI PENANDATANGANAN DENGAN BLINDING (TOY) ---
-Fp2 sign_commitment_blind(int *j_rand, int *r_blind) {
-    *j_rand = rand() % P;
-    *r_blind = rand() % P;
-    Fp2 e_com = { ((*j_rand * 4) + *r_blind) % P, ((*j_rand * 1) + *r_blind) % P };
-    return e_com;
+// --- Aritmetika Kuaternion ---
+Quaternion add_q(Quaternion q1, Quaternion q2) {
+    return (Quaternion){
+        (q1.a + q2.a) % P,
+        (q1.b + q2.b) % P,
+        (q1.c + q2.c) % P,
+        (q1.d + q2.d) % P
+    };
 }
 
-int sign_response_blind(int sk, int j_rand, int chall, int r_blind) {
-    return (sk + j_rand + chall + r_blind) % P;
+Quaternion mul_q(Quaternion q1, Quaternion q2) {
+    int a = (q1.a*q2.a - q1.b*q2.b - q1.c*q2.c - q1.d*q2.d) % P;
+    int b = (q1.a*q2.b + q1.b*q2.a + q1.c*q2.d - q1.d*q2.c) % P;
+    int c = (q1.a*q2.c - q1.b*q2.d + q1.c*q2.a + q1.d*q2.b) % P;
+    int d = (q1.a*q2.d + q1.b*q2.c - q1.c*q2.b + q1.d*q2.a) % P;
+    if(a<0) a+=P; if(b<0) b+=P; if(c<0) c+=P; if(d<0) d+=P;
+    return (Quaternion){a,b,c,d};
 }
 
-// --- FUNGSI VERIFIKASI (TOY) ---
-int verify_blind(Fp2 pk, Fp2 e_com, int chall, int resp) {
-    int check = (pk.re + e_com.re + chall) % P;
-    return (resp != 0 && check > 0);
+Quaternion neg_q(Quaternion q) {
+    return (Quaternion){
+        (-q.a+P)%P,
+        (-q.b+P)%P,
+        (-q.c+P)%P,
+        (-q.d+P)%P
+    };
 }
 
+int norm_q(Quaternion q) {
+    return (q.a*q.a + q.b*q.b + q.c*q.c + q.d*q.d) % P;
+}
+
+// --- KeyGen (Toy) ---
+Quaternion generate_sk() {
+    return (Quaternion){1,1,1,1}; // contoh quaternion kecil
+}
+
+Quaternion generate_pk(Quaternion sk) {
+    Quaternion base = {1,1,1,1}; // base quaternion
+    return mul_q(sk, base);
+}
+
+// --- Signature Structure ---
+typedef struct {
+    Quaternion e_com;
+    int chall;
+    Quaternion resp;
+} Signature;
+
+// --- Sign ---
+Signature sign(Quaternion sk, const char* msg) {
+    Signature sig;
+
+    // Commitment: pilih J acak (toy)
+    Quaternion J = {2,0,1,0};
+    sig.e_com = mul_q(J, (Quaternion){1,1,1,1});
+
+    // Challenge: hash sederhana
+    sig.chall = (msg[0] + sig.e_com.a) % 4;
+
+    // Response: sk + J + chall
+    Quaternion sum = add_q(sk,J);
+    sig.resp = (Quaternion){
+        (sum.a + sig.chall) % P,
+        (sum.b + sig.chall) % P,
+        (sum.c + sig.chall) % P,
+        (sum.d + sig.chall) % P
+    };
+
+    return sig;
+}
+
+// --- Verify ---
+int verify(Quaternion pk, Signature sig) {
+    // Toy verification: linear combination
+    Quaternion pk_c = mul_q(pk, (Quaternion){sig.chall,0,0,0});
+    Quaternion rhs = add_q(pk_c, sig.e_com);
+
+    return (sig.resp.a == rhs.a && sig.resp.b == rhs.b &&
+            sig.resp.c == rhs.c && sig.resp.d == rhs.d);
+}
+
+// --- Main ---
 int main(void) {
-    int sk = rand() % (int)pow(2, E);
-    Fp2 pk = { (sk * 3) % P, (sk * 2) % P };
-    const char* pesan = "Laporan Mingguan";
+    Quaternion sk = generate_sk();
+    Quaternion pk = generate_pk(sk);
+    const char* msg = "OriSign";
 
-    int j_rand, r_blind;
-    Fp2 e_com = sign_commitment_blind(&j_rand, &r_blind);
-    int chall = (pesan[0] + pk.re) % (int)pow(2, ECHAL);
-    int resp  = sign_response_blind(sk, j_rand, chall, r_blind);
+    Signature sig = sign(sk, msg);
 
-    printf("--- ORISIGN SIGNATURE WITH BLINDING ---\n");
-    printf("E_com (Commitment): %d + %di\n", e_com.re, e_com.im);
-    printf("Challenge: %d\n", chall);
-    printf("Response: %d\n", resp);
+    printf("--- ORISIGN TOY QUATERNION ---\n");
+    printf("Secret Key  : (%d,%d,%d,%d)\n", sk.a, sk.b, sk.c, sk.d);
+    printf("Public Key  : (%d,%d,%d,%d)\n", pk.a, pk.b, pk.c, pk.d);
+    printf("Commitment  : (%d,%d,%d,%d)\n", sig.e_com.a, sig.e_com.b, sig.e_com.c, sig.e_com.d);
+    printf("Challenge   : %d\n", sig.chall);
+    printf("Response    : (%d,%d,%d,%d)\n", sig.resp.a, sig.resp.b, sig.resp.c, sig.resp.d);
 
-    int is_valid = verify_blind(pk, e_com, chall, resp);
-
-    printf("\n--- VERIFICATION RESULT ---\n");
-    printf("Status: %s\n", is_valid ? "VALID" : "INVALID");
+    int valid = verify(pk, sig);
+    printf("\n--- VERIFICATION ---\n");
+    printf("Status      : %s\n", valid ? "VALID" : "INVALID");
 
     return 0;
 }
