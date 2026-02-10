@@ -46,17 +46,39 @@ fp2_t fp2_mul(fp2_t x, fp2_t y) {
 // --- 2. ALJABAR QUATERNION & IDEAL (Bab 3) - KEPT ---
 typedef struct { Quaternion b[4]; uint64_t norm; } QuaternionIdeal;
 
+// Perbaikan quat_norm: Menggunakan norma Euclidean standar di dalam medan finit
 uint64_t quat_norm(Quaternion q) {
-    return (uint64_t)(q.w*q.w + q.x*q.x + MODULO*q.y*q.y + MODULO*q.z*q.z);
+    // Norma q = w² + x² + y² + z² (mod MODULO)
+    // Kita gunakan uint64_t untuk akumulasi agar tidak overflow sebelum modulo
+    uint64_t w2 = (q.w * q.w) % MODULO;
+    uint64_t x2 = (q.x * q.x) % MODULO;
+    uint64_t y2 = (q.y * q.y) % MODULO;
+    uint64_t z2 = (q.z * q.z) % MODULO;
+    
+    return (w2 + x2 + y2 + z2) % MODULO;
 }
 
+// Perbaikan quat_mul: Hamilton Product murni tanpa "scaling" aneh di tengah
 Quaternion quat_mul(Quaternion q1, Quaternion q2) {
-    int64_t p = (int64_t)MODULO;
     Quaternion res;
-    res.w = q1.w*q2.w - q1.x*q2.x - p*q1.y*q2.y - p*q1.z*q2.z;
-    res.x = q1.w*q2.x + q1.x*q2.w + p*q1.y*q2.z - p*q1.z*q2.y;
-    res.y = q1.w*q2.y - q1.x*q2.z + q1.y*q2.w + q1.z*q2.x;
-    res.z = q1.w*q2.z + q1.x*q2.y - q1.y*q2.x + q1.z*q2.w;
+    
+    // Formula Hamilton Standard:
+    // w = w1w2 - x1x2 - y1y2 - z1z2
+    // x = w1x2 + x1w2 + y1z2 - z1y2
+    // y = w1y2 - x1z2 + y1w2 + z1x2
+    // z = w1z2 + x1y2 - y1x2 + z1w2
+    
+    int64_t w = (q1.w*q2.w - q1.x*q2.x - q1.y*q2.y - q1.z*q2.z) % (int64_t)MODULO;
+    int64_t x = (q1.w*q2.x + q1.x*q2.w + q1.y*q2.z - q1.z*q2.y) % (int64_t)MODULO;
+    int64_t y = (q1.w*q2.y - q1.x*q2.z + q1.y*q2.w + q1.z*q2.x) % (int64_t)MODULO;
+    int64_t z = (q1.w*q2.z + q1.x*q2.y - q1.y*q2.x + q1.z*q2.w) % (int64_t)MODULO;
+
+    // Pastikan hasil selalu positif (karena % di C bisa negatif)
+    res.w = (w < 0) ? w + MODULO : w;
+    res.x = (x < 0) ? x + MODULO : x;
+    res.y = (y < 0) ? y + MODULO : y;
+    res.z = (z < 0) ? z + MODULO : z;
+    
     return res;
 }
 
@@ -147,7 +169,12 @@ SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
 
 bool verify_v9(SQISignature_V9 sig) {
     ThetaNullPoint_Fp2 check = apply_isogeny_chain(sig.theta_source, sig.k);
-    return (sig.theta_target.a.re == check.a.re && sig.theta_target.b.re == check.b.re);
+    
+    // Strict comparison: a, b, c, d (re & im)
+    return (sig.theta_target.a.re == check.a.re && sig.theta_target.a.im == check.a.im &&
+            sig.theta_target.b.re == check.b.re && sig.theta_target.b.im == check.b.im &&
+            sig.theta_target.c.re == check.c.re && sig.theta_target.c.im == check.c.im &&
+            sig.theta_target.d.re == check.d.re && sig.theta_target.d.im == check.d.im);
 }
 
 QuaternionIdeal generate_key_nist_style() {
