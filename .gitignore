@@ -1,0 +1,8 @@
+orisign
+orisign.core
+.cache/
+.lua.
+compile_commands.json
+clangd.core
+fc-cache.core
+

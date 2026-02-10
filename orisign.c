@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include <sys/random.h>
 #include "fips202.h"
 #include "klpt.h"
 
@@ -29,8 +28,7 @@
 
 uint64_t secure_random_uint64() {
     uint64_t val;
-    ssize_t ret = getrandom(&val, sizeof(val), 0);
-    if (ret != sizeof(val)) return (uint64_t)rand(); // Fallback jika gagal
+    arc4random_buf(&val, sizeof(val));
     return val;
 }
 
@@ -137,7 +135,7 @@ SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
     }
     
     printf("[SIGN]   KLPT Guaranteed Search Completed in %d attempt(s).\n", attempts);
-    printf("[KLPT]   Alpha Path: (w:%ld, x:%ld, y:%ld, z:%ld)\n", 
+    printf("[KLPT]   Alpha Path: (w:%lld, x:%lld, y:%lld, z:%lld)\n", 
             alpha.w, alpha.x, alpha.y, alpha.z);
 
     // 3. Theta Walk
@@ -183,9 +181,9 @@ int main() {
     QuaternionIdeal sk_I = generate_key_nist_style();
     
     printf("[KEYGEN] Secret Basis-4 HNF Generated via CSPRNG.\n");
-    printf("[KEYGEN] Basis w-coeffs: (%ld, %ld, %ld)\n", 
+    printf("[KEYGEN] Basis w-coeffs: (%lld, %lld, %lld)\n", 
             sk_I.b[1].w, sk_I.b[2].w, sk_I.b[3].w);
-    printf("[KEYGEN] Norm L = %lu\n", sk_I.norm);
+    printf("[KEYGEN] Norm L = %llu\n", sk_I.norm);
 
     // B. SIGNING (Isogeny Walk Depth 2^k)
     const char* msg = "NIST_Round2_Full_Chain_Alignment";
