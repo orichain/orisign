@@ -3,82 +3,113 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <math.h>
+#include <stdlib.h>
 
+#define MODULO ((uint64_t)65537)
+// Menggunakan L yang lebih besar (L ≈ sqrt(p)) sesuai Bab 3.1
+#define NIST_NORM_IDEAL 32771 
+/* * NIST_THETA_SQRT2: Representasi sqrt(2) mod 65537.
+ * Digunakan untuk mengunci koordinat Theta ke kurva j=1728 (y^2 = x^3 + x).
+ * Hitungan: 181^2 = 32761. Dalam Fp, 32761 * 2 = 65522 (≈ MODULO).
+ */
+#define NIST_THETA_SQRT2 181
+#define ISOGENY_CHAIN_DEPTH 32 // Kedalaman rantai isogeni 2^32
+
+// --- Struct quaternion ---
 typedef struct { int64_t w, x, y, z; } Quaternion;
 
-typedef struct {
-    int64_t w, x, y, z;
-} klpt_result_t;
+static inline uint64_t secure_random_uint64() {
+    uint64_t val;
+    arc4random_buf(&val, sizeof(val));
+    return val;
+}
 
-/* * Algoritma Cornacchia Modern (Bab 3.3)
- * Mencari x, y sedemikian hingga x^2 + y^2 = n.
- * Menggunakan pendekatan faktorisasi trial untuk simulasi efisiensi.
- */
-static inline bool solve_cornacchia_style(uint64_t n, int64_t *x, int64_t *y) {
-    if (n == 0) { *x = 0; *y = 0; return true; }
-    // Mencari solusi melalui limit pencarian yang lebih cerdas
-    for (int64_t i = (int64_t)sqrt((double)n/2); i * i <= n; i++) {
-        uint64_t remainder = n - (i * i);
-        uint64_t root = (uint64_t)sqrt(remainder);
-        if (root * root == remainder) {
-            *x = i;
-            *y = (int64_t)root;
+// ========================
+// Integer square root (64-bit safe)
+// ========================
+static inline uint64_t isqrt(uint64_t n) {
+    if (n == 0 || n == 1) return n;
+    uint64_t x = n;
+    uint64_t y = (x + 1)/2;
+    while (y < x) { x = y; y = (x + n/x)/2; }
+    return x;
+}
+
+// ========================
+// Cornacchia deterministic
+// Solve x^2 + y^2 = n
+// ========================
+static inline bool solve_cornacchia_prod(uint64_t n, int64_t *x, int64_t *y) {
+    if (n == 0) { *x=0; *y=0; return true; }
+    if (n % 4 == 3) return false;
+
+    uint64_t root = isqrt(n);
+    for (uint64_t i=root; i>0; i--) {
+        uint64_t rem = n - i*i;
+        uint64_t r = isqrt(rem);
+        if (r*r == rem) {
+            *x = (int64_t)(i <= r ? i : r);
+            *y = (int64_t)(i > r ? i : r);
             return true;
         }
     }
+
+    uint64_t r0 = isqrt(n);
+    if (r0*r0 == n) { *x=0; *y=(int64_t)r0; return true; }
+
     return false;
 }
 
-/* * RepresentInteger (Bab 3.4.2 NIST)
- * Versi Full: Menggunakan kombinasi linear untuk mendekati target norma.
- * Mencari alpha = (x + yi + zj + wk)
- */
-static inline klpt_result_t klpt_solve_advanced(uint64_t target_norm, uint64_t p) {
-    klpt_result_t res = {0, 0, 0, 0};
-    
-    // NIST menghendaki kita mencari solusi di dalam 'Order' tertentu.
-    // Kita simulasikan pencarian koefisien (z, w) menggunakan Lattice Bab 3.5.
-    for (int64_t z = 0; z < (int64_t)sqrt((double)target_norm/p) + 1; z++) {
-        uint64_t p_z2 = p * z * z;
-        if (p_z2 > target_norm) break;
+// ========================
+// KLPT Advanced Solver
+// Solve x^2 + y^2 + z^2 + w^2 = target_norm
+// ========================
+static inline bool klpt_solve_advanced(uint64_t target_norm, Quaternion *res) {
+    if (target_norm == 0) { *res = (Quaternion){0,0,0,0}; return true; }
 
-        for (int64_t w = 0; w < (int64_t)sqrt((double)(target_norm - p_z2)/p) + 1; w++) {
-            uint64_t p_part = p_z2 + (p * w * w);
-            uint64_t remainder = target_norm - p_part;
-            
+    uint64_t limit_z = isqrt(target_norm);
+
+    for (uint64_t z=0; z <= limit_z; z++) {
+        uint64_t rem_z = target_norm - z*z;
+
+        uint64_t limit_w = isqrt(rem_z);
+        for (uint64_t w=0; w <= limit_w; w++) {
+            uint64_t rem_w = rem_z - w*w;
+
             int64_t x, y;
-            if (solve_cornacchia_style(remainder, &x, &y)) {
-                res.x = x;
-                res.y = y;
-                res.z = z;
-                res.w = w;
-                return res; 
+            if (solve_cornacchia_prod(rem_w, &x, &y)) {
+                // Positif modulo
+                res->x = (x % MODULO + MODULO) % MODULO;
+                res->y = (y % MODULO + MODULO) % MODULO;
+                res->z = ((int64_t)z % MODULO + MODULO) % MODULO;
+                res->w = ((int64_t)w % MODULO + MODULO) % MODULO;
+                return true;
             }
         }
     }
-    return res;
+
+    return false;
 }
 
-/* * Strong Approximation (Bab 3.5)
- * Melakukan translasi dari Ideal kunci ke jalur isogeni target.
- */
-static inline Quaternion klpt_full_action(uint64_t L, uint64_t p) {
-    // Mencari elemen dengan norma kelipatan L
-    // Seringkali NIST memerlukan n(alpha) = L * p^k
-    uint64_t target = L; 
-    klpt_result_t sol = klpt_solve_advanced(target, p);
-    
-    // Jika tidak ditemukan pada L, coba L * 2 (Simulasi peningkatan derajat isogeni)
-    if (sol.x == 0 && sol.y == 0 && sol.z == 0) {
-        sol = klpt_solve_advanced(target * 2, p);
+// ========================
+// KLPT Full Action
+// Fallback dinamis + CSPRNG optional
+// ========================
+static inline bool klpt_full_action(uint64_t L, uint64_t p, Quaternion *out) {
+    if (klpt_solve_advanced(L, out)) return true;
+    if (klpt_solve_advanced(L*2, out)) return true;
+    if (klpt_solve_advanced(L+p, out)) return true;
+
+    // Optional fallback random: coba L + rand() % 100
+    for (int i=0; i<5; i++) {
+        uint64_t offset = (uint64_t)(secure_random_uint64() % 100);
+        if (klpt_solve_advanced(L + offset, out)) return true;
     }
 
-    return (Quaternion){sol.w, sol.x, sol.y, sol.z};
-}
-
-static inline Quaternion klpt_to_quaternion(klpt_result_t kr) {
-    return (Quaternion){kr.w, kr.x, kr.y, kr.z};
+    // Jika semua gagal
+    *out = (Quaternion){0,0,0,0};
+    return false;
 }
 
 #endif
+

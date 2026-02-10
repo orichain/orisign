@@ -10,27 +10,10 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include "fips202.h"
 #include "klpt.h"
-
-#define MODULO ((uint64_t)65537)
-// Menggunakan L yang lebih besar (L ≈ sqrt(p)) sesuai Bab 3.1
-#define NIST_NORM_IDEAL 32771 
-/* * NIST_THETA_SQRT2: Representasi sqrt(2) mod 65537.
- * Digunakan untuk mengunci koordinat Theta ke kurva j=1728 (y^2 = x^3 + x).
- * Hitungan: 181^2 = 32761. Dalam Fp, 32761 * 2 = 65522 (≈ MODULO).
- */
-#define NIST_THETA_SQRT2 181
-#define ISOGENY_CHAIN_DEPTH 32 // Kedalaman rantai isogeni 2^32
-
-uint64_t secure_random_uint64() {
-    uint64_t val;
-    arc4random_buf(&val, sizeof(val));
-    return val;
-}
 
 // --- 1. ARITMATIKA MEDAN Fp2 (Bab 2.1) - KEPT ---
 typedef struct { uint64_t re; uint64_t im; } fp2_t;
@@ -148,7 +131,7 @@ SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
         if (attempts > 10) radius_limit = 5000;
 
         uint64_t secure_offset = secure_random_uint64() % radius_limit; 
-        alpha = klpt_full_action(NIST_NORM_IDEAL + secure_offset, MODULO);
+        if (!klpt_full_action(NIST_NORM_IDEAL + secure_offset, MODULO, &alpha)) continue;
         
         // Solusi harus ditemukan untuk lanjut ke tahap berikutnya
         if (alpha.x != 0 || alpha.y != 0 || alpha.z != 0) {
