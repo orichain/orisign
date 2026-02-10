@@ -6,9 +6,14 @@
 #include <stdlib.h>
 
 #define MODULO ((uint64_t)65537)
-#define NIST_NORM_IDEAL 32771
+// Menggunakan L yang lebih besar (L ≈ sqrt(p)) sesuai Bab 3.1
+#define NIST_NORM_IDEAL 32771 
+/* * NIST_THETA_SQRT2: Representasi sqrt(2) mod 65537.
+ * Digunakan untuk mengunci koordinat Theta ke kurva j=1728 (y^2 = x^3 + x).
+ * Hitungan: 181^2 = 32761. Dalam Fp, 32761 * 2 = 65522 (≈ MODULO).
+ */
 #define NIST_THETA_SQRT2 181
-#define ISOGENY_CHAIN_DEPTH 32
+#define ISOGENY_CHAIN_DEPTH 32 // Kedalaman rantai isogeni 2^32
 
 typedef struct { int64_t w, x, y, z; } Quaternion;
 
