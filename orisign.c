@@ -166,25 +166,42 @@ QuaternionIdeal generate_key_nist_style(){
 int main(){
     printf("==============================================\n");
     printf("  ORISIGN V9.1 - NIST Full Chain OpenBSD\n");
-   printf("==============================================\n\n");
+    printf("==============================================\n\n");
 
+    // 1. Keygen
     QuaternionIdeal sk_I = generate_key_nist_style();
     printf("[KEYGEN] Secret Basis-4 HNF generated.\n");
-    printf("[KEYGEN] Basis w-coeffs: (%lld,%lld,%lld)\n",
-           sk_I.b[1].w, sk_I.b[2].w, sk_I.b[3].w);
     printf("[KEYGEN] Norm L = %llu\n", sk_I.norm);
 
+    // 2. Signing (Normal)
     const char* msg = "NIST_Round2_Full_Chain_Alignment";
     SQISignature_V9 sig = sign_v9(msg, sk_I);
-    printf("[SIGN] Theta walk depth 2^%d\n", sig.k);
+    printf("[SIGN] Signature created successfully.\n");
 
+    // 3. Verifikasi Pertama (Valid)
+    printf("[VERIFY] Checking original signature...\n");
     if (verify_v9(sig)){
         printf("[STATUS] VALID: Chain Integrity Verified.\n");
     } else {
         printf("[STATUS] INVALID: Chain Integrity Failed!\n");
     }
 
-    // Benchmark
+    printf("\n--- SIMULASI TAMPERING (ATTACK) ---\n");
+
+    // 4. Simulasi Serangan: Ubah satu nilai di theta_target secara paksa
+    // Kita tambahkan 1 ke komponen imajiner koordinat 'b'
+    sig.theta_target.b.im = (sig.theta_target.b.im + 1) % MODULO;
+    printf("[TAMPER] Signature modified by attacker (theta_target.b.im changed).\n");
+
+    // 5. Verifikasi Kedua (Harus Invalid)
+    printf("[VERIFY] Checking tampered signature...\n");
+    if (verify_v9(sig)){
+        printf("[STATUS] CRITICAL ERROR: Tampered signature accepted!\n");
+    } else {
+        printf("[STATUS] REJECTED: Tamper detected by Verify logic. (SUCCESS)\n");
+    }
+
+    // Benchmark tetap sama...
     printf("\n[BENCH] Running 10M Quaternion Mul...\n");
     struct timespec start,end;
     clock_gettime(CLOCK_MONOTONIC, &start);
