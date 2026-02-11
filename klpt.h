@@ -17,6 +17,9 @@
 // --- CONSTANTS & DOMAIN SEPARATION ---
 #define ORISIGN_DOMAIN_SEP "ORISIGN-V9.5-NIST-PQC-2026"
 #define COMPRESSED_SIG_SIZE 104 // 8 (chal) + (6 coords * 16 bytes)
+#define NORM_TOLERANCE_UPPER 1.15
+#define NORM_TOLERANCE_LOWER 0.85
+#define NORM_TOLERANCE_LIMIT 0.80
 
 typedef struct { int64_t w, x, y, z; } Quaternion;
 
