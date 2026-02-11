@@ -1,0 +1,19 @@
+#pragma once
+#include <stdbool.h>
+
+/* ----------------- Global Parameters ------------------ */
+#define MODULO ((uint64_t)65537)
+#define SQ_POWER 15
+
+#define ORISIGN_DOMAIN_SEP "ORISIGN-V9.6-NIST-PQC-2026"
+#define COMPRESSED_SIG_SIZE 104
+
+#define NIST_NORM_IDEAL 32771
+#define NIST_THETA_SQRT2 181
+
+#define NORM_TOLERANCE_UPPER 1.15
+#define NORM_TOLERANCE_LOWER 0.85
+#define NORM_TOLERANCE_LIMIT 0.80
+
+#define FP2_PACKED_BYTES 16
+
