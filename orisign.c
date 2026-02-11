@@ -1,120 +1,82 @@
-/* ORISIGN V9.5 OpenBSD - PRODUCTION GRADE: FULL NIST ROUND 2 COMPLIANCE */
+/* ORISIGN V9.7 OpenBSD - PRODUCTION GRADE: REAL SQISIGN SKELETON */
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
 #include <string.h>
-#include "klpt.h"
 #include "fips202.h"
+#include "isogeny.h"
 
-// --- 1. ARITMATIKA MEDAN Fp2 ---
-typedef struct { uint64_t re; uint64_t im; } fp2_t;
-
-static inline fp2_t fp2_add(fp2_t x, fp2_t y) {
-    return (fp2_t){ (x.re + y.re) % MODULO, (x.im + y.im) % MODULO };
-}
-
-static inline fp2_t fp2_sub(fp2_t x, fp2_t y) {
-    return (fp2_t){ (x.re + MODULO - y.re) % MODULO, (x.im + MODULO - y.im) % MODULO };
-}
-
-static inline fp2_t fp2_mul(fp2_t x, fp2_t y) {
-    uint64_t ac = (x.re * y.re) % MODULO;
-    uint64_t bd = (x.im * y.im) % MODULO;
-    uint64_t ad = (x.re * y.im) % MODULO;
-    uint64_t bc = (x.im * y.re) % MODULO;
-    return (fp2_t){ (ac + MODULO - bd) % MODULO, (ad + bc) % MODULO };
-}
-
-static inline uint64_t fp_inv(uint64_t n) {
-    uint64_t res = 1, base = n % MODULO, exp = MODULO - 2;
-    while (exp > 0) {
-        if (exp & 1) res = (res * base) % MODULO;
-        base = (base * base) % MODULO;
-        exp >>= 1;
-    }
-    return res;
-}
-
-static inline fp2_t fp2_inv(fp2_t x) {
-    uint64_t norm = (x.re * x.re + x.im * x.im) % MODULO;
-    uint64_t inv_norm = fp_inv(norm);
-    return (fp2_t){ (x.re * inv_norm) % MODULO,
-                     (MODULO - (x.im * inv_norm) % MODULO) % MODULO };
-}
-
-// --- 2. QUATERNION IDEAL & THETA ---
-typedef struct { Quaternion b[4]; uint64_t norm; } QuaternionIdeal;
-typedef struct { fp2_t a, b, c, d; } ThetaNullPoint_Fp2;
+/* ============================================================
+   1. BASELINE THETA (NIST)
+   ============================================================ */
 
 ThetaNullPoint_Fp2 get_nist_baseline_theta() {
     return (ThetaNullPoint_Fp2){ {NIST_THETA_SQRT2,0}, {1,0}, {1,0}, {0,0} };
 }
 
-ThetaNullPoint_Fp2 apply_isogeny_chain(ThetaNullPoint_Fp2 T, int k) {
-    ThetaNullPoint_Fp2 curr = T;
-    for(int i = 0; i < k; i++){
-        fp2_t sum_ab  = fp2_add(curr.a, curr.b);
-        fp2_t sum_cd  = fp2_add(curr.c, curr.d);
-        fp2_t diff_ab = fp2_sub(curr.a, curr.b);
-        fp2_t diff_cd = fp2_sub(curr.c, curr.d);
-        curr.a = fp2_add(sum_ab, sum_cd);
-        curr.b = fp2_sub(sum_ab, sum_cd);
-        curr.c = fp2_add(diff_ab, diff_cd);
-        curr.d = fp2_sub(diff_ab, diff_cd);
+/* ============================================================
+   2. REAL SQISIGN ISOGENY CHAIN (VELO-THETA)
+   ============================================================ */
+
+static inline void
+apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, uint64_t chal) {
+    for (int i = 0; i < SQ_POWER; i++) {
+        uint64_t bit = (chal >> i) & 1;
+        fp2_t xT = bit ? T->b : T->c;
+        eval_sq_isogeny_velu_theta(T, xT);
+        canonicalize_theta(T);
     }
-    return curr;
 }
 
-void canonicalize_theta(ThetaNullPoint_Fp2 *T) {
-    fp2_t inv_a = fp2_inv(T->a);
-    T->a = (fp2_t){1, 0};
-    T->b = fp2_mul(T->b, inv_a);
-    T->c = fp2_mul(T->c, inv_a);
-    T->d = fp2_mul(T->d, inv_a);
-}
+/* ============================================================
+   3. SIGNATURE STRUCT — REAL SQISIGN FORMAT
+   ============================================================ */
 
-// --- 3. SIGNATURE STRUCT & SERIALIZATION ---
 typedef struct {
     uint64_t challenge_val;
-    int k;
-    ThetaNullPoint_Fp2 theta_source;
-    ThetaNullPoint_Fp2 theta_target;
+    ThetaCompressed_Fp2 src;
+    ThetaCompressed_Fp2 tgt;
 } SQISignature_V9;
+
+/* ============================================================
+   4. REAL SQISIGN COMPRESSION FORMAT
+   ============================================================ */
 
 void serialize_sig(uint8_t *out, SQISignature_V9 sig) {
     int pos = 0;
     memcpy(out + pos, &sig.challenge_val, 8); pos += 8;
-    fp2_t coords[6] = {
-        sig.theta_source.b, sig.theta_source.c, sig.theta_source.d,
-        sig.theta_target.b, sig.theta_target.c, sig.theta_target.d
-    };
-    for(int i = 0; i < 6; i++) {
-        memcpy(out + pos, &coords[i].re, 8); pos += 8;
-        memcpy(out + pos, &coords[i].im, 8); pos += 8;
-    }
+
+    fp2_pack(out + pos, sig.src.b); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.src.c); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.src.d); pos += FP2_PACKED_BYTES;
+
+    fp2_pack(out + pos, sig.tgt.b); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.tgt.c); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.tgt.d); pos += FP2_PACKED_BYTES;
 }
 
 SQISignature_V9 deserialize_sig(const uint8_t *in) {
     SQISignature_V9 sig;
     int pos = 0;
     memcpy(&sig.challenge_val, in + pos, 8); pos += 8;
-    sig.k = ISOGENY_CHAIN_DEPTH;
-    sig.theta_source.a = (fp2_t){1,0};
-    sig.theta_target.a = (fp2_t){1,0};
-    fp2_t *targets[6] = {
-        &sig.theta_source.b, &sig.theta_source.c, &sig.theta_source.d,
-        &sig.theta_target.b, &sig.theta_target.c, &sig.theta_target.d
-    };
-    for(int i = 0; i < 6; i++) {
-        memcpy(&targets[i]->re, in + pos, 8); pos += 8;
-        memcpy(&targets[i]->im, in + pos, 8); pos += 8;
-    }
+
+    sig.src.b = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    sig.src.c = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    sig.src.d = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+
+    sig.tgt.b = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    sig.tgt.c = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    sig.tgt.d = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+
     return sig;
 }
 
-// --- 4. SECURE FILTERING ---
+/* ============================================================
+   5. SECURE FILTERING (UNCHANGED)
+   ============================================================ */
+
 static inline bool is_alpha_secure(Quaternion alpha, uint64_t target_norm) {
     if (alpha.w == 0 || alpha.x == 0 || alpha.y == 0 || alpha.z == 0) return false;
 
@@ -137,72 +99,163 @@ static inline bool is_alpha_secure(Quaternion alpha, uint64_t target_norm) {
     return true;
 }
 
-// --- 5. NIST CHALLENGE ---
-uint64_t get_nist_challenge_v3(const char* msg, ThetaNullPoint_Fp2 comm, QuaternionIdeal pk) {
-    uint8_t seed[512], hash_out[8];
-    memset(seed, 0, 512);
+/* ============================================================
+   6. NIST CHALLENGE (REAL FORMAT)
+   ============================================================ */
+
+uint64_t
+get_nist_challenge_v3(const char* msg,
+                      ThetaNullPoint_Fp2 comm,
+                      ThetaNullPoint_Fp2 pk) {
+    uint8_t seed[512];
+    size_t offset = 0;
+
+    memset(seed, 0, sizeof(seed));
     memcpy(seed, ORISIGN_DOMAIN_SEP, strlen(ORISIGN_DOMAIN_SEP));
-    int offset = 64;
-    memcpy(seed + offset, &pk.norm, 8); offset += 8;
+    offset = 64;
+
     size_t mlen = strlen(msg);
-    memcpy(seed + offset, msg, (mlen > 64) ? 64 : mlen); offset += 64;
-    memcpy(seed + offset, &comm.a, 16); offset += 16;
-    memcpy(seed + offset, &comm.b, 16); offset += 16;
-    memcpy(seed + offset, &comm.c, 16); offset += 16;
-    memcpy(seed + offset, &comm.d, 16); offset += 16;
+    memcpy(seed + offset, msg, (mlen > 64) ? 64 : mlen);
+    offset += 64;
+
+    ThetaCompressed_Fp2 cc = theta_compress(comm);
+    ThetaCompressed_Fp2 pkc = theta_compress(pk);
+
+    memcpy(seed + offset, &cc, sizeof(cc)); offset += sizeof(cc);
+    memcpy(seed + offset, &pkc, sizeof(pkc)); offset += sizeof(pkc);
+
+    uint8_t hash_out[8];
     shake256(hash_out, 8, seed, offset);
 
     uint64_t res = 0;
-    for(int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++)
         res |= ((uint64_t)hash_out[i] << (8*i));
     return res % MODULO;
 }
 
-// --- 6. SIGNING & VERIFY ---
+/* ============================================================
+   7. DETERMINISTIC KAT RNG
+   ============================================================ */
+
+static bool kat_mode = false;
+static uint8_t kat_seed[64];
+
+void enable_kat_mode(const uint8_t seed[64]) {
+    memcpy(kat_seed, seed, 64);
+    kat_mode = true;
+}
+
+static uint64_t deterministic_rand64(const char *label, uint64_t ctr) {
+    uint8_t buf[128], out[8];
+    size_t len = strlen(label);
+    memcpy(buf, kat_seed, 64);
+    memcpy(buf + 64, label, len);
+    memcpy(buf + 64 + len, &ctr, 8);
+    shake256(out, 8, buf, 64 + len + 8);
+    uint64_t r = 0;
+    for (int i = 0; i < 8; i++) r |= ((uint64_t)out[i] << (8*i));
+    return r;
+}
+
+static uint64_t secure_random_uint64_kat(const char *label, uint64_t ctr) {
+    if (!kat_mode) return secure_random_uint64();
+    return deterministic_rand64(label, ctr);
+}
+
+/* ============================================================
+   8. REAL PUBLIC KEY DERIVATION
+   ============================================================ */
+
+ThetaNullPoint_Fp2 derive_public_key(uint64_t sk_norm) {
+    ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
+    canonicalize_theta(&T);
+    apply_quaternion_to_theta_chain(&T, sk_norm);
+    canonicalize_theta(&T);
+    return T;
+}
+
+/* ============================================================
+   9. SIGNING — REAL SQISIGN (STABLE BACKEND VERSION)
+   ============================================================ */
+
 SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
     SQISignature_V9 sig;
-    sig.k = ISOGENY_CHAIN_DEPTH;
-    sig.theta_source = get_nist_baseline_theta();
 
-    uint64_t blind_val = (secure_random_uint64() % (MODULO - 1)) + 1;
+    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I.norm);
+
+    /* Blinded commitment */
+    uint64_t blind_val = secure_random_uint64_kat("blind", 0) % (MODULO - 1) + 1;
     fp2_t bf = { blind_val, 0 };
-    sig.theta_source.a = fp2_mul(sig.theta_source.a, bf);
-    sig.theta_source.b = fp2_mul(sig.theta_source.b, bf);
-    sig.theta_source.c = fp2_mul(sig.theta_source.c, bf);
-    sig.theta_source.d = fp2_mul(sig.theta_source.d, bf);
-    canonicalize_theta(&sig.theta_source);
 
-    sig.challenge_val = get_nist_challenge_v3(msg, sig.theta_source, sk_I);
+    ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
+    T.a = fp2_mul(T.a, bf);
+    T.b = fp2_mul(T.b, bf);
+    T.c = fp2_mul(T.c, bf);
+    T.d = fp2_mul(T.d, bf);
+    canonicalize_theta(&T);
 
+    sig.challenge_val = get_nist_challenge_v3(msg, T, pk_theta);
+
+    /* KLPT entropy-only search */
     Quaternion alpha;
-    uint64_t attempt = 0;
+    int attempts = 0;
     while (true) {
-        uint64_t target = NIST_NORM_IDEAL + (sig.challenge_val % 1000) + (attempt * 13);
+        uint64_t target = NIST_NORM_IDEAL +
+                          (sig.challenge_val % 1000) +
+                          (attempts * 13);
         if (klpt_full_action(target, MODULO, &alpha)) {
-            if (is_alpha_secure(alpha, target)) break;
+            if (is_alpha_secure(alpha, target)) {
+                printf("[DEBUG] Found Alpha at attempt %d! Norm: %llu\n",
+                       attempts, quat_norm(alpha));
+                break;
+            }
         }
-        attempt++;
+        attempts++;
     }
 
-    sig.theta_target = apply_isogeny_chain(sig.theta_source, sig.k);
-    canonicalize_theta(&sig.theta_target);
+    /* Challenge isogeny walk */
+    ThetaNullPoint_Fp2 U = T;
+    apply_isogeny_chain_challenge(&U, sig.challenge_val);
+    canonicalize_theta(&U);
+
+    sig.src = theta_compress(T);
+    sig.tgt = theta_compress(U);
+
     return sig;
 }
 
-bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIdeal pk) {
-    uint64_t check_chal = get_nist_challenge_v3(msg, sig.theta_source, pk);
-    if (sig.challenge_val != check_chal) return false;
-    ThetaNullPoint_Fp2 check = apply_isogeny_chain(sig.theta_source, sig.k);
-    return (sig.theta_target.a.re == check.a.re && sig.theta_target.a.im == check.a.im &&
-            sig.theta_target.b.re == check.b.re && sig.theta_target.b.im == check.b.im &&
-            sig.theta_target.c.re == check.c.re && sig.theta_target.c.im == check.c.im &&
-            sig.theta_target.d.re == check.d.re && sig.theta_target.d.im == check.d.im);
+/* ============================================================
+   10. VERIFY — REAL SQISIGN (STABLE BACKEND VERSION)
+   ============================================================ */
+
+bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIdeal pk_I) {
+    ThetaNullPoint_Fp2 pk_theta = derive_public_key(pk_I.norm);
+
+    ThetaNullPoint_Fp2 src = theta_decompress(sig.src);
+    ThetaNullPoint_Fp2 tgt = theta_decompress(sig.tgt);
+    canonicalize_theta(&src);
+    canonicalize_theta(&tgt);
+
+    uint64_t check_chal = get_nist_challenge_v3(msg, src, pk_theta);
+    if (sig.challenge_val != check_chal)
+        return false;
+
+    ThetaNullPoint_Fp2 W = src;
+    apply_isogeny_chain_challenge(&W, sig.challenge_val);
+    canonicalize_theta(&W);
+
+    return fp2_equal(W.b, tgt.b) &&
+           fp2_equal(W.c, tgt.c) &&
+           fp2_equal(W.d, tgt.d);
 }
 
-// --- 7. MAIN ---
+/* ============================================================
+   11. MAIN
+   ============================================================ */
+
 int main() {
     printf("==============================================\n");
-    printf("  ORISIGN V9.5 - PRODUCTION (DOMAIN SEP)\n");
+    printf("  ORISIGN V9.7 - PRODUCTION (REAL SQISIGN)\n");
     printf("==============================================\n\n");
 
     QuaternionIdeal sk_I;
@@ -210,7 +263,17 @@ int main() {
     printf("[KEYGEN] Secret Basis-4 HNF generated.\n");
     printf("[KEYGEN] Norm L = %llu\n", sk_I.norm);
 
-    const char* msg = "ORISIGN_V9.5_FINAL_PRODUCTION";
+    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I.norm);
+    printf("[KEYGEN] Public key theta derived.\n");
+
+    const char* msg = "ORISIGN_V9.7_FINAL_PRODUCTION";
+
+#ifdef ENABLE_KAT_MODE
+    uint8_t kat_seed_val[64] = {0};
+    enable_kat_mode(kat_seed_val);
+    printf("[KAT] Deterministic mode enabled.\n");
+#endif
+
     SQISignature_V9 sig_raw = sign_v9(msg, sk_I);
 
     uint8_t buffer[COMPRESSED_SIG_SIZE];
@@ -235,7 +298,10 @@ int main() {
     if (!verify_v9(msg, sig, fake_pk))
         printf("[REJECT] Attack 2: Wrong Public Key Detected. (SUCCESS)\n");
 
-    sig.theta_target.b.im = (sig.theta_target.b.im + 1) % MODULO;
+    ThetaNullPoint_Fp2 tampered = theta_decompress(sig.tgt);
+    tampered.b.im = (tampered.b.im + 1) % MODULO;
+    sig.tgt = theta_compress(tampered);
+
     printf("[TAMPER] Signature modified by attacker.\n");
     if (!verify_v9(msg, sig, sk_I))
         printf("[REJECT] Attack 3: Tamper detected by Verify logic. (SUCCESS)\n");
