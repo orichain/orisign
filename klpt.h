@@ -14,6 +14,9 @@
  */
 #define NIST_THETA_SQRT2 181
 #define ISOGENY_CHAIN_DEPTH 32 // Kedalaman rantai isogeni 2^32
+// --- CONSTANTS & DOMAIN SEPARATION ---
+#define ORISIGN_DOMAIN_SEP "ORISIGN-V9.5-NIST-PQC-2026"
+#define COMPRESSED_SIG_SIZE 104 // 8 (chal) + (6 coords * 16 bytes)
 
 typedef struct { int64_t w, x, y, z; } Quaternion;
 
