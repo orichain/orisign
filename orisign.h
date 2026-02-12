@@ -53,6 +53,9 @@ static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, uint64_t
         // 4. Normalisasi State
         // Menjaga koordinat tetap kecil dan sinkron antara Sign & Verify
         canonicalize_theta(T);
+
+        printf("         [Step %d]: Points: {0x%04X...} | OK (Bit: %lu)\n", 
+                i, (uint16_t)(T->b.re & 0xFFFF), (unsigned long)bit);
     }
 }
 
@@ -114,33 +117,30 @@ static inline SQISignature_V9 deserialize_sig(const uint8_t *in) {
  * Fokus: Pencegahan skewness, densitas entropi, dan validasi range norma.
  */
 static inline bool is_alpha_secure(Quaternion alpha, uint64_t target_norm) {
-    // 1. Quick Check: Hindari komponen nol (Early Exit)
-    // Dalam produksi, alpha dengan komponen 0 bisa memudahkan serangan faktorisasi.
-    if ((alpha.w | alpha.x | alpha.y | alpha.z) == 0) return false;
+    // 1. Quick Check: Hindari komponen nol
     if (alpha.w == 0 || alpha.x == 0 || alpha.y == 0 || alpha.z == 0) return false;
 
-    // 2. Kalkulasi Norma
+    // 2. Anti-Symmetry Check (Saran Baru Anda)
+    // Menolak jika ada dua komponen yang nilainya sama persis.
+    // Ini memaksa KLPT mencari elemen yang lebih 'acak' sebarannya.
+    if (alpha.w == alpha.x || alpha.w == alpha.y || alpha.w == alpha.z ||
+        alpha.x == alpha.y || alpha.x == alpha.z ||
+        alpha.y == alpha.z) return false;
+
+    // 3. Kalkulasi Norma & Range Validation
     uint64_t norm = quat_norm(alpha);
     if (norm == 0) return false;
-
-    // 3. Range Validation
-    // Memastikan norma hasil KLPT berada dalam batas toleransi target.
     if (norm < (uint64_t)(target_norm * NORM_TOLERANCE_LOWER) ||
         norm > (uint64_t)(target_norm * NORM_TOLERANCE_UPPER)) return false;
 
     // 4. Skewness Defense (Anti-Dominance)
-    // Memastikan tidak ada satu komponen yang menampung hampir seluruh nilai norma.
-    // Menggunakan __int128 untuk presisi tinggi saat kuadrat komponen besar.
     const unsigned __int128 limit = (unsigned __int128)target_norm * NORM_TOLERANCE_LIMIT;
-    
     if ((unsigned __int128)alpha.w * alpha.w > limit) return false;
     if ((unsigned __int128)alpha.x * alpha.x > limit) return false;
     if ((unsigned __int128)alpha.y * alpha.y > limit) return false;
     if ((unsigned __int128)alpha.z * alpha.z > limit) return false;
 
     // 5. Entropy Density Check
-    // __builtin_popcountll memastikan norma memiliki variasi bit yang cukup.
-    // 6 bit set adalah batas aman minimum untuk menghindari struktur norma yang terlalu "tipis".
     if (__builtin_popcountll(norm) < 6) return false;
 
     return true;
@@ -252,8 +252,14 @@ start_sign:
     goto start_sign;
 
 success_klpt:
+    printf("[SIGN] Path found! Quaternion Alpha details:\n");
+    printf("       w: %lld, x: %lld, y: %lld, z: %lld\n", 
+            (long long)alpha.w, 
+            (long long)alpha.x, 
+            (long long)alpha.y, 
+            (long long)alpha.z
+    );
     /* 3. Challenge Isogeny Walk */
-    ;
     ThetaNullPoint_Fp2 U = T;
     apply_isogeny_chain_challenge(&U, sig.challenge_val);
     canonicalize_theta(&U);

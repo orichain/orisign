@@ -55,13 +55,6 @@ int main() {
     
     clock_gettime(CLOCK_MONOTONIC, &e_sign);
     
-    // Log internal untuk audit (Alpha stats)
-    printf("[SIGN] Path found! Quaternion Alpha details:\n");
-    printf("       w: %lld, x: %lld, y: %lld, z: %lld\n", 
-            (long long)sig_raw.challenge_val % 127, 
-            (long long)sig_raw.challenge_val % 97,
-            (long long)sig_raw.challenge_val % 83,
-            (long long)sig_raw.challenge_val % 67);
     printf("[SIGN] Challenge H(m, pk): %llu\n", sig_raw.challenge_val);
 
     // --- 3. SERIALIZATION ---
@@ -76,12 +69,6 @@ int main() {
     printf("[VERIFY] 1. Challenge Re-hashing... OK (Val: %llu)\n", sig_raw.challenge_val);
     printf("[VERIFY] 2. Basis Reconstruction... OK\n");
     printf("[VERIFY] 3. Climbing Isogeny Tree (Degree 2^%d)...\n", SQ_POWER);
-    
-    // Visualisasi Isogeny Walk
-    for(int i=0; i<SQ_POWER; i++) {
-        printf("         [Step %d]: Points: {0x%04X...} | OK\n", 
-                i, (uint16_t)(sig_raw.challenge_val ^ (i*0xABC)));
-    }
 
     struct timespec s_ver, e_ver;
     clock_gettime(CLOCK_MONOTONIC, &s_ver);
