@@ -19,3 +19,9 @@ typedef struct {
     ThetaCompressed_Fp2 tgt;
 } SQISignature_V9;
 
+typedef struct {
+    bool enabled;
+    uint8_t seed[64];
+    uint64_t counter;
+} kat_context;
+

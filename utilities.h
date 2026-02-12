@@ -2,6 +2,33 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
+
+/**
+ * secure_memzero
+ * Memastikan data sensitif dihapus dari memori.
+ * Menggunakan teknik volatile function pointer untuk mencegah optimasi kompiler.
+ */
+static void* (*const volatile volatile_memset)(void*, int, size_t) = memset;
+
+static inline void secure_memzero(void *v, size_t n) {
+    if (v == NULL) return;
+    volatile_memset(v, 0, n);
+}
+
+/**
+ * secure_compare (Constant-Time)
+ * Membandingkan dua buffer tanpa membocorkan posisi perbedaan bit.
+ * Digunakan untuk memvalidasi hash atau tanda tangan.
+ */
+static inline int secure_compare(const uint8_t *a, const uint8_t *b, size_t n) {
+    uint8_t result = 0;
+    for (size_t i = 0; i < n; i++) {
+        result |= (a[i] ^ b[i]);
+    }
+    // Mengembalikan 0 jika identik, 1 jika berbeda
+    return (result != 0);
+}
 
 /* CSPRNG (OpenBSD) */
 static inline uint64_t secure_random_uint64(void) {
@@ -10,26 +37,22 @@ static inline uint64_t secure_random_uint64(void) {
     return v;
 }
 
-static inline bool is_prime_miller_rabin(uint64_t n) {
+static inline bool is_prime_miller_rabin_nist(uint64_t n, int iterations) {
     if (n < 2) return false;
     if (n == 2 || n == 3) return true;
     if (n % 2 == 0) return false;
 
-    // Tulis n-1 sebagai 2^s * d
+    // n-1 = 2^s * d
     uint64_t d = n - 1;
     int s = 0;
-    while (d % 2 == 0) {
-        d /= 2;
-        s++;
-    }
+    while (d % 2 == 0) { d /= 2; s++; }
 
-    // Basis saksi untuk uint64_t (cukup untuk n < 2^64)
-    uint64_t witnesses[] = {2, 3, 5, 7, 11, 13, 17, 19, 23};
-    for (int i = 0; i < 9; i++) {
-        uint64_t a = witnesses[i];
-        if (n <= a) break;
+    for (int i = 0; i < iterations; i++) {
+        // STANDAR NIST/OPENSSL: Ambil saksi secara acak dari sistem
+        // secure_random_uint64() dari OpenBSD sangat cocok di sini
+        uint64_t a = 2 + (secure_random_uint64() % (n - 3));
 
-        // Hitung x = a^d mod n
+        // Modular Exponentiation: x = a^d mod n
         __uint128_t x = 1, base = a % n;
         uint64_t exp = d;
         while (exp > 0) {
@@ -48,9 +71,9 @@ static inline bool is_prime_miller_rabin(uint64_t n) {
                 break;
             }
         }
-        if (composite) return false;
+        if (composite) return false; // Pasti komposit
     }
-    return true;
+    return true; // Probabilitas prima sangat tinggi
 }
 
 // Fungsi pembantu untuk Hex Dump yang rapi

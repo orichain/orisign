@@ -3,7 +3,7 @@
 
 /* ----------------- Global Parameters ------------------ */
 #define MODULO ((uint64_t)65537)
-#define SQ_POWER 15
+#define SQ_POWER 8
 
 #define ORISIGN_DOMAIN_SEP "ORISIGN-V9.6-NIST-PQC-2026"
 #define COMPRESSED_SIG_SIZE 104

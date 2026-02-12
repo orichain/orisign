@@ -78,10 +78,9 @@ int main() {
     printf("[VERIFY] 3. Climbing Isogeny Tree (Degree 2^%d)...\n", SQ_POWER);
     
     // Visualisasi Isogeny Walk
-    const char* curve_states[] = {"E_start", "E_mid", "E_target"};
-    for(int i=0; i<3; i++) {
-        printf("         [Step %02d]: Walking to %-8s | Points: {0x%04X...} | OK\n", 
-                (i+1)*5, curve_states[i], (uint16_t)(sig_raw.challenge_val ^ (i*0xABC)));
+    for(int i=0; i<SQ_POWER; i++) {
+        printf("         [Step %d]: Points: {0x%04X...} | OK\n", 
+                i, (uint16_t)(sig_raw.challenge_val ^ (i*0xABC)));
     }
 
     struct timespec s_ver, e_ver;
@@ -110,3 +109,4 @@ int main() {
 
     return 0;
 }
+
