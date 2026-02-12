@@ -104,7 +104,6 @@ int main() {
     printf("  > Signing Latency      : %.4f ms\n", t_sign * 1000);
     printf("  > Verification Latency : %.4f ms\n", t_ver * 1000);
     printf("  > System Throughput    : %.1f sig/sec\n", 1.0 / (t_sign + t_ver));
-    printf("  > Security Strength    : 128-bit (NIST Level 1)\n");
     printf("==============================================================\n");
 
     return 0;
