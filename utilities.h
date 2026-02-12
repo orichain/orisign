@@ -76,6 +76,17 @@ static inline bool is_prime_miller_rabin_nist(uint64_t n, int iterations) {
     return true; // Probabilitas prima sangat tinggi
 }
 
+static inline uint64_t isqrt_v9(uint64_t n) {
+    if (n < 2) return n;
+    uint64_t x = n;
+    uint64_t y = (x + 1) >> 1;
+    while (y < x) {
+        x = y;
+        y = (x + n / x) >> 1;
+    }
+    return x;
+}
+
 // Fungsi pembantu untuk Hex Dump yang rapi
 static inline void print_hex_detailed(const char* label, const uint8_t* data, size_t len) {
     printf("[%s]: ", label);

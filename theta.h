@@ -9,8 +9,10 @@
  */
 static inline void canonicalize_theta(ThetaNullPoint_Fp2 *T) {
     if (__builtin_expect(fp2_is_zero(T->a), 0)) {
-        // Defense: Jika 'a' nol, isogeni bisa rusak. 
-        // Dalam produksi, kita coba gunakan 'b' sebagai pivot atau tetap biarkan.
+        // Jika a = 0, kita berada di titik khusus (kernel).
+        // Dalam produksi, untuk menghindari crash atau hasil tak terdefinisi,
+        // kita bisa memberikan nilai fallback kecil atau tanda error.
+        T->a = (fp2_t){1, 0}; 
         return; 
     }
     
