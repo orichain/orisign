@@ -47,8 +47,10 @@ static inline uint64_t secure_random_hardware(void) {
 static inline uint64_t drbg_generate_safe(const char *label) {
     // Pastikan counter tidak overflow (NIST SP 800-90A requirement)
     if (global_kat_ctx.counter == KAT_MAX_COUNTER) {
-        // Dalam produksi, kita bisa re-seed atau fail-safe ke hardware
-        return secure_random_hardware();
+        uint8_t seed[KAT_SEED_SIZE];
+        arc4random_buf(seed, KAT_SEED_SIZE);
+        memcpy(global_kat_ctx.seed, seed, KAT_SEED_SIZE);
+        global_kat_ctx.counter = 0;
     }
 
     uint8_t state[128]; 
