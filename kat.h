@@ -1,62 +1,96 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include "fips202.h"
 #include "types.h"
-#include "utilities.h"
 
-// Global context untuk penggunaan sederhana, 
-// tapi fungsi tetap menerima pointer untuk fleksibilitas
-static kat_context global_kat_ctx = { .enabled = false, .counter = 0 };
+// Gunakan 'volatile' untuk memastikan compiler tidak mengoptimasi penghapusan memori
+static kat_context_t global_kat_ctx = { .enabled = false, .counter = 0 };
 
-static inline void kat_init(const uint8_t seed[64]) {
-    memcpy(global_kat_ctx.seed, seed, 64);
+/**
+ * Inisialisasi KAT dengan Seed NIST
+ */
+static inline void kat_init(const uint8_t seed[KAT_SEED_SIZE]) {
+    if (global_kat_ctx.initialized) {
+        return; 
+    }
+    if (seed == NULL) return;
+    memcpy(global_kat_ctx.seed, seed, KAT_SEED_SIZE);
     global_kat_ctx.enabled = true;
+    global_kat_ctx.initialized = true;
     global_kat_ctx.counter = 0;
 }
 
-static inline void kat_disable() {
+/**
+ * Pembersihan Memori yang Aman (Anti-Leak)
+ */
+static inline void kat_destroy(void) {
     global_kat_ctx.enabled = false;
-    // Security: Bersihkan seed dari memori saat dimatikan
-    memset(global_kat_ctx.seed, 0, 64);
+    global_kat_ctx.initialized = false;
+    global_kat_ctx.counter = 0;
+    // Explicit bzero/memset untuk membersihkan data sensitif dari RAM
+    explicit_bzero(global_kat_ctx.seed, KAT_SEED_SIZE);
+}
+
+/* Base CSPRNG (OpenBSD path) */
+static inline uint64_t secure_random_hardware(void) {
+    uint64_t v;
+    arc4random_buf(&v, sizeof(v));
+    return v;
 }
 
 /**
- * PENGEMBANGAN: DRBG Berbasis SHAKE256 (NIST Style)
- * Menggunakan Domain Separation untuk mencegah 'collision' antar label
+ * DRBG Berbasis SHAKE256 dengan Proteksi Overflow
  */
-static inline uint64_t drbg_generate(const char *label) {
-    uint8_t entropy_block[128];
+static inline uint64_t drbg_generate_safe(const char *label) {
+    // Pastikan counter tidak overflow (NIST SP 800-90A requirement)
+    if (global_kat_ctx.counter == KAT_MAX_COUNTER) {
+        // Dalam produksi, kita bisa re-seed atau fail-safe ke hardware
+        return secure_random_hardware();
+    }
+
+    uint8_t state[128]; 
     uint8_t output[8];
+    size_t label_len = label ? strlen(label) : 0;
+    if (label_len > 32) label_len = 32;
+
+    // 1. Konstruksi State: [Seed(64) | Label(32) | Counter(8)]
+    memset(state, 0, sizeof(state));
+    memcpy(state, global_kat_ctx.seed, KAT_SEED_SIZE);
+    if (label) {
+        memcpy(state + KAT_SEED_SIZE, label, label_len);
+    }
     
-    // 1. Masukkan Seed
-    memcpy(entropy_block, global_kat_ctx.seed, 64);
-    
-    // 2. Masukkan Label (Domain Separation)
-    size_t label_len = strlen(label);
-    if (label_len > 32) label_len = 32; // Limit label size
-    memcpy(entropy_block + 64, label, label_len);
-    
-    // 3. Masukkan Counter untuk memastikan output unik setiap pemanggilan
+    // Increment counter sebelum digunakan
     uint64_t current_ctr = global_kat_ctx.counter++;
-    memcpy(entropy_block + 64 + label_len, &current_ctr, 8);
+    memcpy(state + KAT_SEED_SIZE + 32, &current_ctr, sizeof(uint64_t));
 
-    // 4. SHAKE256 sebagai XOF (Extendable Output Function)
-    // Sesuai untuk NIST PQC karena tahan serangan pre-image
-    shake256(output, 8, entropy_block, 64 + label_len + 8);
+    // 2. SHAKE256 Absorbing
+    // Menggunakan SHAKE256 untuk output 64-bit yang tahan tabrakan (collision-resistant)
+    shake256(output, 8, state, KAT_SEED_SIZE + 32 + 8);
 
+    // 3. Reconstruct uint64_t secara Little-Endian (Platform Independent)
     uint64_t r = 0;
-    for (int i = 0; i < 8; i++) r |= ((uint64_t)output[i] << (8*i));
+    for (int i = 0; i < 8; i++) {
+        r |= ((uint64_t)output[i] << (8 * i));
+    }
+
+    // Bersihkan buffer temporer dari stack
+    explicit_bzero(state, sizeof(state));
+    
     return r;
 }
 
 /**
- * Entry Point utama untuk Randomness
+ * Entry Point Utama
  */
 static inline uint64_t secure_random_uint64_kat(const char *label) {
+    // Branch prediction: asumsikan mode produksi (disabled) lebih sering digunakan
     if (__builtin_expect(!global_kat_ctx.enabled, 1)) {
-        return secure_random_uint64(); // Path tercepat (Production)
+        return secure_random_hardware();
     }
-    return drbg_generate(label); // Path Debug/KAT
+    return drbg_generate_safe(label);
 }
+

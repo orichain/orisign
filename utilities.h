@@ -1,4 +1,6 @@
 #pragma once
+#include "constants.h"
+#include "kat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -30,13 +32,6 @@ static inline int secure_compare(const uint8_t *a, const uint8_t *b, size_t n) {
     return (result != 0);
 }
 
-/* CSPRNG (OpenBSD) */
-static inline uint64_t secure_random_uint64(void) {
-    uint64_t v;
-    arc4random_buf(&v, sizeof(v));
-    return v;
-}
-
 static inline bool is_prime_miller_rabin_nist(uint64_t n, int iterations) {
     if (n < 2) return false;
     if (n == 2 || n == 3) return true;
@@ -50,7 +45,7 @@ static inline bool is_prime_miller_rabin_nist(uint64_t n, int iterations) {
     for (int i = 0; i < iterations; i++) {
         // STANDAR NIST/OPENSSL: Ambil saksi secara acak dari sistem
         // secure_random_uint64() dari OpenBSD sangat cocok di sini
-        uint64_t a = 2 + (secure_random_uint64() % (n - 3));
+        uint64_t a = 2 + (secure_random_uint64_kat(KAT_LABEL) % (n - 3));
 
         // Modular Exponentiation: x = a^d mod n
         __uint128_t x = 1, base = a % n;

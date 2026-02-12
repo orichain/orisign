@@ -1,5 +1,6 @@
 
 #pragma once
+#include "constants.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -21,7 +22,8 @@ typedef struct {
 
 typedef struct {
     bool enabled;
-    uint8_t seed[64];
+    uint8_t seed[KAT_SEED_SIZE];
     uint64_t counter;
-} kat_context;
+    bool initialized;
+} kat_context_t;
 

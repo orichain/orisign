@@ -1,4 +1,5 @@
 #pragma once
+#include "kat.h"
 #include "quaternion.h"
 #include "types.h"
 #include "utilities.h"
@@ -101,7 +102,7 @@ static inline bool klpt_full_action(uint64_t L, uint64_t p, Quaternion *out) {
 
     // 3. Last resort: Entropy-based randomized search
     for (int attempts = 0; attempts < 10; attempts++) {
-        uint64_t salt = secure_random_uint64() % 1024;
+        uint64_t salt = secure_random_uint64_kat(KAT_LABEL) % 1024;
         if (klpt_solve_advanced(L + salt, out)) return true;
     }
 

@@ -212,7 +212,7 @@ static inline SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
     ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I.norm);
 
     /* 1. Blinded Commitment */
-    uint64_t blind_val = (secure_random_uint64_kat("blind") % (MODULO - 1)) + 1;
+    uint64_t blind_val = (secure_random_uint64_kat(KAT_LABEL) % (MODULO - 1)) + 1;
     fp2_t bf = { .re = blind_val, .im = 0 };
 
     ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
@@ -248,7 +248,7 @@ start_sign:
     
     // Jika gagal setelah MAX_SIGN_ATTEMPTS, reset komitmen tanpa memakan stack
     attempts = 0;
-    blind_val = secure_random_uint64(); // Re-randomize
+    blind_val = secure_random_uint64_kat(KAT_LABEL); // Re-randomize
     goto start_sign;
 
 success_klpt:
@@ -316,7 +316,7 @@ static inline QuaternionIdeal keygen_v9(void) {
         // 1. Entropi Keamanan Tinggi
         // Menggunakan offset dari generator random kriptografis (secure_random)
         // Rentang 2000 memberikan densitas prima yang cukup tanpa kebocoran pola.
-        uint64_t offset = secure_random_uint64() % 2000;
+        uint64_t offset = secure_random_uint64_kat(KAT_LABEL) % 2000;
         candidate = NIST_NORM_IDEAL + offset;
 
         // 2. Parity Check (Fast Path)
