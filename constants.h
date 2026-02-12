@@ -17,3 +17,5 @@
 
 #define FP2_PACKED_BYTES 16
 
+#define MAX_SIGN_ATTEMPTS 1000
+

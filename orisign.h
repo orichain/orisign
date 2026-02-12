@@ -135,6 +135,12 @@ static inline SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
     Quaternion alpha;
     int attempts = 0;
     while (true) {
+        static int resets = 0; // Hanya untuk debugging
+        if (attempts > MAX_SIGN_ATTEMPTS) {
+            resets++;
+            printf("[WARN] KLPT Stalled. Resetting commitment (Reset count: %d)...\n", resets);
+            return sign_v9(msg, sk_I);
+        }
         uint64_t target = NIST_NORM_IDEAL +
                           (sig.challenge_val % 1000) +
                           (attempts * 13);
@@ -164,6 +170,9 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIde
 
     ThetaNullPoint_Fp2 src = theta_decompress(sig.src);
     ThetaNullPoint_Fp2 tgt = theta_decompress(sig.tgt);
+
+    if (theta_is_infinity(tgt)) return false;
+
     canonicalize_theta(&src);
     canonicalize_theta(&tgt);
 
@@ -178,5 +187,31 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIde
     return fp2_equal(W.b, tgt.b) &&
            fp2_equal(W.c, tgt.c) &&
            fp2_equal(W.d, tgt.d);
+}
+
+static inline QuaternionIdeal keygen_v9() {
+    QuaternionIdeal sk;
+    uint64_t candidate;
+
+    while (true) {
+        // Ambil entropi acak
+        uint64_t offset = secure_random_uint64() % 2000;
+        candidate = NIST_NORM_IDEAL + offset;
+
+        // Pastikan ganjil agar bisa menjadi kandidat prima (kecuali 2)
+        if (candidate % 2 == 0) candidate++;
+
+        // Cek apakah kandidat ini prima
+        if (is_prime_miller_rabin(candidate)) {
+            // Tambahan syarat SQISIGN: n % 4 == 3 biasanya lebih disukai
+            // untuk mempermudah perhitungan akar kuadrat di dalam field
+            if (candidate % 4 == 3) {
+                break; 
+            }
+        }
+    }
+
+    sk.norm = candidate;
+    return sk;
 }
 

@@ -25,6 +25,10 @@ static inline ThetaNullPoint_Fp2 theta_decompress(ThetaCompressed_Fp2 C) {
     return T;
 }
 
+static inline bool theta_is_infinity(ThetaNullPoint_Fp2 T) {
+    return fp2_is_zero(T.a) && fp2_is_zero(T.b) && fp2_is_zero(T.c) && fp2_is_zero(T.d);
+}
+
 /* Vélu-theta 2-isogeny step */
 static inline void eval_sq_isogeny_velu_theta(ThetaNullPoint_Fp2 *T, fp2_t xT) {
     fp2_t a = T->a, b = T->b, c = T->c, d = T->d;

@@ -62,6 +62,10 @@ static inline bool fp2_equal(fp2_t a, fp2_t b) {
            ((a.im % MODULO) == (b.im % MODULO));
 }
 
+static inline bool fp2_is_zero(fp2_t x) {
+    return (x.re % MODULO == 0) && (x.im % MODULO == 0);
+}
+
 /* FP2 sqrt */
 static inline uint64_t fp_sqrt(uint64_t a) {
     if (a == 0) return 0;
