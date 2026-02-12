@@ -48,7 +48,11 @@ int main() {
     struct timespec s_sign, e_sign;
     clock_gettime(CLOCK_MONOTONIC, &s_sign);
     
-    SQISignature_V9 sig_raw = sign_v9(msg, sk_I);
+    SQISignature_V9 sig_raw;
+    bool is_signed = sign_v9(&sig_raw, msg, sk_I);
+    if (!is_signed) {
+        return -1; 
+    }
     
     clock_gettime(CLOCK_MONOTONIC, &e_sign);
     
@@ -70,7 +74,7 @@ int main() {
     struct timespec s_ver, e_ver;
     clock_gettime(CLOCK_MONOTONIC, &s_ver);
     
-    bool is_valid = verify_v9(msg, sig_raw, sk_I);
+    bool is_valid = verify_v9(msg, &sig_raw, sk_I);
     
     clock_gettime(CLOCK_MONOTONIC, &e_ver);
 

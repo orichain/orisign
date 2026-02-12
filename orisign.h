@@ -204,38 +204,40 @@ static inline ThetaNullPoint_Fp2 derive_public_key(uint64_t sk_norm) {
     return T;
 }
 
-static inline SQISignature_V9 sign_v9(const char* msg, QuaternionIdeal sk_I) {
+/**
+ * SQISign Signature Generation V9.7
+ * Lengkap dengan logging alpha dan limit reset.
+ */
+static inline bool sign_v9(SQISignature_V9 *sig_out, const char* msg, QuaternionIdeal sk_I) {
     SQISignature_V9 sig;
+    Quaternion alpha;
     
-    // PENINGKATAN: Pre-computed Public Key
-    // Dalam produksi, pk_theta biasanya dikirim bersama sk_I atau dihitung sekali saja.
+    // 0. Pre-compute Public Key untuk hashing challenge
     ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I.norm);
+    
+    int total_resets = 0;
+    int attempts = 0;
 
-    /* 1. Blinded Commitment */
+start_sign:
+    attempts = 0;
+
+    /* 1. BLINDED COMMITMENT */
     uint64_t blind_val = (secure_random_uint64_kat(KAT_LABEL) % (MODULO - 1)) + 1;
     fp2_t bf = { .re = blind_val, .im = 0 };
 
     ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
     
-    // PENINGKATAN: Menggunakan fungsi mul proyektif jika tersedia
-    // Jika tidak, cara Anda sudah benar.
     T.a = fp2_mul(T.a, bf);
     T.b = fp2_mul(T.b, bf);
     T.c = fp2_mul(T.c, bf);
     T.d = fp2_mul(T.d, bf);
     canonicalize_theta(&T);
 
+    /* 2. CHALLENGE GENERATION */
     sig.challenge_val = get_nist_challenge_v3(msg, T, pk_theta);
 
-    /* 2. KLPT Search Loop */
-    Quaternion alpha;
-    int attempts = 0;
-    
-    // PENINGKATAN: Iterative loop menggantikan Rekursi
-    // Rekursi 'return sign_v9' berisiko Stack Overflow jika MAX_SIGN_ATTEMPTS tercapai berkali-kali.
-    // Kita gunakan label 'start_sign' untuk reset yang aman.
-start_sign:
-    while (attempts <= MAX_SIGN_ATTEMPTS) {
+    /* 3. KLPT SEARCH LOOP */
+    while (attempts < MAX_SIGN_ATTEMPTS) {
         uint64_t target = NIST_NORM_IDEAL + (sig.challenge_val % 1000) + (attempts * 13);
         
         if (klpt_full_action(target, MODULO, &alpha)) {
@@ -246,39 +248,48 @@ start_sign:
         attempts++;
     }
     
-    // Jika gagal setelah MAX_SIGN_ATTEMPTS, reset komitmen tanpa memakan stack
-    attempts = 0;
-    blind_val = secure_random_uint64_kat(KAT_LABEL); // Re-randomize
+    /* 4. RESET MECHANISM */
+    total_resets++;
+    if (total_resets > MAX_SIGN_RESETS) { 
+        printf("[ERROR] Sign failed after 50 commitment resets.\n");
+        return false;
+    }
+    
     goto start_sign;
 
 success_klpt:
-    printf("[SIGN] Path found! Quaternion Alpha details:\n");
-    printf("       w: %lld, x: %lld, y: %lld, z: %lld\n", 
+    /* 5. LOGGING DATA ASLI (BALIK LAGI) */
+    printf("[SIGN] Path found! Resets: %d | Attempts: %d\n", total_resets, attempts);
+    printf("       Alpha: w=%lld, x=%lld, y=%lld, z=%lld\n", 
             (long long)alpha.w, 
             (long long)alpha.x, 
             (long long)alpha.y, 
-            (long long)alpha.z
-    );
-    /* 3. Challenge Isogeny Walk */
+            (long long)alpha.z);
+
+    /* 6. CHALLENGE ISOGENY WALK */
     ThetaNullPoint_Fp2 U = T;
     apply_isogeny_chain_challenge(&U, sig.challenge_val);
     canonicalize_theta(&U);
 
+    /* 7. SERIALIZATION */
     sig.src = theta_compress(T);
     sig.tgt = theta_compress(U);
 
-    return sig;
+    // Salin ke output pointer
+    *sig_out = sig;
+
+    return true;
 }
 
-static inline bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIdeal pk_I) {
+static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, QuaternionIdeal pk_I) {
     // PENINGKATAN: Early Exit pada input yang mustahil
-    if (sig.challenge_val == 0) return false;
+    if (sig->challenge_val == 0) return false;
 
     ThetaNullPoint_Fp2 pk_theta = derive_public_key(pk_I.norm);
 
     // PENINGKATAN: Gabungkan dekompresi dengan validasi domain
-    ThetaNullPoint_Fp2 src = theta_decompress(sig.src);
-    ThetaNullPoint_Fp2 tgt = theta_decompress(sig.tgt);
+    ThetaNullPoint_Fp2 src = theta_decompress(sig->src);
+    ThetaNullPoint_Fp2 tgt = theta_decompress(sig->tgt);
 
     if (theta_is_infinity(tgt) || theta_is_infinity(src)) return false;
 
@@ -289,10 +300,10 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 sig, QuaternionIde
     uint64_t check_chal = get_nist_challenge_v3(msg, src, pk_theta);
     
     // Constant-time comparison untuk challenge (opsional untuk verifier)
-    if (sig.challenge_val != check_chal) return false;
+    if (sig->challenge_val != check_chal) return false;
 
     ThetaNullPoint_Fp2 W = src;
-    apply_isogeny_chain_challenge(&W, sig.challenge_val);
+    apply_isogeny_chain_challenge(&W, sig->challenge_val);
     
     // PENINGKATAN: Normalisasi Akhir
     canonicalize_theta(&W);
