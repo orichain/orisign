@@ -1,6 +1,5 @@
 #pragma once
 
-#include "constants.h"
 #include "kat.h"
 
 #include <stdint.h>
@@ -103,36 +102,38 @@ modexp_u64(uint64_t base, uint64_t exp, uint64_t mod)
  *   true  -> kemungkinan besar prima
  *   false -> komposit
  */
-static inline bool
-is_prime_miller_rabin_nist(uint64_t n, int iterations)
+static inline bool is_prime_miller_rabin_nist(uint64_t n, int iterations)
 {
-    if (n < 2)
-        return false;
+    // 1. Penanganan angka kecil
+    if (n < 2) return false;
+    if (n == 2 || n == 3) return true;
+    if ((n & 1ULL) == 0) return false;
 
-    /* small primes fast-path */
-    if (n == 2 || n == 3)
-        return true;
+    // 2. Trial Division (Sangat cepat, menghemat CPU)
+    static const uint32_t small_primes[] = {
+        3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53
+    };
+    for (int i = 0; i < 15; i++) {
+        if (n % small_primes[i] == 0) return (n == small_primes[i]);
+    }
 
-    if ((n & 1ULL) == 0)
-        return false;
-
-    if (iterations <= 0)
-        iterations = 5;  /* safe default */
-
-    /* decompose n-1 = 2^s * d */
+    // 3. Setup dekomposisi n-1 = 2^s * d
     uint64_t d = n - 1;
     int s = 0;
-
     while ((d & 1ULL) == 0) {
         d >>= 1;
         s++;
     }
 
-    for (int i = 0; i < iterations; i++) {
+    // Gunakan minimal 40 iterasi jika tidak ditentukan
+    if (iterations < 40) iterations = 40; 
 
-        /* ambil saksi acak dalam [2, n-2] */
-        uint64_t a =
-            2 + (secure_random_uint64_kat(KAT_LABEL) % (n - 3));
+    for (int i = 0; i < iterations; i++) {
+        // Pemilihan saksi 'a' dengan Rejection Sampling (menghindari bias)
+        uint64_t a;
+        do {
+            a = secure_random_hardware() % (n - 1);
+        } while (a < 2);
 
         uint64_t x = modexp_u64(a, d, n);
 
@@ -140,22 +141,19 @@ is_prime_miller_rabin_nist(uint64_t n, int iterations)
             continue;
 
         bool composite = true;
-
         for (int r = 1; r < s; r++) {
-            __uint128_t sq = (__uint128_t)x * x;
-            x = (uint64_t)(sq % n);
-
+            // Gunakan __uint128_t untuk keamanan perkalian kuadrat
+            x = (uint64_t)(((__uint128_t)x * x) % n);
             if (x == n - 1) {
                 composite = false;
                 break;
             }
         }
 
-        if (composite)
-            return false; /* pasti komposit */
+        if (composite) return false; 
     }
 
-    return true; /* probabilitas prima sangat tinggi */
+    return true; 
 }
 
 

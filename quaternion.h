@@ -11,6 +11,14 @@
    - All components canonical < MODULO
    ================================================================ */
 
+static inline Quaternion quat_add(Quaternion a, Quaternion b) {
+    return (Quaternion){
+        fp_add(a.w, b.w),
+        fp_add(a.x, b.x),
+        fp_add(a.y, b.y),
+        fp_add(a.z, b.z)
+    };
+}
 
 /* ------------------------------------------------
    Hamilton Product

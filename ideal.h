@@ -103,7 +103,81 @@ static inline bool solve_cornacchia_nist(uint64_t n,
  * KLPT SOLVER (INTEGER SEARCH DOMAIN)
  * ============================================================ */
 
-static inline bool klpt_solve_advanced(uint64_t target_norm,
+static inline uint64_t pow_mod(uint64_t base, uint64_t exp, uint64_t mod) {
+    uint64_t res = 1;
+    base %= mod;
+    while (exp > 0) {
+        if (exp % 2 == 1) res = (__uint128_t)res * base % mod;
+        base = (__uint128_t)base * base % mod;
+        exp /= 2;
+    }
+    return res;
+}
+
+static inline bool modular_sqrt(uint64_t a, uint64_t p, uint64_t *r) {
+    if (a == 0) { *r = 0; return true; }
+    if (pow_mod(a, (p - 1) / 2, p) != 1) return false; // Bukan residu kuadratik
+
+    // Kasus khusus p % 4 == 3 (Sangat cepat)
+    if ((p & 3) == 3) {
+        *r = pow_mod(a, (p + 1) / 4, p);
+        return true;
+    }
+
+    // Untuk p umum (Tonelli-Shanks Standar)
+    uint64_t s = 0, q = p - 1;
+    while ((q & 1) == 0) { q >>= 1; s++; }
+    
+    uint64_t z = 2;
+    while (pow_mod(z, (p - 1) / 2, p) != p - 1) z++;
+    
+    uint64_t c = pow_mod(z, q, p);
+    uint64_t r_val = pow_mod(a, (q + 1) / 2, p);
+    uint64_t t = pow_mod(a, q, p);
+    uint64_t m = s;
+
+    while (t % p != 1) {
+        uint64_t i = 1, temp = (uint64_t)((__uint128_t)t * t % p);
+        while (temp % p != 1 && i < m) { temp = (uint64_t)((__uint128_t)temp * temp % p); i++; }
+        uint64_t b = c;
+        for (uint64_t j = 0; j < m - i - 1; j++) b = (uint64_t)((__uint128_t)b * b % p);
+        m = i;
+        c = (uint64_t)((__uint128_t)b * b % p);
+        t = (uint64_t)((__uint128_t)t * c % p);
+        r_val = (uint64_t)((__uint128_t)r_val * b % p);
+    }
+    *r = r_val;
+    return true;
+}
+
+static inline bool klpt_solve_advanced(uint64_t target_norm, Quaternion *res) {
+    if (target_norm == 0) return false;
+    uint64_t limit = isqrt_v9(target_norm);
+    
+    // 1000 attempts sudah sangat aman untuk norma 64-bit ke atas
+    for (int attempts = 0; attempts < 1000; attempts++) {
+        uint64_t z = secure_random_uint64_kat(KAT_LABEL) % (limit + 1);
+        uint64_t rem_z = target_norm - (z * z);
+        
+        uint64_t limit_w = isqrt_v9(rem_z);
+        uint64_t w = secure_random_uint64_kat(KAT_LABEL) % (limit_w + 1);
+        
+        uint64_t rem_w = rem_z - (w * w);
+        int64_t x, y;
+
+        // Cornacchia tetap menjadi penyelesaian akhir yang efisien
+        if (solve_cornacchia_nist(rem_w, &x, &y)) {
+            res->w = w;
+            res->x = fp_from_signed(x);
+            res->y = fp_from_signed(y);
+            res->z = z;
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline bool klpt_solve_advanced_nist_round2(uint64_t target_norm,
                                        Quaternion *res)
 {
     if (target_norm == 0)

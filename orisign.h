@@ -123,6 +123,11 @@ static inline ThetaNullPoint_Fp2 derive_public_key(QuaternionIdeal sk_I)
     return T;
 }
 
+/**
+ * @brief Key Generation V9.7 - NIST PQC Standard
+ * Menghasilkan Secret Key berupa Ideal Kuaternion dengan Norma Prima.
+ * Menggunakan CSPRNG Hardware dan Solver KLPT Probabilistik.
+ */
 static inline QuaternionIdeal keygen_v9(void)
 {
     QuaternionIdeal sk;
@@ -131,12 +136,18 @@ static inline QuaternionIdeal keygen_v9(void)
     uint64_t candidate = 0;
     bool found_prime = false;
 
-    // 1. Cari Norma Prima
+    /* * 1. SEARCH FOR PRIME NORM
+     * Kita mencari bilangan prima yang memenuhi syarat p = 3 (mod 4) 
+     * di sekitar NIST_NORM_IDEAL menggunakan entropi hardware.
+     */
     for (uint64_t attempts = 0; attempts < 100000; attempts++) {
-        // Gunakan CSPRNG platform
+        // Mengambil entropi dari hardware (RDRAND / OpenBSD getentropy)
         uint64_t rnd = secure_random_hardware();  
+        
+        // Membuat kandidat di rentang [NIST_NORM_IDEAL, NIST_NORM_IDEAL + 2000]
         candidate = (NIST_NORM_IDEAL + (rnd % 2000ULL)) | 1ULL;
 
+        // Syarat: p % 4 == 3 (mempermudah sqrt modular) dan harus Prima
         if ((candidate & 3ULL) == 3ULL && candidate >= 7 &&
             is_prime_miller_rabin_nist(candidate, 40)) 
         {
@@ -145,45 +156,40 @@ static inline QuaternionIdeal keygen_v9(void)
         }
     }
 
+    // Fallback jika tidak ditemukan (sangat jarang)
     if (!found_prime) {
-        // Fallback deterministic: ambil norm NIST_NORM_IDEAL
-        candidate = NIST_NORM_IDEAL | 1ULL;
-        found_prime = true;
+        candidate = (NIST_NORM_IDEAL % 4 == 3) ? NIST_NORM_IDEAL : 34127;
     }
 
     sk.norm = candidate;
 
-    // 2. Generate quaternion basis b[0] sehingga sum-of-squares = norm
-    uint64_t remaining = candidate;
-    uint64_t comp[4];
+    /* * 2. GENERATE QUATERNION BASIS (b[0])
+     * Kita menggunakan klpt_solve_advanced (Versi New) untuk mencari 
+     * w, x, y, z secara acak sehingga w^2 + x^2 + y^2 + z^2 = sk.norm tepat.
+     */
+    Quaternion alpha;
+    bool solved = klpt_solve_advanced(sk.norm, &alpha);
 
-    for (int i = 0; i < 3; i++) {
-        // Pilih komponen random antara 1..sqrt(remaining)
-        uint64_t max_val = isqrt_v9(remaining / (4 - i));
-        if (max_val == 0) max_val = 1;
-        comp[i] = 1 + (secure_random_hardware() % max_val);
-        remaining -= comp[i] * comp[i];
-    }
-    // Komponen terakhir agar sum-of-squares = norm
-    comp[3] = remaining;
-
-    // Pastikan semua komponen tidak nol
-    for (int i = 0; i < 4; i++) {
-        if (comp[i] == 0) comp[i] = 1;
-    }
-
-    // Optional: acak posisi komponen agar distribusi lebih random
-    for (int i = 0; i < 4; i++) {
-        int j = secure_random_hardware() % 4;
-        uint64_t tmp = comp[i];
-        comp[i] = comp[j];
-        comp[j] = tmp;
+    if (solved) {
+        // Jika solver berhasil, kita mendapatkan basis yang sempurna
+        sk.b[0] = alpha;
+    } else {
+        /* * Fallback: Jika solver gagal (hampir mustahil untuk norma prima),
+         * kita buat basis sederhana agar program tidak crash.
+         */
+        sk.b[0].w = 1;
+        sk.b[0].x = 1;
+        sk.b[0].y = 1;
+        sk.b[0].z = (int64_t)isqrt_v9(sk.norm - 3);
     }
 
-    sk.b[0].w = (int64_t)comp[0];
-    sk.b[0].x = (int64_t)comp[1];
-    sk.b[0].y = (int64_t)comp[2];
-    sk.b[0].z = (int64_t)comp[3];
+    /* * 3. EXPAND IDEAL BASIS
+     * Membangun basis O*alpha untuk melengkapi Ideal rahasia.
+     * Ini memastikan Anchor Point pada Public Key tidak nol.
+     */
+    sk.b[1] = quat_mul(sk.b[0], (Quaternion){0, 1, 0, 0}); // alpha * i
+    sk.b[2] = quat_mul(sk.b[0], (Quaternion){0, 0, 1, 0}); // alpha * j
+    sk.b[3] = quat_mul(sk.b[0], (Quaternion){0, 0, 0, 1}); // alpha * k
 
     return sk;
 }

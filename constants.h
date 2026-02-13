@@ -1,6 +1,8 @@
 #pragma once
 #include <stdbool.h>
 
+#define NB64BLOCK 5
+
 /* ----------------- Global Parameters ------------------ */
 /* 
    Prime modulus for F_p.
