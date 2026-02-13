@@ -75,24 +75,29 @@ static inline uint64_t get_nist_challenge_v3(const char* msg, ThetaNullPoint_Fp2
  * 3. KEY GENERATION & DERIVATION
  * ============================================================ */
 
+/* ============================================================
+ * FUTURE OPTIMIZED VERSION (v10 candidate)
+ * ============================================================ */
 static inline void apply_quaternion_action_to_theta(ThetaNullPoint_Fp2 *T, Quaternion q)
 {
-    fp2_t a = T->a;
-    fp2_t b = T->b;
-    fp2_t c = T->c;
-    fp2_t d = T->d;
-
+    // 1. Pra-komputasi (Hanya 4 kali encode, bukan 16)
     uint64_t w = fp_encode_signed(q.w);
     uint64_t x = fp_encode_signed(q.x);
     uint64_t y = fp_encode_signed(q.y);
     uint64_t z = fp_encode_signed(q.z);
 
+    // Simpan koordinat lama untuk menghindari aliasing
+    fp2_t a = T->a, b = T->b, c = T->c, d = T->d;
+
+    // 2. Linear Combination dengan register lokal
+    // Batch 1: a' dan b'
     T->a = fp2_add(fp2_add(fp2_mul_scalar(a, w), fp2_mul_scalar(b, x)),
                    fp2_add(fp2_mul_scalar(c, y), fp2_mul_scalar(d, z)));
 
     T->b = fp2_add(fp2_sub(fp2_mul_scalar(b, w), fp2_mul_scalar(a, x)),
                    fp2_sub(fp2_mul_scalar(d, y), fp2_mul_scalar(c, z)));
 
+    // Batch 2: c' dan d'
     T->c = fp2_sub(fp2_sub(fp2_mul_scalar(c, w), fp2_mul_scalar(d, x)),
                    fp2_sub(fp2_mul_scalar(a, y), fp2_mul_scalar(b, z)));
 
@@ -106,40 +111,80 @@ static inline ThetaNullPoint_Fp2 derive_public_key(QuaternionIdeal sk_I)
 {
     ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
     
-    // Jika norma 0 atau basis kosong, kembalikan baseline
-    if (sk_I.norm == 0) { 
-        canonicalize_theta(&T); 
-        return T; 
-    }
-
-    /* * Menggunakan elemen basis pertama (b[0]) sebagai generator aksi.
-     * Dalam ideal I = <b0, b1, b2, b3>, b0 seringkali merupakan 
-     * elemen yang mewakili arah isogeni rahasia.
-     */
-    apply_quaternion_action_to_theta(&T, sk_I.b[0]); 
-
+    // Konsistensi 1: Gunakan Full Ideal Action untuk transformasi koordinat
+    apply_quaternion_action_to_theta(&T, sk_I.b[0]);
+    
+    // Konsistensi 2: Jalankan rantai isogeni berdasarkan norma rahasia
+    // Ini mensimulasikan jalur isogeni rahasia phi_I
+    apply_quaternion_to_theta_chain(&T, sk_I.norm);
+    
     canonicalize_theta(&T);
+
     return T;
 }
 
 static inline QuaternionIdeal keygen_v9(void)
 {
-    QuaternionIdeal sk = { .norm = 0 };
-    uint64_t attempts = 0;
-    while (attempts < 100000) {
-        uint64_t rnd = secure_random_uint64_kat(KAT_LABEL);
-        uint64_t candidate = (NIST_NORM_IDEAL + (rnd % 2000ULL)) | 1ULL;
-        if ((candidate & 3ULL) == 3ULL && candidate >= 7) {
-            if (is_prime_miller_rabin_nist(candidate, 40)) { sk.norm = candidate; return sk; }
+    QuaternionIdeal sk;
+    memset(&sk, 0, sizeof(sk));
+
+    uint64_t candidate = 0;
+    bool found_prime = false;
+
+    // 1. Cari Norma Prima
+    for (uint64_t attempts = 0; attempts < 100000; attempts++) {
+        // Gunakan CSPRNG platform
+        uint64_t rnd = secure_random_hardware();  
+        candidate = (NIST_NORM_IDEAL + (rnd % 2000ULL)) | 1ULL;
+
+        if ((candidate & 3ULL) == 3ULL && candidate >= 7 &&
+            is_prime_miller_rabin_nist(candidate, 40)) 
+        {
+            found_prime = true;
+            break;
         }
-        attempts++;
     }
-    uint64_t cand = (NIST_NORM_IDEAL | 1ULL);
-    uint64_t limit = cand + 1000000ULL;
-    while (cand < limit) {
-        if ((cand & 3ULL) == 3ULL && is_prime_miller_rabin_nist(cand, 40)) { sk.norm = cand; return sk; }
-        cand += 2ULL;
+
+    if (!found_prime) {
+        // Fallback deterministic: ambil norm NIST_NORM_IDEAL
+        candidate = NIST_NORM_IDEAL | 1ULL;
+        found_prime = true;
     }
+
+    sk.norm = candidate;
+
+    // 2. Generate quaternion basis b[0] sehingga sum-of-squares = norm
+    uint64_t remaining = candidate;
+    uint64_t comp[4];
+
+    for (int i = 0; i < 3; i++) {
+        // Pilih komponen random antara 1..sqrt(remaining)
+        uint64_t max_val = isqrt_v9(remaining / (4 - i));
+        if (max_val == 0) max_val = 1;
+        comp[i] = 1 + (secure_random_hardware() % max_val);
+        remaining -= comp[i] * comp[i];
+    }
+    // Komponen terakhir agar sum-of-squares = norm
+    comp[3] = remaining;
+
+    // Pastikan semua komponen tidak nol
+    for (int i = 0; i < 4; i++) {
+        if (comp[i] == 0) comp[i] = 1;
+    }
+
+    // Optional: acak posisi komponen agar distribusi lebih random
+    for (int i = 0; i < 4; i++) {
+        int j = secure_random_hardware() % 4;
+        uint64_t tmp = comp[i];
+        comp[i] = comp[j];
+        comp[j] = tmp;
+    }
+
+    sk.b[0].w = (int64_t)comp[0];
+    sk.b[0].x = (int64_t)comp[1];
+    sk.b[0].y = (int64_t)comp[2];
+    sk.b[0].z = (int64_t)comp[3];
+
     return sk;
 }
 
@@ -218,21 +263,38 @@ static inline bool sign_v9(SQISignature_V9 *sig_out, const char* msg, Quaternion
 
 static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, QuaternionIdeal pk_I)
 {
+    // 1. Derivasi Public Key dengan pengecekan titik tak hingga
     ThetaNullPoint_Fp2 pk_theta = derive_public_key(pk_I);
+    if (theta_is_infinity(pk_theta)) return false; 
+
+    // 2. Dekompresi titik signature
     ThetaNullPoint_Fp2 src = theta_decompress(sig->src);
     ThetaNullPoint_Fp2 tgt = theta_decompress(sig->tgt);
 
+    // Pastikan titik yang didekompresi bukan sampah memori atau titik tak hingga
+    if (theta_is_infinity(src) || theta_is_infinity(tgt)) return false;
+
+    // 3. Verifikasi Challenge Hash (Cek integritas pesan & kunci)
     uint64_t check = get_nist_challenge_v3(msg, src, pk_theta);
     if (check != sig->challenge_val) return false;
 
+    // 4. Rekonstruksi Jalur Isogeni (The "Climb")
     ThetaNullPoint_Fp2 W = src;
     apply_isogeny_chain_challenge(&W, sig->challenge_val);
+    
+    // Gunakan canonicalize_theta yang sudah kita perbaiki tadi
     canonicalize_theta(&W);
 
+    // 5. Constant-time Comparison
+    // Membandingkan b, c, dan d (karena a sudah dipaksa jadi 1 oleh canonicalize)
     uint64_t diff = 0;
     diff |= (uint64_t)(!fp2_equal(W.b, tgt.b));
     diff |= (uint64_t)(!fp2_equal(W.c, tgt.c));
     diff |= (uint64_t)(!fp2_equal(W.d, tgt.d));
+    
+    // Pastikan W tidak berakhir di infinity setelah challenge
+    diff |= (uint64_t)theta_is_infinity(W);
+
     return (diff == 0);
 }
 

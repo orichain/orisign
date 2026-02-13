@@ -29,17 +29,22 @@ static inline fp2_t fp2_cmov(fp2_t x, fp2_t y, uint64_t mask)
 
 static inline void canonicalize_theta(ThetaNullPoint_Fp2 *T)
 {
-    /*
-     * If a == 0 → invalid projective point.
-     * Do NOT silently rewrite to 1.
-     * Leave unchanged and let caller validate.
-     */
-    if (fp2_is_zero(T->a))
+    // Cek apakah a adalah nol
+    if (fp2_is_zero(T->a)) {
+        /* * Di level ini, kita menandai seluruh titik sebagai nol (titik singular).
+         * Ini akan membuat pemeriksaan 'theta_is_infinity' di fungsi lain menjadi true.
+         */
+        T->a = (fp2_t){0, 0};
+        T->b = (fp2_t){0, 0};
+        T->c = (fp2_t){0, 0};
+        T->d = (fp2_t){0, 0};
         return;
+    }
 
+    // Hanya panggil invers jika a != 0
     fp2_t inva = fp2_inv(T->a);
 
-    T->a = (fp2_t){1, 0};
+    T->a = (fp2_t){1, 0}; // Normalisasi standar proyektif
     T->b = fp2_mul(T->b, inva);
     T->c = fp2_mul(T->c, inva);
     T->d = fp2_mul(T->d, inva);
