@@ -2,7 +2,26 @@
 #include <stdbool.h>
 
 /* ----------------- Global Parameters ------------------ */
-#define MODULO ((uint64_t)65537)
+/* 
+   Prime modulus for F_p.
+
+   Requirements:
+   - Prime number
+   - MODULO < 2^63   (required for safe uint64 arithmetic)
+   - MODULO % 4 == 3 (enables fast sqrt via a^((p+1)/4))
+
+   65519 is:
+   - Prime
+   - 65519 ≡ 3 (mod 4)
+   - Close to 2^16 for lightweight testing
+   - Suitable for uint64 single-limb arithmetic
+
+   NOTE:
+   This size is NOT post-quantum secure.
+   Intended for prototype / algebra validation only.
+*/
+#define MODULO ((uint64_t)65519)
+#define BARRETT_MU (((__uint128_t)1 << 64) / MODULO)
 #define SQ_POWER 8
 
 #define ORISIGN_DOMAIN_SEP "ORISIGN-V9.6-NIST-PQC-2026"

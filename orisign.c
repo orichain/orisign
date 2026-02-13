@@ -28,7 +28,7 @@ int main() {
     printf("[KEYGEN] Secret Key (sk_I) generated uniquely.\n");
     printf("[KEYGEN] Secret Norm: %llu\n", sk_I.norm);
     
-    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I.norm);
+    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I);
     printf("[KEYGEN] Public Key (pk_theta) derived successfully.\n");
     printf("         -> Anchor Point b: {0x%04llX, 0x%04llX}\n", pk_theta.b.re, pk_theta.b.im);
     printf("         -> Anchor Point c: {0x%04llX, 0x%04llX}\n\n", pk_theta.c.re, pk_theta.c.im);
@@ -60,7 +60,7 @@ int main() {
 
     // --- 3. SERIALIZATION ---
     uint8_t buffer[COMPRESSED_SIG_SIZE];
-    serialize_sig(buffer, sig_raw);
+    serialize_sig(buffer, COMPRESSED_SIG_SIZE, sig_raw);
     printf("\n[SERIAL] Exporting signature to binary format (%d bytes)...\n", COMPRESSED_SIG_SIZE);
     print_hex_detailed("RAW_SIG", buffer, COMPRESSED_SIG_SIZE);
     printf("[SERIAL] Entropy Check: 16 bits per coordinate (MOD 65537)\n");

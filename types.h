@@ -6,7 +6,7 @@
 
 /* ----------------- Basic Types ------------------------ */
 typedef struct { uint64_t re, im; } fp2_t;
-typedef struct { int64_t w, x, y, z; } Quaternion;
+typedef struct { uint64_t w, x, y, z; } Quaternion;
 typedef struct { Quaternion b[4]; uint64_t norm; } QuaternionIdeal;
 typedef struct { fp2_t a, b, c, d; } ThetaNullPoint_Fp2;
 
