@@ -1,5 +1,6 @@
 #pragma once
 #include "constants.h"
+#include "globals.h"
 #include "types.h"
 #include <stdbool.h>
 #include <stdint.h>

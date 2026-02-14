@@ -7,15 +7,15 @@
 /* ----------------- Basic Types ------------------------ */
 
 typedef union {
-    uint64_t bitsu64[NB64BLOCK];
-	  int64_t bits64[NB64BLOCK];
-	  uint32_t bitsu32[NB64BLOCK*2];
-    int32_t bits32[NB64BLOCK*2];
-    uint16_t bitsu16[NB64BLOCK*2*2];
-    int16_t bits16[NB64BLOCK*2*2];
-	  uint8_t bitsu8[NB64BLOCK*2*2*2];
-    int8_t bits8[NB64BLOCK*2*2*2];
-} orisign_int_t;
+    uint64_t bitsu64[NBLOCK];
+	  int64_t bits64[NBLOCK];
+	  uint32_t bitsu32[NBLOCK*2];
+    int32_t bits32[NBLOCK*2];
+    uint16_t bitsu16[NBLOCK*2*2];
+    int16_t bits16[NBLOCK*2*2];
+	  uint8_t bitsu8[NBLOCK*2*2*2];
+    int8_t bits8[NBLOCK*2*2*2];
+} oriint_t;
 
 typedef struct { uint64_t re, im; } fp2_t;
 typedef struct { uint64_t w, x, y, z; } Quaternion;
