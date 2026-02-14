@@ -184,35 +184,15 @@ isqrt_v9(uint64_t n)
     return x;
 }
 
+static inline void print_hex(const char* label, const uint8_t* data, size_t len, int uppercase) {
+    if (label)
+        printf("%s", label);
 
-/* ============================================================
- *  Debug Utilities
- * ============================================================
- */
+    const char* fmt = uppercase ? "%02X" : "%02x";
 
-/*
- * print_hex_detailed
- *
- * Hex dump rapi 16-byte per baris.
- * Untuk debugging / KAT logging.
- */
-static inline void
-print_hex_detailed(const char *label,
-                   const uint8_t *data,
-                   size_t len)
-{
-    if (!label || !data)
-        return;
-
-    printf("[%s]: ", label);
-
-    for (size_t i = 0; i < len; i++) {
-        if (i > 0 && (i % 16) == 0)
-            printf("\n           ");
-
-        printf("%02X", data[i]);
+    for (size_t i = 0; i < len; ++i) {
+        printf(fmt, data[i]);
     }
-
     printf("\n");
 }
 

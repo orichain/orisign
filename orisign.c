@@ -62,7 +62,7 @@ int main() {
     uint8_t buffer[COMPRESSED_SIG_SIZE];
     serialize_sig(buffer, COMPRESSED_SIG_SIZE, sig_raw);
     printf("\n[SERIAL] Exporting signature to binary format (%d bytes)...\n", COMPRESSED_SIG_SIZE);
-    print_hex_detailed("RAW_SIG", buffer, COMPRESSED_SIG_SIZE);
+    print_hex("[RAW_SIG]: ", buffer, COMPRESSED_SIG_SIZE, 1);
     printf("[SERIAL] Entropy Check: 16 bits per coordinate (MOD 65537)\n");
 
     // --- 4. VERIFICATION PHASE ---
@@ -74,7 +74,9 @@ int main() {
     struct timespec s_ver, e_ver;
     clock_gettime(CLOCK_MONOTONIC, &s_ver);
     
-    bool is_valid = verify_v9(msg, &sig_raw, sk_I);
+    SQISignature_V9 sig_raw_vrf;
+    deserialize_sig(&sig_raw_vrf, buffer, COMPRESSED_SIG_SIZE);
+    bool is_valid = verify_v9(msg, &sig_raw_vrf, pk_theta);
     
     clock_gettime(CLOCK_MONOTONIC, &e_ver);
 

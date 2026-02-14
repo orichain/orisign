@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/endian.h>
 
 #include "constants.h"
 #include "fips202.h"
@@ -50,17 +51,17 @@ static inline uint64_t get_nist_challenge_v3(const char* msg, ThetaNullPoint_Fp2
     shake256_inc_absorb(&ctx, (const uint8_t*)ORISIGN_DOMAIN_SEP, strlen(ORISIGN_DOMAIN_SEP));
     shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
 
-    uint8_t buf[FP2_PACKED_BYTES];
+    uint8_t buf[FP2_BYTES];
     ThetaCompressed_Fp2 cc = theta_compress(comm);
     ThetaCompressed_Fp2 pkc = theta_compress(pk);
 
-    fp2_pack(buf, cc.b); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
-    fp2_pack(buf, cc.c); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
-    fp2_pack(buf, cc.d); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
+    fp2_pack(buf, cc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, cc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, cc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
 
-    fp2_pack(buf, pkc.b); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
-    fp2_pack(buf, pkc.c); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
-    fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_PACKED_BYTES);
+    fp2_pack(buf, pkc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, pkc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
 
     shake256_inc_finalize(&ctx);
     uint8_t hash_out[8];
@@ -267,10 +268,9 @@ static inline bool sign_v9(SQISignature_V9 *sig_out, const char* msg, Quaternion
     return false;
 }
 
-static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, QuaternionIdeal pk_I)
+static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, ThetaNullPoint_Fp2 pk_theta)
 {
     // 1. Derivasi Public Key dengan pengecekan titik tak hingga
-    ThetaNullPoint_Fp2 pk_theta = derive_public_key(pk_I);
     if (theta_is_infinity(pk_theta)) return false; 
 
     // 2. Dekompresi titik signature
@@ -311,20 +311,21 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, QuaternionId
 static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignature_V9 sig)
 {
     if (!out) return false;
-    size_t needed = 8 + (6 * FP2_PACKED_BYTES);
+    size_t needed = FP_BYTES + (6 * FP2_BYTES);
     if (out_len < needed) return false;
+    
+    uint64_t challenge_val_be = htobe64(sig.challenge_val);
+    memcpy(out, &challenge_val_be, FP_BYTES);
 
-    size_t pos = 0;
-    for (int i = 0; i < 8; i++)
-        out[pos++] = (uint8_t)((sig.challenge_val >> (8 * i)) & 0xFF);
+    size_t pos = FP_BYTES;
 
-    fp2_pack(out + pos, sig.src.b); pos += FP2_PACKED_BYTES;
-    fp2_pack(out + pos, sig.src.c); pos += FP2_PACKED_BYTES;
-    fp2_pack(out + pos, sig.src.d); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.src.b); pos += FP2_BYTES;
+    fp2_pack(out + pos, sig.src.c); pos += FP2_BYTES;
+    fp2_pack(out + pos, sig.src.d); pos += FP2_BYTES;
 
-    fp2_pack(out + pos, sig.tgt.b); pos += FP2_PACKED_BYTES;
-    fp2_pack(out + pos, sig.tgt.c); pos += FP2_PACKED_BYTES;
-    fp2_pack(out + pos, sig.tgt.d); pos += FP2_PACKED_BYTES;
+    fp2_pack(out + pos, sig.tgt.b); pos += FP2_BYTES;
+    fp2_pack(out + pos, sig.tgt.c); pos += FP2_BYTES;
+    fp2_pack(out + pos, sig.tgt.d); pos += FP2_BYTES;
 
     return true;
 }
@@ -332,22 +333,24 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignatur
 static inline bool deserialize_sig(SQISignature_V9 *sig, const uint8_t *in, size_t in_len)
 {
     if (!sig || !in) return false;
-    size_t needed = 8 + (6 * FP2_PACKED_BYTES);
+    size_t needed = FP_BYTES + (6 * FP2_BYTES);
     if (in_len < needed) return false;
 
     memset(sig, 0, sizeof(*sig));
-    size_t pos = 0;
 
-    for (int i = 0; i < 8; i++)
-        sig->challenge_val |= ((uint64_t)in[pos++] << (8 * i));
+    uint64_t challenge_val_be;
+    memcpy(&challenge_val_be, in, FP_BYTES);
+    sig->challenge_val = be64toh(challenge_val_be);
 
-    sig->src.b = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
-    sig->src.c = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
-    sig->src.d = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    size_t pos = FP_BYTES;
 
-    sig->tgt.b = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
-    sig->tgt.c = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
-    sig->tgt.d = fp2_unpack(in + pos); pos += FP2_PACKED_BYTES;
+    sig->src.b = fp2_unpack(in + pos); pos += FP2_BYTES;
+    sig->src.c = fp2_unpack(in + pos); pos += FP2_BYTES;
+    sig->src.d = fp2_unpack(in + pos); pos += FP2_BYTES;
+
+    sig->tgt.b = fp2_unpack(in + pos); pos += FP2_BYTES;
+    sig->tgt.c = fp2_unpack(in + pos); pos += FP2_BYTES;
+    sig->tgt.d = fp2_unpack(in + pos); pos += FP2_BYTES;
 
     return true;
 }

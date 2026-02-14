@@ -24,8 +24,6 @@ typedef struct { fp2_t a, b, c, d; } ThetaNullPoint_Fp2;
 
 typedef struct { fp2_t b, c, d; } ThetaCompressed_Fp2;
 
-typedef struct { fp2_t x, y; int infinity; } ECPoint;
-
 typedef struct {
     uint64_t challenge_val;
     ThetaCompressed_Fp2 src;

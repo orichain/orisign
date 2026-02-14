@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/endian.h>
 
 /* ================================================================
    PRODUCTION-GRADE PRIME FIELD (uint64_t)
@@ -152,19 +153,23 @@ static inline uint64_t fp_sqrt(uint64_t a)
 /* ================================================================
    FP2 Packing / Unpacking
    ================================================================ */
-static inline void fp2_pack(uint8_t out[16], fp2_t x)
+static inline void fp2_pack(uint8_t out[2 * FP_BYTES], fp2_t x)
 {
-    memcpy(out, &x.re, 8);
-    memcpy(out + 8, &x.im, 8);
+    uint64_t re_be = htobe64(x.re);
+    uint64_t im_be = htobe64(x.im);
+    memcpy(out, &re_be, FP_BYTES);
+    memcpy(out + FP_BYTES, &im_be, FP_BYTES);
 }
 
-static inline fp2_t fp2_unpack(const uint8_t in[16])
+static inline fp2_t fp2_unpack(const uint8_t in[2 * FP_BYTES])
 {
     fp2_t x;
-    memcpy(&x.re, in, 8);
-    memcpy(&x.im, in + 8, 8);
-    x.re = barrett_reduce(x.re);
-    x.im = barrett_reduce(x.im);
+    uint64_t re_be;
+    uint64_t im_be;
+    memcpy(&re_be, in, FP_BYTES);
+    memcpy(&im_be, in + FP_BYTES, FP_BYTES);
+    x.re = barrett_reduce(be64toh(re_be));
+    x.im = barrett_reduce(be64toh(im_be));
     return x;
 }
 
