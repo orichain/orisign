@@ -7,14 +7,14 @@
 /* ----------------- Basic Types ------------------------ */
 
 typedef union {
-    uint64_t bitsu64[NBLOCK];
-	  int64_t bits64[NBLOCK];
-	  uint32_t bitsu32[NBLOCK*2];
-    int32_t bits32[NBLOCK*2];
-    uint16_t bitsu16[NBLOCK*2*2];
-    int16_t bits16[NBLOCK*2*2];
-	  uint8_t bitsu8[NBLOCK*2*2*2];
-    int8_t bits8[NBLOCK*2*2*2];
+    uint64_t bitsu64[ORIINTBLOCK];
+	  int64_t bits64[ORIINTBLOCK];
+	  uint32_t bitsu32[ORIINTBLOCK*2];
+    int32_t bits32[ORIINTBLOCK*2];
+    uint16_t bitsu16[ORIINTBLOCK*2*2];
+    int16_t bits16[ORIINTBLOCK*2*2];
+	  uint8_t bitsu8[ORIINTBLOCK*2*2*2];
+    int8_t bits8[ORIINTBLOCK*2*2*2];
 } oriint_t;
 
 typedef struct { uint64_t re, im; } fp2_t;

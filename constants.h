@@ -2,6 +2,7 @@
 #include <stdbool.h>
 
 #define NBLOCK 1
+#define ORIINTBLOCK 5
 #define SQ_POWER 8
 #define DOMAIN_SEP "ORISIGN-V9.7-NIST-PQC-2026"
 #define HASHES_BYTES 32

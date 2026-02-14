@@ -11,6 +11,7 @@
 #include "constants.h"
 #include "types.h"
 #include "orisign.h"
+#include "int.h"
 
 int main() {
     struct timespec s_total, e_total;
