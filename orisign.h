@@ -28,10 +28,53 @@ static inline ThetaNullPoint_Fp2 get_nist_baseline_theta(void)
     return (ThetaNullPoint_Fp2){ a, b, c, d };
 }
 
-static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, uint64_t chal)
+static inline bool recover_y_from_x(
+    const ThetaNullPoint_Fp2 *T,
+    const fp2_t *x,
+    fp2_t *out_y)
 {
+    (void)T; /* belum dipakai, tetap disimpan untuk future upgrade */
+
+    /* x^2 */
+    fp2_t x2 = fp2_mul(*x, *x);
+
+    /* x^3 */
+    fp2_t x3 = fp2_mul(x2, *x);
+
+    /* rhs = x^3 + x + 1 */
+    fp2_t rhs = fp2_add(
+                    fp2_add(x3, *x),
+                    (fp2_t){1, 0}
+                 );
+
+    /* sementara hanya support kasus imag = 0 */
+    if (rhs.im != 0)
+        return false;
+
+    uint64_t y = fp_sqrt(rhs.re);
+
+    /*
+       fp_sqrt return:
+       0   -> jika non-residue ATAU sqrt(0)
+       maka kita harus cek manual
+    */
+    if (y == 0) {
+        if (rhs.re != 0)
+            return false;  /* non-residue */
+    }
+
+    out_y->re = y;
+    out_y->im = 0;
+
+    return true;
+}
+
+static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, const uint8_t chal[HASHES_BYTES])
+{
+    _Static_assert(SQ_POWER <= (HASHES_BYTES * 8), "Error: SQ_POWER lebih besar dari jumlah bit yang tersedia di challenge hash!");
     for (int i = 0; i < SQ_POWER; i++) {
-        uint64_t bit = (chal >> i) & 1ULL;
+        uint64_t bit = (chal[i >> 3] >> (i & 7)) & 1ULL;
+
         fp2_t xT;
         xT.re = ct_select_u64(T->c.re, T->b.re, bit);
         xT.im = ct_select_u64(T->c.im, T->b.im, bit);
@@ -44,11 +87,11 @@ static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, uint64_t
 /* ============================================================
  * 2. CHALLENGE HASH (Hardened against Struct Padding)
  * ============================================================ */
-static inline uint64_t get_nist_challenge_v3(const char* msg, ThetaNullPoint_Fp2 comm, ThetaNullPoint_Fp2 pk)
+static inline void get_nist_challenge_v3(uint8_t *hash_out, const char* msg, ThetaNullPoint_Fp2 comm, ThetaNullPoint_Fp2 pk)
 {
     shake256incctx ctx;
     shake256_inc_init(&ctx);
-    shake256_inc_absorb(&ctx, (const uint8_t*)ORISIGN_DOMAIN_SEP, strlen(ORISIGN_DOMAIN_SEP));
+    shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
     shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
 
     uint8_t buf[FP2_BYTES];
@@ -64,12 +107,7 @@ static inline uint64_t get_nist_challenge_v3(const char* msg, ThetaNullPoint_Fp2
     fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
 
     shake256_inc_finalize(&ctx);
-    uint8_t hash_out[8];
-    shake256_inc_squeeze(hash_out, 8, &ctx);
-
-    uint64_t res = 0;
-    for (int i = 0; i < 8; i++) res |= ((uint64_t)hash_out[i] << (8 * i));
-    return res & ((1ULL << SQ_POWER) - 1ULL);
+    shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
 }
 
 /* ============================================================
@@ -253,14 +291,9 @@ static inline bool sign_v9(SQISignature_V9 *sig_out, const char* msg, Quaternion
         apply_quaternion_action_to_theta(&T, alpha_selected);
         canonicalize_theta(&T);
 
-        uint64_t challenge = get_nist_challenge_v3(msg, T, pk_theta);
-        ThetaNullPoint_Fp2 U = T;
-        apply_isogeny_chain_challenge(&U, challenge);
-        canonicalize_theta(&U);
+        get_nist_challenge_v3(sig_out->challenge_val, msg, T, pk_theta);
 
-        sig_out->challenge_val = challenge;
         sig_out->src = theta_compress(T);
-        sig_out->tgt = theta_compress(U);
         
         memset(&alpha_selected, 0, sizeof(alpha_selected));
         return true;
@@ -275,14 +308,17 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, ThetaNullPoi
 
     // 2. Dekompresi titik signature
     ThetaNullPoint_Fp2 src = theta_decompress(sig->src);
-    ThetaNullPoint_Fp2 tgt = theta_decompress(sig->tgt);
+    ThetaNullPoint_Fp2 tgt = src;
+    apply_isogeny_chain_challenge(&tgt, sig->challenge_val);
+    canonicalize_theta(&tgt);
 
     // Pastikan titik yang didekompresi bukan sampah memori atau titik tak hingga
     if (theta_is_infinity(src) || theta_is_infinity(tgt)) return false;
 
     // 3. Verifikasi Challenge Hash (Cek integritas pesan & kunci)
-    uint64_t check = get_nist_challenge_v3(msg, src, pk_theta);
-    if (check != sig->challenge_val) return false;
+    uint8_t check[HASHES_BYTES];
+    get_nist_challenge_v3(check, msg, src, pk_theta);
+    if (memcmp(check, sig->challenge_val, HASHES_BYTES) != 0) return false;
 
     // 4. Rekonstruksi Jalur Isogeni (The "Climb")
     ThetaNullPoint_Fp2 W = src;
@@ -311,21 +347,15 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, ThetaNullPoi
 static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignature_V9 sig)
 {
     if (!out) return false;
-    size_t needed = FP_BYTES + (6 * FP2_BYTES);
+    size_t needed = HASHES_BYTES + (FP2_SIGNC * FP2_BYTES);
     if (out_len < needed) return false;
     
-    uint64_t challenge_val_be = htobe64(sig.challenge_val);
-    memcpy(out, &challenge_val_be, FP_BYTES);
+    memcpy(out, sig.challenge_val, HASHES_BYTES);
 
-    size_t pos = FP_BYTES;
-
+    size_t pos = HASHES_BYTES;
     fp2_pack(out + pos, sig.src.b); pos += FP2_BYTES;
     fp2_pack(out + pos, sig.src.c); pos += FP2_BYTES;
     fp2_pack(out + pos, sig.src.d); pos += FP2_BYTES;
-
-    fp2_pack(out + pos, sig.tgt.b); pos += FP2_BYTES;
-    fp2_pack(out + pos, sig.tgt.c); pos += FP2_BYTES;
-    fp2_pack(out + pos, sig.tgt.d); pos += FP2_BYTES;
 
     return true;
 }
@@ -333,24 +363,17 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignatur
 static inline bool deserialize_sig(SQISignature_V9 *sig, const uint8_t *in, size_t in_len)
 {
     if (!sig || !in) return false;
-    size_t needed = FP_BYTES + (6 * FP2_BYTES);
+    size_t needed = HASHES_BYTES + (FP2_SIGNC * FP2_BYTES);
     if (in_len < needed) return false;
 
     memset(sig, 0, sizeof(*sig));
+    memcpy(sig->challenge_val, in, HASHES_BYTES);
 
-    uint64_t challenge_val_be;
-    memcpy(&challenge_val_be, in, FP_BYTES);
-    sig->challenge_val = be64toh(challenge_val_be);
-
-    size_t pos = FP_BYTES;
+    size_t pos = HASHES_BYTES;
 
     sig->src.b = fp2_unpack(in + pos); pos += FP2_BYTES;
     sig->src.c = fp2_unpack(in + pos); pos += FP2_BYTES;
     sig->src.d = fp2_unpack(in + pos); pos += FP2_BYTES;
-
-    sig->tgt.b = fp2_unpack(in + pos); pos += FP2_BYTES;
-    sig->tgt.c = fp2_unpack(in + pos); pos += FP2_BYTES;
-    sig->tgt.d = fp2_unpack(in + pos); pos += FP2_BYTES;
 
     return true;
 }

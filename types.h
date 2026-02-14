@@ -22,12 +22,15 @@ typedef struct { uint64_t w, x, y, z; } Quaternion;
 typedef struct { Quaternion b[4]; uint64_t norm; } QuaternionIdeal;
 typedef struct { fp2_t a, b, c, d; } ThetaNullPoint_Fp2;
 
-typedef struct { fp2_t b, c, d; } ThetaCompressed_Fp2;
+typedef struct { 
+    fp2_t b;
+    fp2_t c;
+    fp2_t d; 
+} ThetaCompressed_Fp2;
 
 typedef struct {
-    uint64_t challenge_val;
+    uint8_t challenge_val[HASHES_BYTES];
     ThetaCompressed_Fp2 src;
-    ThetaCompressed_Fp2 tgt;
 } SQISignature_V9;
 
 typedef struct {

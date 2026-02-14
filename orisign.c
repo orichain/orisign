@@ -30,8 +30,15 @@ int main() {
     
     ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I);
     printf("[KEYGEN] Public Key (pk_theta) derived successfully.\n");
+    
+    // DEBUG PK UNTUK MEMASTIKAN a = 1
+    printf("         -> Anchor Point a: {0x%04llX, 0x%04llX} %s\n", 
+            pk_theta.a.re, pk_theta.a.im, 
+            (pk_theta.a.re == 1 && pk_theta.a.im == 0) ? "[OK: AFFINE]" : "[ERROR: PROJECTIVE]");
+    
     printf("         -> Anchor Point b: {0x%04llX, 0x%04llX}\n", pk_theta.b.re, pk_theta.b.im);
-    printf("         -> Anchor Point c: {0x%04llX, 0x%04llX}\n\n", pk_theta.c.re, pk_theta.c.im);
+    printf("         -> Anchor Point c: {0x%04llX, 0x%04llX}\n", pk_theta.c.re, pk_theta.c.im);
+    printf("         -> Anchor Point d: {0x%04llX, 0x%04llX}\n\n", pk_theta.d.re, pk_theta.d.im);
 
     // --- 2. SIGNING PHASE ---
     const char* msg = "ORISIGN_V9.7_FINAL_PRODUCTION";
@@ -56,7 +63,7 @@ int main() {
     
     clock_gettime(CLOCK_MONOTONIC, &e_sign);
     
-    printf("[SIGN] Challenge H(m, pk): %llu\n", sig_raw.challenge_val);
+    print_hex("[SIGN] Challenge H(m, pk): ", sig_raw.challenge_val, HASHES_BYTES, 1);
 
     // --- 3. SERIALIZATION ---
     uint8_t buffer[COMPRESSED_SIG_SIZE];
@@ -67,15 +74,15 @@ int main() {
 
     // --- 4. VERIFICATION PHASE ---
     printf("\n[VERIFY] Starting cryptographic verification...\n");
-    printf("[VERIFY] 1. Challenge Re-hashing... OK (Val: %llu)\n", sig_raw.challenge_val);
+    SQISignature_V9 sig_raw_vrf;
+    deserialize_sig(&sig_raw_vrf, buffer, COMPRESSED_SIG_SIZE);
+    print_hex("[VERIFY] 1. Challenge Re-hashing... OK Val: ", sig_raw_vrf.challenge_val, HASHES_BYTES, 1);
     printf("[VERIFY] 2. Basis Reconstruction... OK\n");
     printf("[VERIFY] 3. Climbing Isogeny Tree (Degree 2^%d)...\n", SQ_POWER);
 
     struct timespec s_ver, e_ver;
     clock_gettime(CLOCK_MONOTONIC, &s_ver);
     
-    SQISignature_V9 sig_raw_vrf;
-    deserialize_sig(&sig_raw_vrf, buffer, COMPRESSED_SIG_SIZE);
     bool is_valid = verify_v9(msg, &sig_raw_vrf, pk_theta);
     
     clock_gettime(CLOCK_MONOTONIC, &e_ver);
