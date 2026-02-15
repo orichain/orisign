@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
     uint64_t lo;
@@ -89,6 +90,19 @@ static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
         acc |= a->bitsu64[i] ^ b->bitsu64[i];
     }
     return acc == 0;
+}
+
+static inline void oriint_select_flag(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t flag) {
+    uint64_t mask = -(uint64_t)(flag != 0);
+    for (int i = 0; i < NBLOCK; i++) {
+        RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
+    }
+}
+
+static inline void oriint_select_mask(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t mask) {
+    for (int i = 0; i < NBLOCK; i++) {
+        RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
+    }
 }
 
 static inline void oriint_shiftr(uint32_t n, oriint_t *d) {
@@ -198,52 +212,50 @@ static inline void oriint_imult(oriint_t *RES, oriint_t *a, int64_t b) {
 	  oriint_imm_mul(RES->bitsu64, b, RES->bitsu64);
 }
 
-/*
-static inline void oriint_addandshift(oriint_t *RES, const oriint_t *a, const oriint_t *b, uint64_t cH) {
+static inline void oriint_addandshift(oriint_t *RES, oriint_t *a, uint64_t cH) {
     uint64_t c = 0;
-    c = oriint_addcarry_u64(c, b->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-    c = oriint_addcarry_u64(c, b->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
-    c = oriint_addcarry_u64(c, b->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
-    c = oriint_addcarry_u64(c, b->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
-    c = oriint_addcarry_u64(c, b->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
-    RES->bitsu64[NBLOCK - 1] = c + cH;
+	
+	  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
+	  RES->bitsu64[4] = c + cH; 
 }
 
-static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a) {
-    oriint_t t, pr, p;
-    uint64_t ML, c;
+static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriint_t *b) {
+  	oriint_t pr;
+	  oriint_t p;
+	  uint64_t ML;
+	  uint64_t c;
 
-    // i = 0
-    oriint_imm_umul(a->bitsu64, RES->bitsu64[0], pr.bitsu64);
-    ML = pr.bitsu64[0] * MM64;
-    oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
-    c = oriint_add_c(&pr, &p);
-    memcpy(t.bitsu64, pr.bitsu64 + 1, 8 * (NBLOCK - 1));
-    t.bitsu64[NBLOCK - 1] = c;
-
-    // i = 1..Msize-1
-    for (int i = 1; i < Msize; i++) {
-        oriint_imm_umul(a->bitsu64, RES->bitsu64[i], pr.bitsu64);
-        ML = (pr.bitsu64[0] + t.bitsu64[0]) * MM64;
-        oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
-        c = oriint_add_c(&pr, &p);
-        oriint_addandshift(&t, &t, &pr, c);
-    }
-
-    // Final reduction modulo P
-    oriint_t tmp;
-    oriint_sub_3(&tmp, &t, &P);
-    if (tmp.bitsu64[NBLOCK - 1] >= 0)
-        oriint_set(RES, &tmp);
-    else
-        oriint_set(RES, &t);
+	  oriint_imm_umul(a->bitsu64, b->bitsu64[0], pr.bitsu64);
+	  ML = pr.bitsu64[0] * MM64;
+	  oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
+	  c = oriint_add_c(&pr, &p);
+	  RES->bitsu64[0] = pr.bitsu64[1];
+	  RES->bitsu64[1] = pr.bitsu64[2];
+	  RES->bitsu64[2] = pr.bitsu64[3];
+	  RES->bitsu64[3] = pr.bitsu64[4];
+	  RES->bitsu64[4] = c;
+	  for (int i = 1; i < Msize; i++) {
+		    oriint_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
+		    ML = (pr.bitsu64[0] + RES->bitsu64[0]) * MM64;
+		    oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
+		    c = oriint_add_c(&pr, &p);
+		    oriint_addandshift(RES, &pr, c);
+	  }
+	  oriint_sub_3(&p, RES, &P);
+	  if(p.bits64[NBLOCK - 1] >= 0)
+		    oriint_set(RES, &p);
 }
 
 static inline void oriint_modmul_montgomerry(oriint_t *RES, oriint_t *a) {
-	  oriint_montgomerymult(RES,a);
-	  oriint_montgomerymult(RES,&R2);
+    oriint_t p;
+	
+	  oriint_montgomerymult(&p,a,RES);
+  	oriint_montgomerymult(RES,&R2,&p);
 }
-*/
 
 static inline void oriint_modmul(oriint_t *RES, oriint_t *a) {
 	  uint64_t ah, al, c;
@@ -413,8 +425,64 @@ static inline void oriint_modinv(oriint_t *RES) {
 	  oriint_set(RES, &s);
 }
 
+static void oriint_modexp_ct(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
+    oriint_t result;
+    oriint_t base;
+    oriint_t tmp;
+
+    oriint_set(&base, a);
+    oriint_set_one(&result);
+
+    for (int i = NBLOCK * 64 - 1; i >= 0; i--)
+    {
+        // result = result^2
+        oriint_set(&tmp, &result);
+        oriint_modmul(&tmp, &result);
+
+        // result = bit ? tmp * base : tmp
+        uint64_t word = i >> 6;
+        uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
+        uint64_t mask = -(int64_t)bit;
+
+        oriint_t mulres;
+        oriint_set(&mulres, &tmp);
+        oriint_modmul(&mulres, &base);
+
+        oriint_select_mask(&result, &tmp, &mulres, mask);
+    }
+
+    oriint_set(RES, &result);
+}
+
+static void oriint_compute_sqrt_exp(oriint_t *e) {
+    oriint_set(e, &P);
+
+    oriint_t one;
+    oriint_set_one(&one);
+    oriint_add_1(e, &one);
+
+    oriint_shiftr(2, e);
+}
+
+static bool oriint_modsqrt(oriint_t *RES, const oriint_t *a) {
+    oriint_t exp;
+    oriint_compute_sqrt_exp(&exp);
+
+    oriint_modexp_ct(RES, a, &exp);
+
+    // verify sqrt
+    oriint_t check;
+    oriint_set(&check, RES);
+    oriint_modmul(&check, RES);
+
+    if (!oriint_is_equal(&check, a))
+        return false;
+
+    return true;
+}
+
 static inline int oriint_getsize() {
-    int i=NBLOCK-1;
+    int i=(2*NBLOCK)-1;
     while(i>0 && P.bitsu32[i]==0) i--;
     return i+1;
 }
@@ -443,13 +511,12 @@ static void oriint_setup_mm64_msize() {
     printf("DEBUG - MSize : %d\n", _msize);
 }
 
-/*
 static inline void oriint_setup_r2() {
     oriint_t one, r, _r2;
 
     oriint_set_one(&one);
-    oriint_montgomerymult(&r, &one);
-    oriint_montgomerymult(&_r2, &r);
+    oriint_montgomerymult(&r, &one, &one);
+    oriint_montgomerymult(&_r2, &r, &one);
     oriint_modinv(&_r2);
 
     // Print R2 in hex
@@ -458,5 +525,4 @@ static inline void oriint_setup_r2() {
         printf("%016llx ", _r2.bitsu64[i]);
     printf("\n");
 }
-*/
 

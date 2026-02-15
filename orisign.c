@@ -105,7 +105,7 @@ int main() {
     printf("==============================================================\n");
 
     oriint_setup_mm64_msize();
-    //oriint_setup_r2();
+    oriint_setup_r2();
 
     oriint_t a, b, res, check, one;
     int i;
@@ -127,6 +127,15 @@ int main() {
     oriint_modmul(&res, &b);
 
     printf("Test modmul 2*3 mod P = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", res.bitsu64[i]);
+    }
+    printf("\n");
+
+    oriint_set(&res, &a);
+    oriint_modmul_montgomerry(&res, &b);
+
+    printf("Test montgomerry modmul 2*3 mod P = ");
     for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
@@ -163,6 +172,68 @@ int main() {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");
+
+        // --------- Test 5: modsqrt ----------
+    printf("----- Test modsqrt -----\n");
+
+    // pilih x = 5
+    oriint_clear(&a);
+    a.bitsu64[0] = 5;
+
+    printf("x = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", a.bitsu64[i]);
+    }
+    printf("\n");
+
+    // b = x^2 mod P
+    oriint_set(&b, &a);
+    oriint_modmul(&b, &a);
+
+    printf("a = x^2 mod P = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", b.bitsu64[i]);
+    }
+    printf("\n");
+
+    // compute sqrt
+    bool ok = oriint_modsqrt(&res, &b);
+
+    printf("modsqrt return = %d\n", ok);
+
+    printf("sqrt(a) = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", res.bitsu64[i]);
+    }
+    printf("\n");
+
+    // verify r^2
+    oriint_set(&check, &res);
+    oriint_modmul(&check, &res);
+
+    printf("r^2 mod P = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", check.bitsu64[i]);
+    }
+    printf("\n");
+
+    printf("r^2 == a ? %d\n", oriint_is_equal(&check, &b));
+
+    // compute P - x
+    oriint_set(&check, &a);
+    oriint_neg(&check);
+    oriint_modadd(&check, &check, (oriint_t*)&P);
+
+    printf("P - x = ");
+    for (i = NBLOCK-1; i >= 0; i--) {
+        printf("%016llx ", check.bitsu64[i]);
+    }
+    printf("\n");
+
+    printf("sqrt == x ? %d\n", oriint_is_equal(&res, &a));
+    printf("sqrt == P-x ? %d\n", oriint_is_equal(&res, &check));
+
+    printf("--------------------------\n");
 
     return 0;
 }

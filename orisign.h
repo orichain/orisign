@@ -9,8 +9,8 @@
 
 #include "constants.h"
 #include "fips202.h"
-#include "ideal.h"
-#include "theta.h"
+#include "ideal_old.h"
+#include "theta_old.h"
 #include "types.h"
 #include "utilities.h"
 #include "fp_old.h"
