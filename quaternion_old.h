@@ -1,0 +1,84 @@
+#pragma once
+#include "fp_old.h"
+#include "types.h"
+#include <stdint.h>
+
+/* ================================================================
+   PRODUCTION-GRADE QUATERNION over F_p (uint64 single-limb)
+   - No division
+   - No %
+   - No data-dependent branch
+   - All components canonical < MODULO
+   ================================================================ */
+
+static inline Quaternion quat_add(Quaternion a, Quaternion b) {
+    return (Quaternion){
+        fp_add(a.w, b.w),
+        fp_add(a.x, b.x),
+        fp_add(a.y, b.y),
+        fp_add(a.z, b.z)
+    };
+}
+
+/* ------------------------------------------------
+   Hamilton Product
+   ------------------------------------------------ */
+
+static inline Quaternion quat_mul(Quaternion a, Quaternion b)
+{
+    uint64_t w = fp_sub(
+                    fp_sub(
+                        fp_sub(
+                            fp_mul(a.w, b.w),
+                            fp_mul(a.x, b.x)
+                        ),
+                        fp_mul(a.y, b.y)
+                    ),
+                    fp_mul(a.z, b.z)
+                );
+
+    uint64_t x = fp_add(
+                    fp_sub(
+                        fp_add(
+                            fp_mul(a.w, b.x),
+                            fp_mul(a.x, b.w)
+                        ),
+                        fp_mul(a.z, b.y)
+                    ),
+                    fp_mul(a.y, b.z)
+                );
+
+    uint64_t y = fp_add(
+                    fp_add(
+                        fp_sub(
+                            fp_mul(a.w, b.y),
+                            fp_mul(a.x, b.z)
+                        ),
+                        fp_mul(a.y, b.w)
+                    ),
+                    fp_mul(a.z, b.x)
+                );
+
+    uint64_t z = fp_add(
+                    fp_add(
+                        fp_sub(
+                            fp_mul(a.w, b.z),
+                            fp_mul(a.y, b.x)
+                        ),
+                        fp_mul(a.z, b.w)
+                    ),
+                    fp_mul(a.x, b.y)
+                );
+
+    return (Quaternion){ w, x, y, z };
+}
+
+static inline uint64_t quat_norm(Quaternion q)
+{
+    uint64_t n = fp_mul(q.w, q.w);
+    n = fp_add(n, fp_mul(q.x, q.x));
+    n = fp_add(n, fp_mul(q.y, q.y));
+    n = fp_add(n, fp_mul(q.z, q.z));
+    return n;
+}
+

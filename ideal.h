@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "kat.h"
-#include "quaternion.h"
+#include "quaternion_old.h"
 #include "types.h"
 #include "utilities.h"
 
