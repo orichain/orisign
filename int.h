@@ -624,6 +624,81 @@ static inline bool oriint_issquare(const oriint_t *n, oriint_t *root) {
     return eq;
 }
 
+static void oriint_div_mod_integer(oriint_t *Q, oriint_t *R, const oriint_t *A, const oriint_t *B) {
+    oriint_t quotient, remainder, tmp;
+    oriint_clear(&quotient);
+    oriint_clear(&remainder);
+
+    if (oriint_is_zero(B)) {
+        if (Q) oriint_clear(Q);
+        if (R) oriint_clear(R);
+        return;
+    }
+
+    for (int i = (NBLOCK * 64) - 1; i >= 0; i--) {
+        // remainder <<= 1
+        oriint_shiftl(1, &remainder);
+
+        // ambil bit ke-i dari A dan taruh di LSB remainder
+        uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
+        remainder.bitsu64[0] |= bit;
+
+        // tmp = remainder - B
+        oriint_set(&tmp, &remainder);
+        oriint_sub_2(&tmp, B);
+
+        // buat mask: 0xFFFF..FFFF jika remainder >= B, 0 jika < B
+        uint64_t ge_mask = -(int64_t)oriint_is_ge(&remainder, B);
+
+        // pilih remainder baru: tmp jika >= B, tetap remainder jika < B
+        for (int j = 0; j < NBLOCK; j++) {
+            remainder.bitsu64[j] = (tmp.bitsu64[j] & ge_mask) | (remainder.bitsu64[j] & ~ge_mask);
+        }
+
+        // update quotient: set bit ke-i jika remainder >= B
+        for (int j = 0; j < NBLOCK; j++) {
+            uint64_t qmask = (j == (i >> 6)) ? (1ULL << (i & 63)) : 0;
+            quotient.bitsu64[j] |= qmask & ge_mask;
+        }
+    }
+
+    if (Q) oriint_set(Q, &quotient);
+    if (R) oriint_set(R, &remainder);
+}
+
+static void oriint_mod_integer(oriint_t *R, const oriint_t *A, const oriint_t *B) {
+    oriint_t remainder, tmp;
+    oriint_clear(&remainder);
+
+    if (oriint_is_zero(B)) {
+        oriint_clear(R);
+        return;
+    }
+
+    for (int i = (NBLOCK * 64) - 1; i >= 0; i--) {
+        // remainder <<= 1
+        oriint_shiftl(1, &remainder);
+
+        // ambil bit ke-i dari A dan taruh di LSB remainder
+        uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
+        remainder.bitsu64[0] |= bit;
+
+        // tmp = remainder - B
+        oriint_set(&tmp, &remainder);
+        oriint_sub_2(&tmp, B);
+
+        // mask = 0xFFFF..FFFF jika remainder >= B, 0 jika < B
+        uint64_t ge_mask = -(int64_t)oriint_is_ge(&remainder, B);
+
+        // pilih remainder baru: tmp jika >= B, tetap remainder jika < B
+        for (int j = 0; j < NBLOCK; j++) {
+            remainder.bitsu64[j] = (tmp.bitsu64[j] & ge_mask) | (remainder.bitsu64[j] & ~ge_mask);
+        }
+    }
+
+    oriint_set(R, &remainder);
+}
+
 static inline void oriint_print(const char* label, const oriint_t* val) {
     printf("%s", label);
     for (int i = NBLOCK - 1; i >= 0; i--) {

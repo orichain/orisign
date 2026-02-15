@@ -23,6 +23,74 @@ static inline void left_ideal_from_generator(quaternion_ideal_t *RES, quaternion
     quat_norm(&RES->norm, alpha);
 }
 
+static bool solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
+    oriint_t z, target_root, r_prev, r_curr, r_next, tmp, one, zero;
+    bool is_valid;
+
+    oriint_set_one(&one);
+    oriint_clear(&zero);
+
+    // 1. Hitung z = sqrt(-1) mod n
+    // Penting: modsqrt di sini harus menggunakan n sebagai modulus, bukan P
+    oriint_sub_3(&tmp, n, &one); 
+    oriint_modsqrt(&z, &tmp, &is_valid); // Pastikan modsqrt mendukung modulus n
+
+    uint64_t valid_mask = -(int64_t)is_valid;
+
+    oriint_set(&r_prev, n);
+    oriint_set(&r_curr, &z);
+    oriint_isqrt(&target_root, n);
+
+    // 2. Optimized constant-time Euclidean loop
+    for (int step = 0; step < NBLOCK * 64; step++) {
+        // PENGAMAN: r_curr bisa menjadi 0 setelah r_curr < target_root.
+        // Kita buat safe_divisor agar mod_integer tidak melakukan pembagian nol.
+        oriint_t safe_divisor;
+        uint64_t is_z = -(int64_t)oriint_is_zero(&r_curr);
+        for (int i = 0; i < NBLOCK; i++) {
+            safe_divisor.bitsu64[i] = (r_curr.bitsu64[i] & ~is_z) | (one.bitsu64[i] & is_z);
+        }
+
+        // r_next = r_prev mod safe_divisor
+        oriint_mod_integer(&r_next, &r_prev, &safe_divisor);
+
+        // ge_mask: tetap 1 selama r_curr >= target_root
+        uint64_t ge_mask = -(int64_t)oriint_is_ge(&r_curr, &target_root);
+
+        // Conditional Move (CT): 
+        // Jika ge_mask=1: r_prev = r_curr, r_curr = r_next
+        // Jika ge_mask=0: r_prev dan r_curr berhenti berubah (freeze)
+        for (int i = 0; i < NBLOCK; i++) {
+            uint64_t next_r_prev = r_curr.bitsu64[i];
+            uint64_t next_r_curr = r_next.bitsu64[i];
+            
+            r_prev.bitsu64[i] = (next_r_prev & ge_mask) | (r_prev.bitsu64[i] & ~ge_mask);
+            r_curr.bitsu64[i] = (next_r_curr & ge_mask) | (r_curr.bitsu64[i] & ~ge_mask);
+        }
+    }
+
+    // 3. Verifikasi akhir: y^2 = n - r_curr^2
+    oriint_sqr(&tmp, &r_curr);
+    
+    // Pastikan n >= r_curr^2 sebelum sub (untuk keamanan integer)
+    oriint_t diff;
+    oriint_sub_3(&diff, n, &tmp);
+
+    bool y_valid = oriint_issquare(&diff, y);
+    uint64_t y_mask = -(int64_t)y_valid;
+    
+    // Gabungkan dengan valid_mask dari modsqrt awal
+    uint64_t final_mask = valid_mask & y_mask;
+
+    // 4. Set x dan y dengan masking
+    for (int i = 0; i < NBLOCK; i++) {
+        x->bitsu64[i] = r_curr.bitsu64[i] & final_mask;
+        y->bitsu64[i] = y->bitsu64[i] & final_mask;
+    }
+
+    return final_mask != 0;
+}
+
 static inline bool solve_cornacchia_nist(oriint_t *n, oriint_t *x, oriint_t *y) {
     if (oriint_is_zero(n)) {
         oriint_clear(x);
@@ -37,27 +105,21 @@ static inline bool solve_cornacchia_nist(oriint_t *n, oriint_t *x, oriint_t *y) 
     oriint_isqrt(&sqrt_n, n);
     oriint_t limit;
     oriint_isqrt(&limit, &nshr1);
-    uint64_t sqrt_n = isqrt_v9(n);
-    uint64_t limit  = isqrt_v9(n >> 1);
-
-    /*
-     * Use signed loop index to avoid unsigned underflow UB.
-     */
-    for (int64_t i = (int64_t)sqrt_n;
-         i >= (int64_t)limit;
-         i--)
-    {
-        __uint128_t sq = (__uint128_t)i * i;
-        uint64_t rem = (uint64_t)((__uint128_t)n - sq);
-
-        uint64_t r;
-        if (is_square_u64(rem, &r)) {
-            *x = (int64_t)r;
-            *y = i;
+    while (oriint_is_ge(&sqrt_n, &limit)) {
+        oriint_t sq;
+        oriint_sqr(&sq, &sqrt_n);
+        oriint_t rem;
+        oriint_sub_3(&rem, n, &sq);
+        oriint_t r;
+        if (oriint_issquare(&rem, &r)) {
+            oriint_set(x, &r);
+            oriint_set(y, &sqrt_n);
             return true;
         }
+        oriint_t one;
+        oriint_set_one(&one);
+        oriint_sub_2(&sqrt_n, &one);
     }
-
     return false;
 }
 
@@ -77,7 +139,7 @@ static inline bool klpt_solve_advanced(uint64_t target_norm, Quaternion *res) {
         int64_t x, y;
 
         // Cornacchia tetap menjadi penyelesaian akhir yang efisien
-        if (solve_cornacchia_nist(rem_w, &x, &y)) {
+        if (solve_cornacchia(rem_w, &x, &y)) {
             res->w = w;
             res->x = fp_from_signed(x);
             res->y = fp_from_signed(y);
