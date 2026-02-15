@@ -127,7 +127,7 @@ int main() {
     oriint_modmul(&res, &b);
 
     printf("Test modmul 2*3 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
+    for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");
@@ -138,7 +138,7 @@ int main() {
     oriint_modadd(&res, &a, &b);
 
     printf("Test modadd 1+1 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
+    for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");
@@ -149,7 +149,7 @@ int main() {
     oriint_modsub_1(&res, &a);
 
     printf("Test modsub 2-1 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
+    for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");
@@ -159,7 +159,7 @@ int main() {
     oriint_modinv(&res);
 
     printf("Test modinv 1 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
+    for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");

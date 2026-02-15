@@ -1,11 +1,17 @@
 #pragma once
 #include <stdbool.h>
 
-#define NBLOCK 1
-#define ORIINTBLOCK 5
-#define SQ_POWER 8
+#define NBLOCK_OLD 1
+#define NBLOCK 5
+#define SQ_POWER_OLD 8
+#define SQ_POWER 256
 #define DOMAIN_SEP "ORISIGN-V9.7-NIST-PQC-2026"
 #define HASHES_BYTES 32
+
+#define FP_BYTES_OLD (NBLOCK_OLD * 8)
+#define FP2_BYTES_OLD (2 * FP_BYTES_OLD)
+#define FP2_SIGNC_OLD 3
+#define COMPRESSED_SIG_SIZE_OLD (HASHES_BYTES + (FP2_SIGNC_OLD * FP2_BYTES_OLD))
 
 #define FP_BYTES (NBLOCK * 8)
 #define FP2_BYTES (2 * FP_BYTES)

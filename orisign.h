@@ -13,7 +13,7 @@
 #include "theta.h"
 #include "types.h"
 #include "utilities.h"
-#include "fp.h"
+#include "fp_old.h"
 
 /* ============================================================
  * 1. CORE UTILITIES & CONSTANT-TIME
@@ -21,61 +21,21 @@
 
 static inline ThetaNullPoint_Fp2 get_nist_baseline_theta(void)
 {
-    const fp2_t a = { .re = NIST_THETA_SQRT2, .im = 0 };
-    const fp2_t b = { .re = 1,                 .im = 0 };
-    const fp2_t c = { .re = 1,                 .im = 0 };
-    const fp2_t d = { .re = 0,                 .im = 0 };
+    const fp2old_t a = { .re = NIST_THETA_SQRT2, .im = 0 };
+    const fp2old_t b = { .re = 1,                 .im = 0 };
+    const fp2old_t c = { .re = 1,                 .im = 0 };
+    const fp2old_t d = { .re = 0,                 .im = 0 };
     return (ThetaNullPoint_Fp2){ a, b, c, d };
-}
-
-static inline bool recover_y_from_x(
-    const ThetaNullPoint_Fp2 *T,
-    const fp2_t *x,
-    fp2_t *out_y)
-{
-    (void)T; /* belum dipakai, tetap disimpan untuk future upgrade */
-
-    /* x^2 */
-    fp2_t x2 = fp2_mul(*x, *x);
-
-    /* x^3 */
-    fp2_t x3 = fp2_mul(x2, *x);
-
-    /* rhs = x^3 + x + 1 */
-    fp2_t rhs = fp2_add(
-                    fp2_add(x3, *x),
-                    (fp2_t){1, 0}
-                 );
-
-    /* sementara hanya support kasus imag = 0 */
-    if (rhs.im != 0)
-        return false;
-
-    uint64_t y = fp_sqrt(rhs.re);
-
-    /*
-       fp_sqrt return:
-       0   -> jika non-residue ATAU sqrt(0)
-       maka kita harus cek manual
-    */
-    if (y == 0) {
-        if (rhs.re != 0)
-            return false;  /* non-residue */
-    }
-
-    out_y->re = y;
-    out_y->im = 0;
-
-    return true;
 }
 
 static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, const uint8_t chal[HASHES_BYTES])
 {
-    _Static_assert(SQ_POWER <= (HASHES_BYTES * 8), "Error: SQ_POWER lebih besar dari jumlah bit yang tersedia di challenge hash!");
-    for (int i = 0; i < SQ_POWER; i++) {
-        uint64_t bit = (chal[i >> 3] >> (i & 7)) & 1ULL;
+    _Static_assert(SQ_POWER_OLD <= (HASHES_BYTES * 8), "Error: SQ_POWER lebih besar dari jumlah bit yang tersedia di challenge hash!");
+    for (int i = 0; i < SQ_POWER_OLD; i++) {
+        uint8_t byte = chal[i >> 3];
+        uint64_t bit = (uint64_t)((byte >> (i & 7)) & 1u);
 
-        fp2_t xT;
+        fp2old_t xT;
         xT.re = ct_select_u64(T->c.re, T->b.re, bit);
         xT.im = ct_select_u64(T->c.im, T->b.im, bit);
 
@@ -94,17 +54,17 @@ static inline void get_nist_challenge_v3(uint8_t *hash_out, const char* msg, The
     shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
     shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
 
-    uint8_t buf[FP2_BYTES];
+    uint8_t buf[FP2_BYTES_OLD];
     ThetaCompressed_Fp2 cc = theta_compress(comm);
     ThetaCompressed_Fp2 pkc = theta_compress(pk);
 
-    fp2_pack(buf, cc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-    fp2_pack(buf, cc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-    fp2_pack(buf, cc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, cc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
+    fp2_pack(buf, cc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
+    fp2_pack(buf, cc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
 
-    fp2_pack(buf, pkc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-    fp2_pack(buf, pkc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-    fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+    fp2_pack(buf, pkc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
+    fp2_pack(buf, pkc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
+    fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
 
     shake256_inc_finalize(&ctx);
     shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
@@ -126,7 +86,7 @@ static inline void apply_quaternion_action_to_theta(ThetaNullPoint_Fp2 *T, Quate
     uint64_t z = fp_encode_signed(q.z);
 
     // Simpan koordinat lama untuk menghindari aliasing
-    fp2_t a = T->a, b = T->b, c = T->c, d = T->d;
+    fp2old_t a = T->a, b = T->b, c = T->c, d = T->d;
 
     // 2. Linear Combination dengan register lokal
     // Batch 1: a' dan b'
@@ -347,15 +307,15 @@ static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, ThetaNullPoi
 static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignature_V9 sig)
 {
     if (!out) return false;
-    size_t needed = HASHES_BYTES + (FP2_SIGNC * FP2_BYTES);
+    size_t needed = HASHES_BYTES + (FP2_SIGNC_OLD * FP2_BYTES_OLD);
     if (out_len < needed) return false;
     
     memcpy(out, sig.challenge_val, HASHES_BYTES);
 
     size_t pos = HASHES_BYTES;
-    fp2_pack(out + pos, sig.src.b); pos += FP2_BYTES;
-    fp2_pack(out + pos, sig.src.c); pos += FP2_BYTES;
-    fp2_pack(out + pos, sig.src.d); pos += FP2_BYTES;
+    fp2_pack(out + pos, sig.src.b); pos += FP2_BYTES_OLD;
+    fp2_pack(out + pos, sig.src.c); pos += FP2_BYTES_OLD;
+    fp2_pack(out + pos, sig.src.d); pos += FP2_BYTES_OLD;
 
     return true;
 }
@@ -363,7 +323,7 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignatur
 static inline bool deserialize_sig(SQISignature_V9 *sig, const uint8_t *in, size_t in_len)
 {
     if (!sig || !in) return false;
-    size_t needed = HASHES_BYTES + (FP2_SIGNC * FP2_BYTES);
+    size_t needed = HASHES_BYTES + (FP2_SIGNC_OLD * FP2_BYTES_OLD);
     if (in_len < needed) return false;
 
     memset(sig, 0, sizeof(*sig));
@@ -371,9 +331,9 @@ static inline bool deserialize_sig(SQISignature_V9 *sig, const uint8_t *in, size
 
     size_t pos = HASHES_BYTES;
 
-    sig->src.b = fp2_unpack(in + pos); pos += FP2_BYTES;
-    sig->src.c = fp2_unpack(in + pos); pos += FP2_BYTES;
-    sig->src.d = fp2_unpack(in + pos); pos += FP2_BYTES;
+    sig->src.b = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
+    sig->src.c = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
+    sig->src.d = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
 
     return true;
 }
