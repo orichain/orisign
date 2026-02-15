@@ -92,6 +92,25 @@ static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
     return acc == 0;
 }
 
+static inline uint64_t oriint_is_ge(const oriint_t *a, const oriint_t *b) {
+    uint64_t ge = 0;
+    uint64_t eq = 1;
+    for (int i = NBLOCK - 1; i >= 0; i--) {
+        uint64_t ai = a->bitsu64[i];
+        uint64_t bi = b->bitsu64[i];
+        uint64_t gt = (ai - bi) >> 63 ^ 1ULL;
+        uint64_t l_eq = ~((ai ^ bi) | -(ai ^ bi)) >> 63;
+        ge |= eq & gt;
+        eq &= l_eq;
+    }
+    return ge | eq;
+}
+
+static inline uint64_t oriint_is_mod4_3(const oriint_t *n) {
+    uint64_t two_bits = n->bitsu64[0] & 3ULL;
+    return 1 ^ ((two_bits ^ 3ULL | -(two_bits ^ 3ULL)) >> 63);
+}
+
 static inline void oriint_select_flag(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t flag) {
     uint64_t mask = -(uint64_t)(flag != 0);
     for (int i = 0; i < NBLOCK; i++) {
@@ -149,7 +168,7 @@ static inline void oriint_add_1(oriint_t *RES, const oriint_t *a) {
 	  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[4]);
 }
 
-static inline void oriint_add_3(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void oriint_add_3(oriint_t *RES, oriint_t *a, const oriint_t *b) {
 	  uint64_t c = 0;
 	
 	  c = oriint_addcarry_u64(c, a->bitsu64[0], b->bitsu64[0], &RES->bitsu64[0]);
@@ -214,14 +233,13 @@ static inline void oriint_imult(oriint_t *RES, oriint_t *a, int64_t b) {
 
 static inline void oriint_addandshift(oriint_t *RES, const oriint_t *a, uint64_t cH) {
     uint64_t c = 0;
-    uint64_t dummy;
-    // Lakukan penjumlahan (RES + a) tapi langsung buang limb terendah (shift right 64)
-    c = oriint_addcarry_u64(0, RES->bitsu64[0], a->bitsu64[0], &dummy); 
-    c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
-    c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
-    c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
-    c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
-    RES->bitsu64[4] = c + cH; 
+	
+	  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
+	  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
+  	c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
+  	RES->bitsu64[4] = c + cH;  
 }
 
 static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriint_t *b) {
@@ -426,7 +444,7 @@ static inline void oriint_modinv(oriint_t *RES) {
 	  oriint_set(RES, &s);
 }
 
-static void oriint_modexp_ct(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
+static void oriint_modexp(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
     oriint_t result;
     oriint_t base;
     oriint_t tmp;
@@ -465,21 +483,87 @@ static void oriint_compute_sqrt_exp(oriint_t *e) {
     oriint_shiftr(2, e);
 }
 
-static bool oriint_modsqrt(oriint_t *RES, const oriint_t *a) {
-    oriint_t exp;
+static void oriint_modsqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
+    oriint_t exp, res, tmp, base;
+    oriint_set_one(&res);
+    oriint_set(&base, a);
+
+    // 1. Hitung exponent untuk sqrt: e = (P+1)/4
     oriint_compute_sqrt_exp(&exp);
 
-    oriint_modexp_ct(RES, a, &exp);
+    // 2. Square-and-multiply constant-time
+    // Menggunakan seluruh bit NBLOCK*64 untuk menjamin timing yang sama
+    for (int i = NBLOCK * 64 - 1; i >= 0; i--) {
+        // square res: res = res^2 mod P
+        oriint_set(&tmp, &res);
+        oriint_modmul(&res, &tmp); 
 
-    // verify sqrt
+        // Ambil bit eksponen secara constant-time
+        uint64_t word = i >> 6;
+        uint64_t bit  = (exp.bitsu64[word] >> (i & 63)) & 1ULL;
+        uint64_t mask = -(int64_t)bit; // 0xFF...F jika bit=1, 0x00...0 jika bit=0
+
+        // Siapkan kandidat perkalian: mulres = res * base mod P
+        oriint_t mulres;
+        oriint_set(&mulres, &res);
+        oriint_modmul(&mulres, &base);
+
+        // Pilih hasil: jika bit=1 pakai mulres, jika bit=0 tetap res (tmp)
+        oriint_select_mask(&res, &res, &mulres, mask);
+    }
+
+    // 3. Verifikasi: check = res^2 mod P
     oriint_t check;
-    oriint_set(&check, RES);
-    oriint_modmul(&check, RES);
+    oriint_set(&check, &res);
+    oriint_modmul(&check, &res);
 
-    if (!oriint_is_equal(&check, a))
-        return false;
+    // 4. Bandingkan check == a secara constant-time
+    uint64_t neq_accumulator = 0;
+    for (int i = 0; i < NBLOCK; i++) {
+        neq_accumulator |= (check.bitsu64[i] ^ a->bitsu64[i]);
+    }
+    
+    // Ubah neq_accumulator jadi mask tunggal: 0 jika sama, -1 jika beda
+    uint64_t final_neq = (neq_accumulator | -neq_accumulator) >> 63;
+    uint64_t full_valid_mask = -(int64_t)(final_neq ^ 1ULL); // 0xFF...F jika cocok, 0 jika tidak
 
-    return true;
+    // 5. Set output: jika tidak valid, RES jadi nol
+    for (int i = 0; i < NBLOCK; i++) {
+        RES->bitsu64[i] = res.bitsu64[i] & full_valid_mask;
+    }
+
+    // Set flag is_valid (untuk logika high-level)
+    if (is_valid) {
+        *is_valid = (full_valid_mask != 0);
+    }
+}
+
+static void oriint_sqr(oriint_t *RES, const oriint_t *A) {
+    oriint_clear(RES);
+
+    for (int i = 0; i < NBLOCK; i++) {
+        uint64_t carry = 0;
+        for (int j = 0; j < NBLOCK; j++) {
+            if (i + j >= NBLOCK) continue;
+            uint64_t hi, lo;
+            lo = oriint_umul128(A->bitsu64[i], A->bitsu64[j], &hi);
+
+            uint64_t c = 0;
+            c = oriint_addcarry_u64(0, RES->bitsu64[i + j], lo, &RES->bitsu64[i + j]);
+
+            uint64_t sum_hi = hi + carry;
+            uint64_t carry_hi = (sum_hi < hi) ? 1 : 0;
+            carry = sum_hi;
+
+            // propagate c ke limb berikutnya
+            for (int k = i + j + 1; k < NBLOCK; k++) {
+                uint64_t val = RES->bitsu64[k] + ((k == i + j + 1) ? carry : 0) + c;
+                carry = ((k == i + j + 1) ? 0 : carry);
+                RES->bitsu64[k] = val;
+                c = 0;
+            }
+        }
+    }
 }
 
 static void oriint_isqrt(oriint_t *RES, const oriint_t *n) {
@@ -491,41 +575,30 @@ static void oriint_isqrt(oriint_t *RES, const oriint_t *n) {
     oriint_t op, res, one, tmp, next_res;
     oriint_set(&op, n);
     oriint_clear(&res);
-    
-    // Set 'one' ke bit genap tertinggi yang mungkin (2^318)
-    oriint_clear(&one);
-    one.bitsu64[4] = (1ULL << 62); 
 
-    // Tahap 1: Geser 'one' ke bawah sampai one <= op
-    // PENTING: Gunakan sub_3 dan cek sign bits64[4]
+    oriint_clear(&one);
+    one.bitsu64[4] = (1ULL << 62);
+
     while (true) {
         oriint_sub_3(&tmp, &one, &op);
-        // Jika one <= op (hasil sub >= 0), maka kita sudah menemukan titik start
-        if (tmp.bits64[NBLOCK - 1] >= 0) break; 
-        
+        if (tmp.bits64[NBLOCK - 1] >= 0) break;
         oriint_shiftr(2, &one);
         if (oriint_is_zero(&one)) break;
     }
 
-    // Tahap 2: Iterasi digit-by-digit
     while (!oriint_is_zero(&one)) {
-        // next_res = res + one
         oriint_add_3(&next_res, &res, &one);
-        
-        // if op >= next_res
         oriint_sub_3(&tmp, &op, &next_res);
         if (tmp.bits64[NBLOCK - 1] >= 0) {
             oriint_set(&op, &tmp);
-            // res = (res >> 1) + one
             oriint_shiftr(1, &res);
             oriint_add_1(&res, &one);
         } else {
-            // res >>= 1
             oriint_shiftr(1, &res);
         }
-        // one >>= 2
         oriint_shiftr(2, &one);
     }
+
     oriint_set(RES, &res);
 }
 
@@ -535,53 +608,20 @@ static inline bool oriint_issquare(const oriint_t *n, oriint_t *root) {
         return true;
     }
 
-    // 1. Pre-filter cepat
+    // Prefilter cepat: periksa 6 bit rendah
     uint64_t m = n->bitsu64[0] & 63ULL;
-    uint64_t mask = 0x0202020202030213ULL; 
-    if (!((mask >> m) & 1ULL)) return false; 
+    uint64_t mask = 0x0202020202030213ULL;
+    if (!((mask >> m) & 1ULL)) return false;
 
-    // 2. Hitung akar
-    oriint_t r;
+    oriint_t r, sq;
     oriint_isqrt(&r, n);
 
-    // 3. Verifikasi r * r == n (Integer multiplication)
-    oriint_t sq;
-    oriint_clear(&sq);
+    oriint_sqr(&sq, &r);
 
-    for (int i = 0; i < NBLOCK; i++) {
-        if (r.bitsu64[i] == 0) continue;
-        uint64_t carry = 0;
-        for (int j = 0; i + j < NBLOCK; j++) { // Pastikan indeks i+j valid
-            uint64_t hi, lo;
-            lo = oriint_umul128(r.bitsu64[i], r.bitsu64[j], &hi);
-            
-            // Tambahkan lo ke posisi saat ini
-            uint64_t c = 0;
-            c = oriint_addcarry_u64(0, sq.bitsu64[i + j], lo, &sq.bitsu64[i + j]);
-            
-            // Tambahkan hi dan carry sebelumnya ke posisi berikutnya jika masih dalam range NBLOCK
-            uint64_t next_val = hi + carry; 
-            uint64_t next_c = (next_val < hi) ? 1 : 0; // Deteksi overflow hi + carry
-            
-            carry = next_val; 
-            
-            // Propagasi carry c ke limb-limb di atasnya
-            for (int k = i + j + 1; k < NBLOCK; k++) {
-                c = oriint_addcarry_u64(c, sq.bitsu64[k], (k == i + j + 1) ? carry : 0, &sq.bitsu64[k]);
-                if (k == i + j + 1) {
-                    c += next_c; // Masukkan overflow dari hi+carry
-                    carry = 0;   // Reset carry karena sudah diproses
-                }
-                if (c == 0) break;
-            }
-        }
-    }
+    bool eq = oriint_is_equal(&sq, n);
+    if (eq && root) oriint_set(root, &r);
 
-    if (oriint_is_equal(&sq, n)) {
-        if (root) oriint_set(root, &r);
-        return true;
-    }
-    return false;
+    return eq;
 }
 
 static inline void oriint_print(const char* label, const oriint_t* val) {
@@ -688,7 +728,8 @@ static inline void oriint_tests() {
     oriint_print("x                  : ", &a);
     oriint_print("a (x^2 mod P)      : ", &b);
 
-    bool ok = oriint_modsqrt(&res, &b);
+    bool ok;
+    oriint_modsqrt(&res, &b, &ok);
     printf("modsqrt return     : %d\n", ok);
     oriint_print("sqrt(a)            : ", &res);
 

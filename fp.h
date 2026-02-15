@@ -7,6 +7,14 @@
 #include <string.h>
 #include <sys/endian.h>
 
+static inline void fp_from_signed(oriint_t *RES, oriint_t *a) {
+    if (a->bits64[4] < 0LL) {
+        oriint_add_3(RES, a, &P);
+    } else {
+        oriint_set(RES, a);
+    }
+}
+
 static inline void fp_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
     oriint_add_3(RES, a, b);
 }

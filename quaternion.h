@@ -2,6 +2,34 @@
 #include "fp.h"
 #include "types.h"
 
+static inline void quat_set(quaternion_t *RES, quaternion_t *a) {
+    oriint_set(&RES->w, &a->w);
+    oriint_set(&RES->x, &a->x);
+    oriint_set(&RES->y, &a->y);
+    oriint_set(&RES->z, &a->z);
+}
+
+static inline void quat_set_01(quaternion_t *RES) {
+    oriint_clear(&RES->w);
+    oriint_set_one(&RES->x);
+    oriint_clear(&RES->y);
+    oriint_clear(&RES->z);
+}
+
+static inline void quat_set_02(quaternion_t *RES) {
+    oriint_clear(&RES->w);
+    oriint_clear(&RES->x);
+    oriint_set_one(&RES->y);
+    oriint_clear(&RES->z);
+}
+
+static inline void quat_set_03(quaternion_t *RES) {
+    oriint_clear(&RES->w);
+    oriint_clear(&RES->x);
+    oriint_clear(&RES->y);
+    oriint_set_one(&RES->z);
+}
+
 static inline void quat_add(quaternion_t *RES, quaternion_t *a, quaternion_t *b) {
     fp_add(&RES->w, &a->w, &b->w);
     fp_add(&RES->x, &a->x, &b->x);
