@@ -3,6 +3,7 @@
 #include "types.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 static inline void oriint_set(oriint_t *a, const oriint_t *b) {
     a->bitsu64[0] = b->bitsu64[0];
@@ -28,64 +29,43 @@ static inline void oriint_clear(oriint_t *a) {
 	  a->bitsu64[4] = 0ULL;
 }
 
-static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *h) {
-    uint64_t rhi, rlo;
-    __asm__ (
-        "mulq %[b]"
-        : "=a"(rlo), "=d"(rhi) 
-        : [a]"0"(a), [b]"rm"(b)
-        : "cc"
-    );
-    *h = rhi;
-    return rlo;
+static inline int oriint_equal(const oriint_t *x, const oriint_t *y) {
+    for (int i = 0; i < ORIINTBLOCK; i++) {
+        if (x->bitsu64[i] != y->bitsu64[i]) return 0;
+    }
+    return 1;
 }
 
-static inline uint64_t oriint_addcarry_u64(uint64_t c, uint64_t a, uint64_t b, uint64_t *d) {
-    uint64_t carry_out;
-    __asm__ (
-        "addb $-1, %b[c]\n\t"
-        "adcq %[b], %[a]\n\t"
-        "setc %b[c]\n\t"
-        "movzbl %b[c], %[c]"
-        : [a] "+r" (a), [c] "=&q" (carry_out)
-        : [b] "re" (b), "[c]" (c)
-        : "cc"
-    );
-    *d = a;
-    return carry_out;
+static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *h) {
+	  uint64_t rhi;
+	  uint64_t rlo;
+	
+	  __asm__( "mulq  %[b];" :"=d"(rhi),"=a"(rlo) :"1"(a),[b]"rm"(b));
+	
+	  *h = rhi;
+	  return rlo;
+}
+
+static uint64_t inline oriint_addcarry_u64(uint64_t c, uint64_t a, uint64_t b, uint64_t *d) {
+	  return __builtin_ia32_addcarryx_u64(c, a, b, (long long unsigned int*)d);
+}
+
+static uint64_t inline oriint_shiftright128(uint64_t a, uint64_t b, unsigned char n) {
+	  uint64_t c;
+	
+	  __asm__ ("movq %1,%0;shrdq %3,%2,%0;" : "=D"(c) : "r"(a),"r"(b),"c"(n));
+	  return c;
+}
+
+static uint64_t inline oriint_shiftleft128(uint64_t a, uint64_t b, unsigned char n) {
+	  uint64_t c;
+	
+	  __asm__ ("movq %1,%0;shldq %3,%2,%0;" : "=D"(c) : "r"(b),"r"(a),"c"(n));
+	  return  c;
 }
 
 static inline uint64_t oriint_subborrow_u64(uint64_t c, uint64_t a, uint64_t b, uint64_t *d) {
-    uint64_t borrow_out;
-    __asm__ (
-        "addb $-1, %b[c]\n\t"
-        "sbbq %[b], %[a]\n\t"
-        "setc %b[c]\n\t"
-        "movzbl %b[c], %[c]"
-        : [a] "+r" (a), [c] "=&q" (borrow_out)
-        : [b] "re" (b), "[c]" (c)
-        : "cc"
-    );
-    *d = a;
-    return borrow_out;
-}
-
-static inline uint64_t oriint_shiftright128(uint64_t low, uint64_t high, unsigned char n) {
-    uint64_t res;
-    __asm__ (
-        "shrdq %3, %2, %0"
-        : "=r"(res) : "0"(low), "r"(high), "cJ"(n) : "cc"
-    );
-    return res;
-}
-
-static inline uint64_t oriint_shiftleft128(uint64_t low, uint64_t high, unsigned char n) {
-    uint64_t res;
-    __asm__ (
-        "shldq %3, %2, %0"
-        : "=r"(res) : "0"(high), "r"(low), "cJ"(n) : "cc"
-    );
-    return res;
+    return __builtin_ia32_subborrow_u64(c, a, b, (long long unsigned int*)d);
 }
 
 static inline void oriint_shiftr(uint32_t n, oriint_t *d) {
@@ -217,7 +197,7 @@ static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, const
     RES->bitsu64[2] = pr.bitsu64[3];
     RES->bitsu64[3] = pr.bitsu64[4];
     RES->bitsu64[4] = c;
-#pragma unroll
+
     for (int i = 1; i < Msize; i++) {
         oriint_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
         ML = (pr.bitsu64[0] + RES->bitsu64[0]) * MM64;
@@ -225,15 +205,64 @@ static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, const
         c = oriint_add_c(&pr, &p);
         oriint_addandshift(RES, &pr, c);
     }
+
     oriint_sub_3(&p, RES, &P);
     if(p.bits64[ORIINTBLOCK - 1] >= 0) oriint_set(RES, &p);
 }
 
-static inline void oriint_modmul(oriint_t *RES, oriint_t *a) {
+static inline void oriint_modmul_montgomerry(oriint_t *RES, oriint_t *a) {
 	  oriint_t p;
 	
 	  oriint_montgomerymult(&p,a,RES);
 	  oriint_montgomerymult(RES,&R2,&p);
+}
+
+static inline void oriint_modmul(oriint_t *RES, oriint_t *a) {
+	  uint64_t ah, al, c;
+	  uint64_t t[5];
+	  uint64_t r512[8];
+	  r512[5] = 0;
+	  r512[6] = 0;
+	  r512[7] = 0;
+
+	  oriint_imm_umul(RES->bitsu64, a->bitsu64[0], r512);
+	  oriint_imm_umul(RES->bitsu64, a->bitsu64[1], t);
+	  c = oriint_addcarry_u64(0, r512[1], t[0], r512 + 1);
+	  c = oriint_addcarry_u64(c, r512[2], t[1], r512 + 2);
+	  c = oriint_addcarry_u64(c, r512[3], t[2], r512 + 3);
+	  c = oriint_addcarry_u64(c, r512[4], t[3], r512 + 4);
+	  c = oriint_addcarry_u64(c, r512[5], t[4], r512 + 5);
+	  oriint_imm_umul(RES->bitsu64, a->bitsu64[2], t);
+	  c = oriint_addcarry_u64(0, r512[2], t[0], r512 + 2);
+	  c = oriint_addcarry_u64(c, r512[3], t[1], r512 + 3);
+	  c = oriint_addcarry_u64(c, r512[4], t[2], r512 + 4);
+	  c = oriint_addcarry_u64(c, r512[5], t[3], r512 + 5);
+	  c = oriint_addcarry_u64(c, r512[6], t[4], r512 + 6);
+	  oriint_imm_umul(RES->bitsu64, a->bitsu64[3], t);
+	  c = oriint_addcarry_u64(0, r512[3], t[0], r512 + 3);
+	  c = oriint_addcarry_u64(c, r512[4], t[1], r512 + 4);
+	  c = oriint_addcarry_u64(c, r512[5], t[2], r512 + 5);
+	  c = oriint_addcarry_u64(c, r512[6], t[3], r512 + 6);
+	  c = oriint_addcarry_u64(c, r512[7], t[4], r512 + 7);
+
+	  // Reduce from 512 to 320 
+	  oriint_imm_umul(r512 + 4, 0x1000003D1ULL, t);
+	  c = oriint_addcarry_u64(0, r512[0], t[0], r512 + 0);
+	  c = oriint_addcarry_u64(c, r512[1], t[1], r512 + 1);
+	  c = oriint_addcarry_u64(c, r512[2], t[2], r512 + 2);
+	  c = oriint_addcarry_u64(c, r512[3], t[3], r512 + 3);
+
+	  // Reduce from 320 to 256 
+	  // No overflow possible here t[4]+c<=0x1000003D1ULL
+	  al = oriint_umul128(t[4] + c, 0x1000003D1ULL, &ah); 
+	  c = oriint_addcarry_u64(0, r512[0], al, RES->bitsu64 + 0);
+	  c = oriint_addcarry_u64(c, r512[1], ah, RES->bitsu64 + 1);
+	  c = oriint_addcarry_u64(c, r512[2], 0ULL, RES->bitsu64 + 2);
+	  c = oriint_addcarry_u64(c, r512[3], 0ULL, RES->bitsu64 + 3);
+
+	  // Probability of carry here or that this>P is very very unlikely
+	  RES->bitsu64[4] = 0ULL; 
+
 }
 
 static inline void oriint_modsub_2(oriint_t *RES, oriint_t *a, oriint_t *b) {
@@ -356,3 +385,52 @@ static inline void oriint_modinv(oriint_t *RES) {
 		    oriint_sub_2(&s,&P);
 	  oriint_set(RES, &s);
 }
+
+static inline int oriint_getsize() {
+    int i=ORIINTBLOCK-1;
+    while(i>0 && P.bitsu32[i]==0) i--;
+    return i+1;
+}
+
+static void oriint_setup_mm64_msize() {
+    uint64_t _mm64;
+    int _msize;
+
+    int nSize = oriint_getsize();
+    // Last digit inversions (Newton's iteration)
+    {
+        int64_t x, t;
+        x = t = P.bits64[0];
+        x = x * (2 - t * x);
+        x = x * (2 - t * x);
+        x = x * (2 - t * x);
+        x = x * (2 - t * x);
+        x = x * (2 - t * x);
+        _mm64 = (uint64_t)(-x);
+    }
+    // Size of Montgomery mult (64bits digit)
+    _msize = nSize/2;
+
+    // Menampilkan MM64 dan MSize
+    printf("DEBUG - MM64  : %016llx\n", _mm64);
+    printf("DEBUG - MSize : %d\n", _msize);
+}
+
+static void oriint_setup_r2() {
+    oriint_t _r2;
+    oriint_t ri;
+    oriint_t one;
+
+    oriint_set_one(&one);
+    oriint_montgomerymult(&ri, &one, &one);
+    oriint_montgomerymult(&_r2, &ri, &one);
+    oriint_modinv(&_r2);
+
+    // Menampilkan R2 (dari LSB ke MSB)
+    printf("DEBUG - R2    : ");
+    for (int i = 0; i < ORIINTBLOCK; i++) {
+        printf("%llu ", _r2.bitsu64[i]);
+    }
+    printf("\n");
+}
+

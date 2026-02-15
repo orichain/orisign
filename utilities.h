@@ -196,3 +196,11 @@ static inline void print_hex(const char* label, const uint8_t* data, size_t len,
     printf("\n");
 }
 
+static inline void print_oriint(const char* label, oriint_t *a) {
+    printf("%s: ", label);
+    for(int i = 4; i >= 0; i--) {
+        printf("%016llx ", a->bitsu64[i]);
+    }
+    printf("\n");
+}
+
