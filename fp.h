@@ -91,6 +91,26 @@ static inline uint64_t fp_inv(uint64_t a)
 }
 
 /* ================================================================
+   Square Root (p % 4 == 3)
+   ================================================================ */
+static inline uint64_t fp_sqrt(uint64_t a)
+{
+    uint64_t r = fp_pow_const(a, (MODULO + 1) >> 2);
+    uint64_t check = fp_mul(r, r);
+    uint64_t ok = (check == a);
+    return r & (-(uint64_t)ok);
+}
+
+/* ================================================================
+   NEW: Encode signed int64_t ke field
+   ================================================================ */
+static inline uint64_t fp_encode_signed(int64_t s)
+{
+    uint64_t abs_s = (s < 0) ? (uint64_t)-s : (uint64_t)s;
+    uint64_t val = abs_s % MODULO;
+    return (s < 0) ? ((val == 0) ? 0 : (MODULO - val)) : val;
+}
+/* ================================================================
    FP2 Arithmetic
    ================================================================ */
 static inline fp2_t fp2_add(fp2_t x, fp2_t y)
@@ -141,17 +161,6 @@ static inline bool fp2_equal(fp2_t a, fp2_t b)
 }
 
 /* ================================================================
-   Square Root (p % 4 == 3)
-   ================================================================ */
-static inline uint64_t fp_sqrt(uint64_t a)
-{
-    uint64_t r = fp_pow_const(a, (MODULO + 1) >> 2);
-    uint64_t check = fp_mul(r, r);
-    uint64_t ok = (check == a);
-    return r & (-(uint64_t)ok);
-}
-
-/* ================================================================
    FP2 Packing / Unpacking
    ================================================================ */
 static inline void fp2_pack(uint8_t out[2 * FP_BYTES], fp2_t x)
@@ -172,16 +181,6 @@ static inline fp2_t fp2_unpack(const uint8_t in[2 * FP_BYTES])
     x.re = barrett_reduce(be64toh(re_be));
     x.im = barrett_reduce(be64toh(im_be));
     return x;
-}
-
-/* ================================================================
-   NEW: Encode signed int64_t ke field
-   ================================================================ */
-static inline uint64_t fp_encode_signed(int64_t s)
-{
-    uint64_t abs_s = (s < 0) ? (uint64_t)-s : (uint64_t)s;
-    uint64_t val = abs_s % MODULO;
-    return (s < 0) ? ((val == 0) ? 0 : (MODULO - val)) : val;
 }
 
 /* ================================================================

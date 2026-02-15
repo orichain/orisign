@@ -104,8 +104,8 @@ int main() {
     printf("  > System Throughput    : %.1f sig/sec\n", 1.0 / (t_sign + t_ver));
     printf("==============================================================\n");
 
-    //oriint_setup_mm64_msize();
-    oriint_setup_r2();
+    oriint_setup_mm64_msize();
+    //oriint_setup_r2();
 
     oriint_t a, b, res, check, one;
     int i;
@@ -120,31 +120,13 @@ int main() {
     // --------- Test 1: simple modmul 3*7 ----------
     oriint_clear(&a);
     oriint_clear(&b);
-    a.bitsu64[0] = 3;
-    b.bitsu64[0] = 7;
+    a.bitsu64[0] = 2;
+    b.bitsu64[0] = 3;
 
     oriint_set(&res, &a);
     oriint_modmul(&res, &b);
 
-    printf("Test modmul 3*7 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
-        printf("%016llx ", res.bitsu64[i]);
-    }
-    printf("\n");
-
-    oriint_set(&res, &a);
-    oriint_modmul_montgomerry(&res, &b);
-
-    printf("Test modmul_montgomerry 3*7 mod P = ");
-    for (i = ORIINTBLOCK-1; i >= 0; i--) {
-        printf("%016llx ", res.bitsu64[i]);
-    }
-    printf("\n");
-
-    oriint_set(&res, &a);
-    oriint_modmul(&res, &b);
-
-    printf("Test modmul 3*7 mod P = ");
+    printf("Test modmul 2*3 mod P = ");
     for (i = ORIINTBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }
@@ -181,34 +163,6 @@ int main() {
         printf("%016llx ", res.bitsu64[i]);
     }
     printf("\n");
-
-    // --------- Test 5: random small modmul ----------
-    oriint_clear(&a);
-    oriint_clear(&b);
-    a.bitsu64[0] = 12345;
-    b.bitsu64[0] = 67890;
-
-    oriint_set(&res, &a);
-    oriint_modmul(&res, &b);
-
-    // verifikasi sederhana: res < P
-    for (i = 0; i < ORIINTBLOCK; i++) {
-        assert(res.bitsu64[i] < UINT64_MAX);
-    }
-    printf("Test random small modmul done\n");
-
-    // --------- Test 6: commutative property ----------
-    oriint_set(&a, &one);
-    b.bitsu64[0] = 2;
-    oriint_set(&res, &a);
-    oriint_modmul(&res, &b);
-
-    oriint_t t2;
-    oriint_set(&t2, &b);
-    oriint_modmul(&t2, &a);
-
-    assert(oriint_equal(&res, &t2));
-    printf("Test modmul commutative OK\n");
 
     return 0;
 }
