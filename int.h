@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+
+
 static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
     uint64_t lo;
     uint64_t h;
