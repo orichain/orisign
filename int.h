@@ -482,6 +482,116 @@ static bool oriint_modsqrt(oriint_t *RES, const oriint_t *a) {
     return true;
 }
 
+static void oriint_isqrt(oriint_t *RES, const oriint_t *n) {
+    if (oriint_is_zero(n)) {
+        oriint_clear(RES);
+        return;
+    }
+
+    oriint_t op, res, one, tmp, next_res;
+    oriint_set(&op, n);
+    oriint_clear(&res);
+    
+    // Set 'one' ke bit genap tertinggi yang mungkin (2^318)
+    oriint_clear(&one);
+    one.bitsu64[4] = (1ULL << 62); 
+
+    // Tahap 1: Geser 'one' ke bawah sampai one <= op
+    // PENTING: Gunakan sub_3 dan cek sign bits64[4]
+    while (true) {
+        oriint_sub_3(&tmp, &one, &op);
+        // Jika one <= op (hasil sub >= 0), maka kita sudah menemukan titik start
+        if (tmp.bits64[NBLOCK - 1] >= 0) break; 
+        
+        oriint_shiftr(2, &one);
+        if (oriint_is_zero(&one)) break;
+    }
+
+    // Tahap 2: Iterasi digit-by-digit
+    while (!oriint_is_zero(&one)) {
+        // next_res = res + one
+        oriint_add_3(&next_res, &res, &one);
+        
+        // if op >= next_res
+        oriint_sub_3(&tmp, &op, &next_res);
+        if (tmp.bits64[NBLOCK - 1] >= 0) {
+            oriint_set(&op, &tmp);
+            // res = (res >> 1) + one
+            oriint_shiftr(1, &res);
+            oriint_add_1(&res, &one);
+        } else {
+            // res >>= 1
+            oriint_shiftr(1, &res);
+        }
+        // one >>= 2
+        oriint_shiftr(2, &one);
+    }
+    oriint_set(RES, &res);
+}
+
+static inline bool oriint_issquare(const oriint_t *n, oriint_t *root) {
+    if (oriint_is_zero(n)) {
+        if (root) oriint_clear(root);
+        return true;
+    }
+
+    // 1. Pre-filter cepat
+    uint64_t m = n->bitsu64[0] & 63ULL;
+    uint64_t mask = 0x0202020202030213ULL; 
+    if (!((mask >> m) & 1ULL)) return false; 
+
+    // 2. Hitung akar
+    oriint_t r;
+    oriint_isqrt(&r, n);
+
+    // 3. Verifikasi r * r == n (Integer multiplication)
+    oriint_t sq;
+    oriint_clear(&sq);
+
+    for (int i = 0; i < NBLOCK; i++) {
+        if (r.bitsu64[i] == 0) continue;
+        uint64_t carry = 0;
+        for (int j = 0; i + j < NBLOCK; j++) { // Pastikan indeks i+j valid
+            uint64_t hi, lo;
+            lo = oriint_umul128(r.bitsu64[i], r.bitsu64[j], &hi);
+            
+            // Tambahkan lo ke posisi saat ini
+            uint64_t c = 0;
+            c = oriint_addcarry_u64(0, sq.bitsu64[i + j], lo, &sq.bitsu64[i + j]);
+            
+            // Tambahkan hi dan carry sebelumnya ke posisi berikutnya jika masih dalam range NBLOCK
+            uint64_t next_val = hi + carry; 
+            uint64_t next_c = (next_val < hi) ? 1 : 0; // Deteksi overflow hi + carry
+            
+            carry = next_val; 
+            
+            // Propagasi carry c ke limb-limb di atasnya
+            for (int k = i + j + 1; k < NBLOCK; k++) {
+                c = oriint_addcarry_u64(c, sq.bitsu64[k], (k == i + j + 1) ? carry : 0, &sq.bitsu64[k]);
+                if (k == i + j + 1) {
+                    c += next_c; // Masukkan overflow dari hi+carry
+                    carry = 0;   // Reset carry karena sudah diproses
+                }
+                if (c == 0) break;
+            }
+        }
+    }
+
+    if (oriint_is_equal(&sq, n)) {
+        if (root) oriint_set(root, &r);
+        return true;
+    }
+    return false;
+}
+
+static inline void oriint_print(const char* label, const oriint_t* val) {
+    printf("%s", label);
+    for (int i = NBLOCK - 1; i >= 0; i--) {
+        printf("%016llx ", val->bitsu64[i]);
+    }
+    printf("\n");
+}
+
 static inline int oriint_getsize() {
     int i=(2*NBLOCK)-1;
     while(i>0 && P.bitsu32[i]==0) i--;
@@ -525,5 +635,121 @@ static inline void oriint_setup_r2() {
     for (int i = 0; i < NBLOCK; i++)
         printf("%016llx ", _r2.bitsu64[i]);
     printf("\n");
+}
+
+
+static inline void oriint_tests() {
+    oriint_setup_mm64_msize();
+    oriint_setup_r2();
+
+    oriint_t a, b, res, check, one;
+    oriint_clear(&a);
+    oriint_clear(&b);
+    oriint_clear(&res);
+    oriint_clear(&check);
+    oriint_set_one(&one);
+
+    // --- TEST 1: MODULAR MULTIPLICATION (3*2) ---
+    printf("----- Test 1: modmul -----\n");
+    oriint_clear(&a); a.bitsu64[0] = 2;
+    oriint_clear(&b); b.bitsu64[0] = 3;
+    
+    oriint_set(&res, &a);
+    oriint_modmul(&res, &b);
+    oriint_print("modmul 2*3 mod P   : ", &res);
+
+    oriint_set(&res, &a);
+    oriint_modmul_k1(&res, &b);
+    oriint_print("k1 modmul 2*3 mod P: ", &res);
+
+    // --- TEST 2: MODULAR ADDITION (1+1) ---
+    printf("\n----- Test 2: modadd -----\n");
+    oriint_modadd(&res, &one, &one);
+    oriint_print("modadd 1+1 mod P   : ", &res);
+
+    // --- TEST 3: MODULAR SUBTRACTION (2-1) ---
+    printf("\n----- Test 3: modsub -----\n");
+    // res saat ini bernilai 2 dari test sebelumnya
+    oriint_modsub_1(&res, &one); 
+    oriint_print("modsub 2-1 mod P   : ", &res);
+
+    // --- TEST 4: MODULAR INVERSE (1^-1) ---
+    printf("\n----- Test 4: modinv -----\n");
+    oriint_set(&a, &one);
+    oriint_modinv(&res);
+    oriint_print("modinv 1 mod P     : ", &res);
+
+    // --- TEST 5: MODULAR SQUARE ROOT ---
+    printf("\n----- Test 5: modsqrt -----\n");
+    oriint_clear(&a); a.bitsu64[0] = 5; // x = 5
+    oriint_set(&b, &a);
+    oriint_modmul(&b, &a); // b = x^2 = 25
+    
+    oriint_print("x                  : ", &a);
+    oriint_print("a (x^2 mod P)      : ", &b);
+
+    bool ok = oriint_modsqrt(&res, &b);
+    printf("modsqrt return     : %d\n", ok);
+    oriint_print("sqrt(a)            : ", &res);
+
+    oriint_set(&check, &res);
+    oriint_modmul(&check, &res);
+    oriint_print("Verify (r^2 mod P) : ", &check);
+    printf("r^2 == a ?         : %d\n", oriint_is_equal(&check, &b));
+
+    // P - x check
+    oriint_set(&check, &a);
+    oriint_neg(&check);
+    oriint_modadd(&check, &check, (oriint_t*)&P);
+    oriint_print("P - x              : ", &check);
+    printf("sqrt == x ?        : %d\n", oriint_is_equal(&res, &a));
+    printf("sqrt == P-x ?      : %d\n", oriint_is_equal(&res, &check));
+
+    // --- TEST 6: INTEGER SQUARE ROOT (isqrt) ---
+    printf("\n----- Test 6: isqrt -----\n");
+    oriint_clear(&a); a.bitsu64[0] = 25;
+    oriint_isqrt(&res, &a);
+    oriint_print("isqrt(25)          : ", &res);
+
+    oriint_clear(&a); a.bitsu64[3] = (1ULL << 8); 
+    oriint_isqrt(&res, &a);
+    oriint_print("Input n (2^200)    : ", &a);
+    oriint_print("isqrt(n) (2^100)   : ", &res);
+
+    oriint_clear(&a); a.bitsu64[0] = 26;
+    oriint_isqrt(&res, &a);
+    printf("isqrt(26) [floor]  : %llu\n", res.bitsu64[0]);
+
+    // --- TEST 7: INTEGER SQUARE VALIDATION (issquare) ---
+    printf("\n----- Test 7: issquare -----\n");
+    oriint_t n_t, r_t;
+    bool is_sq;
+
+    oriint_clear(&n_t); n_t.bitsu64[0] = 144;
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test 144           : is_square=%d, root=%llu\n", is_sq, r_t.bitsu64[0]);
+
+    oriint_clear(&n_t); n_t.bitsu64[0] = 150;
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test 150           : is_square=%d\n", is_sq);
+
+    oriint_clear(&n_t); n_t.bitsu64[3] = (1ULL << 8);
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test 2^200         : is_square=%d\n", is_sq);
+    oriint_print("Root 2^100         : ", &r_t);
+
+    n_t.bitsu64[0] = 1;
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test 2^200 + 1     : is_square=%d\n", is_sq);
+
+    oriint_clear(&n_t);
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test Zero          : is_square=%d, root=%llu\n", is_sq, r_t.bitsu64[0]);
+
+    oriint_clear(&n_t); n_t.bitsu64[4] = (1ULL << 62);
+    is_sq = oriint_issquare(&n_t, &r_t);
+    printf("Test 2^318         : is_square=%d\n", is_sq);
+
+    printf("--------------------------\n");
 }
 
