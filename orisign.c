@@ -133,9 +133,9 @@ int main() {
     printf("\n");
 
     oriint_set(&res, &a);
-    oriint_modmul_montgomerry(&res, &b);
+    oriint_modmul_k1(&res, &b);
 
-    printf("Test montgomerry modmul 2*3 mod P = ");
+    printf("Test k1 modmul 2*3 mod P = ");
     for (i = NBLOCK-1; i >= 0; i--) {
         printf("%016llx ", res.bitsu64[i]);
     }

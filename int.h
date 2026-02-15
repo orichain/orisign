@@ -212,15 +212,16 @@ static inline void oriint_imult(oriint_t *RES, oriint_t *a, int64_t b) {
 	  oriint_imm_mul(RES->bitsu64, b, RES->bitsu64);
 }
 
-static inline void oriint_addandshift(oriint_t *RES, oriint_t *a, uint64_t cH) {
+static inline void oriint_addandshift(oriint_t *RES, const oriint_t *a, uint64_t cH) {
     uint64_t c = 0;
-	
-	  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-	  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
-	  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
-	  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
-	  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
-	  RES->bitsu64[4] = c + cH; 
+    uint64_t dummy;
+    // Lakukan penjumlahan (RES + a) tapi langsung buang limb terendah (shift right 64)
+    c = oriint_addcarry_u64(0, RES->bitsu64[0], a->bitsu64[0], &dummy); 
+    c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
+    c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
+    c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
+    c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
+    RES->bitsu64[4] = c + cH; 
 }
 
 static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriint_t *b) {
@@ -250,14 +251,14 @@ static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriin
 		    oriint_set(RES, &p);
 }
 
-static inline void oriint_modmul_montgomerry(oriint_t *RES, oriint_t *a) {
+static inline void oriint_modmul(oriint_t *RES, oriint_t *a) {
     oriint_t p;
 	
 	  oriint_montgomerymult(&p,a,RES);
   	oriint_montgomerymult(RES,&R2,&p);
 }
 
-static inline void oriint_modmul(oriint_t *RES, oriint_t *a) {
+static inline void oriint_modmul_k1(oriint_t *RES, oriint_t *a) {
 	  uint64_t ah, al, c;
 	  uint64_t t[5];
 	  uint64_t r512[8];
