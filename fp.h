@@ -9,27 +9,27 @@
 
 static inline void fp_from_signed(oriint_t *RES, oriint_t *a) {
     if (a->bits64[4] < 0LL) {
-        oriint_add_3(RES, a, &P);
+        oriint_int_add_3(RES, a, &P);
     } else {
         oriint_set(RES, a);
     }
 }
 
 static inline void fp_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
-    oriint_add_3(RES, a, b);
+    oriint_int_add_3(RES, a, b);
 }
 
 static inline void fp_sub(oriint_t *RES, oriint_t *a, oriint_t *b) {
-    oriint_sub_3(RES, a, b);
+    oriint_int_sub_3(RES, a, b);
 }
 
 static inline void fp_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
     oriint_set(RES, a);
-    oriint_modmul(RES, b);
+    oriint_mod_mul(RES, b);
 }
 
 static inline void fp_inv(oriint_t *RES) {
-    oriint_modinv(RES);
+    oriint_mod_inv(RES);
 }
 
 static inline void fp2_add(fp2_t *RES, fp2_t *a, fp2_t *b) {

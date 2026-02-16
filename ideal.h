@@ -32,14 +32,14 @@ static bool solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
 
     // 1. Hitung z = sqrt(-1) mod n
     // Penting: modsqrt di sini harus menggunakan n sebagai modulus, bukan P
-    oriint_sub_3(&tmp, n, &one); 
-    oriint_modsqrt(&z, &tmp, &is_valid); // Pastikan modsqrt mendukung modulus n
+    oriint_int_sub_3(&tmp, n, &one); 
+    oriint_mod_sqrt(&z, &tmp, &is_valid); // Pastikan modsqrt mendukung modulus n
 
     uint64_t valid_mask = -(int64_t)is_valid;
 
     oriint_set(&r_prev, n);
     oriint_set(&r_curr, &z);
-    oriint_isqrt(&target_root, n);
+    oriint_int_isqrt(&target_root, n);
 
     // 2. Optimized constant-time Euclidean loop
     for (int step = 0; step < NBLOCK * 64; step++) {
@@ -52,7 +52,7 @@ static bool solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
         }
 
         // r_next = r_prev mod safe_divisor
-        oriint_mod_integer(&r_next, &r_prev, &safe_divisor);
+        oriint_int_mod(&r_next, &r_prev, &safe_divisor);
 
         // ge_mask: tetap 1 selama r_curr >= target_root
         uint64_t ge_mask = -(int64_t)oriint_is_ge(&r_curr, &target_root);
@@ -70,13 +70,13 @@ static bool solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
     }
 
     // 3. Verifikasi akhir: y^2 = n - r_curr^2
-    oriint_sqr(&tmp, &r_curr);
+    oriint_int_sqr(&tmp, &r_curr);
     
     // Pastikan n >= r_curr^2 sebelum sub (untuk keamanan integer)
     oriint_t diff;
-    oriint_sub_3(&diff, n, &tmp);
+    oriint_int_sub_3(&diff, n, &tmp);
 
-    bool y_valid = oriint_issquare(&diff, y);
+    bool y_valid = oriint_int_issquare(&diff, y);
     uint64_t y_mask = -(int64_t)y_valid;
     
     // Gabungkan dengan valid_mask dari modsqrt awal
@@ -100,25 +100,25 @@ static inline bool solve_cornacchia_nist(oriint_t *n, oriint_t *x, oriint_t *y) 
     if (oriint_is_mod4_3(n)) return false;
     oriint_t nshr1;
     oriint_set(&nshr1, n);
-    oriint_shiftr(1, &nshr1);
+    oriint_int_shiftr(1, &nshr1);
     oriint_t sqrt_n;
-    oriint_isqrt(&sqrt_n, n);
+    oriint_int_isqrt(&sqrt_n, n);
     oriint_t limit;
-    oriint_isqrt(&limit, &nshr1);
+    oriint_int_isqrt(&limit, &nshr1);
     while (oriint_is_ge(&sqrt_n, &limit)) {
         oriint_t sq;
-        oriint_sqr(&sq, &sqrt_n);
+        oriint_int_sqr(&sq, &sqrt_n);
         oriint_t rem;
-        oriint_sub_3(&rem, n, &sq);
+        oriint_int_sub_3(&rem, n, &sq);
         oriint_t r;
-        if (oriint_issquare(&rem, &r)) {
+        if (oriint_int_issquare(&rem, &r)) {
             oriint_set(x, &r);
             oriint_set(y, &sqrt_n);
             return true;
         }
         oriint_t one;
         oriint_set_one(&one);
-        oriint_sub_2(&sqrt_n, &one);
+        oriint_int_sub_2(&sqrt_n, &one);
     }
     return false;
 }
