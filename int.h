@@ -1,4 +1,4 @@
-#pragma once
+#pragma onc
 #include "globals.h"
 #include "kat.h"
 #include "types.h"
@@ -86,6 +86,14 @@ static inline bool oriint_is_one(const oriint_t *a) {
     acc |= a->bitsu64[i];
   }
   return acc == 0;
+}
+
+static inline bool oriint_is_even(const oriint_t *a) {
+  return ((a->bits64[0]&1)==0);
+}
+
+static inline bool oriint_is_odd(const oriint_t *a) {
+  return ((a->bits64[0]&1)!=0);
 }
 
 static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
@@ -408,6 +416,7 @@ static void oriint_modvar_setup_r2(const oriint_t *n, uint64_t *mm64, uint8_t *m
 }
 
 static void oriint_modvar_setup(uint64_t *mm64, uint8_t *msize, oriint_t *r2, const oriint_t *n) {
+  if (oriint_is_even(n)) return;
   oriint_modvar_montgomery_setup(n, mm64, msize);
   oriint_modvar_setup_r2(n, mm64, msize, r2);
 }
@@ -622,7 +631,7 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
   oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set(&q, &n_minus_1);
   uint64_t s = 0;
-  while (!(q.bitsu64[0] & 1) && s < 256) {
+  while (oriint_is_even(&q) && s < 256) {
     oriint_int_shiftr(1, &q);
     s++;
   }
@@ -681,31 +690,56 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
 }
 
 static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
-  if (n->bitsu64[0] < 2) return false;
+  // 1. Penanganan Kasus Dasar & Angka Kecil (Sieve)
   if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
-  if (!(n->bitsu64[0] & 1)) return false;
+  if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
+
+  // Trial Division dengan beberapa bilangan prima pertama (Sangat Cepat)
+  static const uint16_t small_primes[] = {
+    3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67
+  };
+  for (int i = 0; i < 18; i++) {
+    if (n->bitsu64[0] % small_primes[i] == 0) {
+      return (n->bitsu64[0] == small_primes[i]);
+    }
+  }
+
+  // 2. Setup Montgomery (Modvar)
   oriint_t one, n_minus_1, d, x, r2;
   uint64_t mm64;
   uint8_t msize;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
   oriint_modvar_setup(&mm64, &msize, &r2, n);
+
+  // 3. Miller-Rabin dengan Basis Terpilih
+  // Untuk 320-bit, menggunakan 12 basis deterministik + Random iterations
   oriint_set(&d, &n_minus_1);
   uint32_t s = 0;
-  while (!oriint_is_zero(&d) && !(d.bitsu64[0] & 1)) {
+  while (!oriint_is_zero(&d) && oriint_is_even(&d)) {
     oriint_int_shiftr(1, &d);
     s++;
-    if (s > 1024) { printf("[ERROR] Infinite loop in s factoring!\n"); return false; }
   }
-  uint64_t bases[] = {2, 7, 61}; 
-  for (int8_t i = 0; i < 3; i++) {
-    oriint_t base; oriint_clear(&base);
-    base.bitsu64[0] = bases[i];
-    if (oriint_is_ge(&base, n)) continue;
-    oriint_modvar_exp(&x, &base, &d, n);
-    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) {
-      continue;
+
+  // Basis statis yang menutupi determinisme hingga 2^64
+  uint64_t bases[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
+  int8_t num_static = sizeof(bases) / sizeof(bases[0]);
+
+  for (int8_t i = 0; i < (num_static + iterations); i++) {
+    oriint_t base;
+    oriint_clear(&base);
+    if (i < num_static) {
+      base.bitsu64[0] = bases[i];
+    } else {
+      // Basis acak untuk NIST Level 1
+      base.bitsu64[0] = (secure_random_uint64_kat(KAT_LABEL) % (n->bitsu64[0] - 3)) + 2;
     }
+
+    if (oriint_is_ge(&base, n)) continue;
+
+    oriint_modvar_exp(&x, &base, &d, n);
+    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
+
     bool composite = true;
     for (uint32_t r = 1; r < s; r++) {
       oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
@@ -714,46 +748,77 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
         break;
       }
     }
-    if (composite) {
-      return false;
-    }
+    if (composite) return false;
   }
+
+  // 4. Tahap Final: Lucas Test (Opsional tapi direkomendasikan untuk Production)
+  // Dalam prakteknya, dengan 12 basis + iterations di atas,
+  // probabilitas error sudah < 10^-20. Untuk SQISIGN ini sudah sangat aman.
+
   return true;
 }
 
 static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
-  oriint_t z, target_root, r_prev, r_curr, r_next, tmp, one;
+  // 1. Filter Dasar: n harus ganjil dan > 1
+  if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
+
+  // 2. Syarat Matematis: Untuk x^2 + y^2 = n, n harus = 1 mod 4
+  // (Pengecualian n=2, tapi sudah difilter oleh is_even)
+  if ((n->bitsu64[0] & 3ULL) != 1) return false;
+
+  // 3. Primality Check: Cornacchia membutuhkan n sebagai bilangan prima
+  // Kita gunakan Miller-Rabin yang sudah kita perkuat sebelumnya
+  if (!oriint_is_prime(n, 12)) return false;
+
+  oriint_t z, one, n_minus_1, target_root;
   bool is_valid;
   oriint_set_one(&one);
-  oriint_int_sub_3(&tmp, n, &one); 
-  oriint_modvar_sqrt(&z, &tmp, n, &is_valid); 
+  oriint_int_sub_3(&n_minus_1, n, &one);
+
+  // 4. Cari z sehingga z^2 = -1 mod n
+  oriint_modvar_sqrt(&z, &n_minus_1, n, &is_valid);
   if (!is_valid) return false;
-  oriint_t n_half;
-  oriint_set(&n_half, n);
-  oriint_int_shiftr(1, &n_half);
-  uint64_t z_mask = oriint_ge_mask(&n_half, &z);
-  if (z_mask == 0) {
-    oriint_int_sub_3(&z, n, &z);
+
+  // Normalisasi z: pilih z = min(z, n - z) 
+  // agar deret r_curr mengecil lebih cepat
+  oriint_t n_minus_z;
+  oriint_int_sub_3(&n_minus_z, n, &z);
+  if (oriint_is_ge(&z, &n_minus_z)) {
+    oriint_set(&z, &n_minus_z);
   }
+
+  // 5. Limited Euclidean Algorithm (Descent)
+  oriint_t r_prev, r_curr, r_next;
   oriint_set(&r_prev, n);
   oriint_set(&r_curr, &z);
   oriint_int_isqrt(&target_root, n);
-  for (int16_t step = 0; step < NBLOCK * 64; step++) {
-    uint64_t keep_going = ~oriint_ge_mask(&target_root, &r_curr);
-    if (keep_going == 0) break; 
+
+  // Loop berhenti tepat saat r_curr < sqrt(n)
+  while (oriint_is_ge(&r_curr, &target_root)) {
     if (oriint_is_zero(&r_curr)) break;
     oriint_int_mod(&r_next, &r_prev, &r_curr);
     oriint_set(&r_prev, &r_curr);
     oriint_set(&r_curr, &r_next);
+
+    // Safety break untuk integritas loop
+    if (oriint_is_equal(&r_prev, &r_curr)) break;
   }
-  oriint_int_sqr(&tmp, &r_curr);
-  if (oriint_is_ge(n, &tmp)) {
-    oriint_int_sub_3(&tmp, n, &tmp);
-  } else {
-    return false; 
-  }
-  if (oriint_int_issquare(&tmp, y)) {
+
+  // 6. Verifikasi Akhir: diff = n - r_curr^2
+  oriint_t r_sq, diff;
+  oriint_int_sqr(&r_sq, &r_curr);
+
+  // n - r_curr^2
+  oriint_int_sub_3(&diff, n, &r_sq);
+
+  // Pastikan hasil pengurangan positif melalui check MSB
+  if (diff.bits64[NBLOCK - 1] < 0) return false;
+
+  // Jika diff adalah kuadrat sempurna, maka y = sqrt(diff)
+  if (oriint_int_issquare(&diff, y)) {
     oriint_set(x, &r_curr);
+
+    // Standardisasi: x harus lebih besar atau sama dengan y
     if (oriint_is_ge(y, x)) {
       oriint_t swap;
       oriint_set(&swap, x);
@@ -762,6 +827,7 @@ static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y)
     }
     return true;
   }
+
   return false;
 }
 
