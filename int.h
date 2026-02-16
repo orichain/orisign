@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
   uint64_t lo;
@@ -53,32 +52,27 @@ static inline uint64_t oriint_subborrow_u64(uint64_t c, uint64_t a, uint64_t b, 
 }
 
 static inline void oriint_set(oriint_t *a, const oriint_t *b) {
-  a->bitsu64[0] = b->bitsu64[0];
-  a->bitsu64[1] = b->bitsu64[1];
-  a->bitsu64[2] = b->bitsu64[2];
-  a->bitsu64[3] = b->bitsu64[3];
-  a->bitsu64[4] = b->bitsu64[4];
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    a->bitsu64[i] = b->bitsu64[i];
+  }
 }
 
 static inline void oriint_set_one(oriint_t *a) {
   a->bitsu64[0] = 1ULL;
-  a->bitsu64[1] = 0ULL;
-  a->bitsu64[2] = 0ULL;
-  a->bitsu64[3] = 0ULL;
-  a->bitsu64[4] = 0ULL;
+  for (int8_t i = 1; i < NBLOCK; i++) {
+    a->bitsu64[i] = 0ULL;
+  }
 }
 
 static inline void oriint_clear(oriint_t *a) {
-  a->bitsu64[0] = 0ULL;
-  a->bitsu64[1] = 0ULL;
-  a->bitsu64[2] = 0ULL;
-  a->bitsu64[3] = 0ULL;
-  a->bitsu64[4] = 0ULL;
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    a->bitsu64[i] = 0ULL;
+  }
 }
 
 static inline bool oriint_is_zero(const oriint_t *a) {
   uint64_t acc = 0;
-  for (size_t i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     acc |= a->bitsu64[i];
   }
   return acc == 0;
@@ -86,7 +80,7 @@ static inline bool oriint_is_zero(const oriint_t *a) {
 
 static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
   uint64_t acc = 0;
-  for (size_t i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     acc |= a->bitsu64[i] ^ b->bitsu64[i];
   }
   return acc == 0;
@@ -99,23 +93,22 @@ static inline uint64_t oriint_is_mod4_3(const oriint_t *n) {
 
 static inline void oriint_select_flag(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t flag) {
   uint64_t mask = -(uint64_t)(flag != 0);
-  for (int i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
   }
 }
 
 static inline void oriint_select_mask(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t mask) {
-  for (int i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
   }
 }
 
 static inline void oriint_int_shiftr(uint32_t n, oriint_t *d) {
-  d->bitsu64[0] = oriint_shiftright128(d->bitsu64[0], d->bitsu64[1], n);
-  d->bitsu64[1] = oriint_shiftright128(d->bitsu64[1], d->bitsu64[2], n);
-  d->bitsu64[2] = oriint_shiftright128(d->bitsu64[2], d->bitsu64[3], n);
-  d->bitsu64[3] = oriint_shiftright128(d->bitsu64[3], d->bitsu64[4], n);
-  d->bitsu64[4] = (uint64_t)((int64_t)d->bits64[4] >> n);
+  for (int8_t i = 0; i < NBLOCK - 1; i++) {
+    d->bitsu64[i] = oriint_shiftright128(d->bitsu64[i], d->bitsu64[i+1], n);
+  }
+  d->bitsu64[NBLOCK-1] = (uint64_t)(d->bits64[NBLOCK-1] >> n);
 }
 
 static inline void oriint_int_shiftl(uint32_t n, oriint_t *d) {
@@ -123,92 +116,70 @@ static inline void oriint_int_shiftl(uint32_t n, oriint_t *d) {
   if (n >= 64) {
     uint32_t blocks = n / 64;
     uint32_t bits = n % 64;
-    for (int i = 4; i >= 0; i--) {
-      d->bitsu64[i] = (i >= (int)blocks) ? d->bitsu64[i - blocks] : 0;
+    for (int8_t i = NBLOCK - 1; i >= 0; i--) {
+      d->bitsu64[i] = (i >= (int8_t)blocks) ? d->bitsu64[i - (int8_t)blocks] : 0;
     }
     if (bits == 0) return;
     n = bits;
   }
-  d->bitsu64[4] = oriint_shiftleft128(d->bitsu64[3], d->bitsu64[4], n);
-  d->bitsu64[3] = oriint_shiftleft128(d->bitsu64[2], d->bitsu64[3], n);
-  d->bitsu64[2] = oriint_shiftleft128(d->bitsu64[1], d->bitsu64[2], n);
-  d->bitsu64[1] = oriint_shiftleft128(d->bitsu64[0], d->bitsu64[1], n);
-  d->bitsu64[0] <<= n;
-}
-
-static inline void oriint_int_shiftl_old(uint32_t n, oriint_t *d) {
-  d->bitsu64[4] = oriint_shiftleft128(d->bitsu64[3], d->bitsu64[4], n);
-  d->bitsu64[3] = oriint_shiftleft128(d->bitsu64[2], d->bitsu64[3], n);
-  d->bitsu64[2] = oriint_shiftleft128(d->bitsu64[1], d->bitsu64[2], n);
-  d->bitsu64[1] = oriint_shiftleft128(d->bitsu64[0], d->bitsu64[1], n);
+  for (int8_t i = NBLOCK - 1; i >= 1; i--) {
+    d->bitsu64[i] = oriint_shiftleft128(d->bitsu64[i-1], d->bitsu64[i], n);
+  }
   d->bitsu64[0] <<= n;
 }
 
 static inline void oriint_imm_umul(const uint64_t *x, uint64_t y, uint64_t *dst) {
   uint64_t c = 0, h, carry;
   dst[0] = oriint_umul128(x[0], y, &h); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[1], y, &h), carry, dst + 1); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[2], y, &h), carry, dst + 2); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[3], y, &h), carry, dst + 3); carry = h;
+  for (int8_t i = 1; i < NBLOCK - 1; i++) {
+    c = oriint_addcarry_u64(c, oriint_umul128(x[i], y, &h), carry, dst + i); carry = h;
+  }
   oriint_addcarry_u64(c, 0ULL, carry, dst + (NBLOCK - 1));
 }
 
 static inline void oriint_imm_mul(const uint64_t *x, uint64_t y, uint64_t *dst) {
   uint64_t c = 0, h, carry;
   dst[0] = oriint_umul128(x[0], y, &h); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[1], y, &h), carry, dst + 1); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[2], y, &h), carry, dst + 2); carry = h;
-  c = oriint_addcarry_u64(c, oriint_umul128(x[3], y, &h), carry, dst + 3); carry = h;
-  oriint_addcarry_u64(c, oriint_umul128(x[4], y, &h), carry, dst + 4);
+  for (int8_t i = 1; i < NBLOCK - 1; i++) {
+    c = oriint_addcarry_u64(c, oriint_umul128(x[i], y, &h), carry, dst + i); carry = h;
+  }
+  oriint_addcarry_u64(c, oriint_umul128(x[NBLOCK-1], y, &h), carry, dst + (NBLOCK - 1));
 }
 
 static inline void oriint_int_add_1(oriint_t *RES, const oriint_t *a) {
   uint64_t c = 0;
-
-  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  }
 }
 
 static inline void oriint_int_add_3(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
   uint64_t c = 0;
-
-  c = oriint_addcarry_u64(c, a->bitsu64[0], b->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_addcarry_u64(c, a->bitsu64[1], b->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_addcarry_u64(c, a->bitsu64[2], b->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_addcarry_u64(c, a->bitsu64[3], b->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_addcarry_u64(c, a->bitsu64[4], b->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_addcarry_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
+  }
 }
 
 static inline uint64_t oriint_int_add_c(oriint_t *RES, const oriint_t *a) {
   uint64_t c = 0;
-  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  }
   return c;
 }
 
 static inline void oriint_int_sub_2(oriint_t *RES, const oriint_t *a) {
   uint64_t c = 0;
-
-  c = oriint_subborrow_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_subborrow_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_subborrow_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_subborrow_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_subborrow_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_subborrow_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  }
 }
 
 static inline void oriint_int_sub_3(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
   uint64_t c = 0;
-  c = oriint_subborrow_u64(c, a->bitsu64[0], b->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_subborrow_u64(c, a->bitsu64[1], b->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_subborrow_u64(c, a->bitsu64[2], b->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_subborrow_u64(c, a->bitsu64[3], b->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_subborrow_u64(c, a->bitsu64[4], b->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_subborrow_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
+  }
 }
 
 static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
@@ -219,12 +190,9 @@ static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
 
 static inline void oriint_int_neg(oriint_t *RES) {
   uint64_t c = 0;
-
-  c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[1], &RES->bitsu64[1]);
-  c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[2], &RES->bitsu64[2]);
-  c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[3], &RES->bitsu64[3]);
-  c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[4], &RES->bitsu64[4]);
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[i], &RES->bitsu64[i]);
+  }
 }
 
 static inline void oriint_int_mult(oriint_t *RES, const oriint_t *a, uint64_t b) {
@@ -233,7 +201,6 @@ static inline void oriint_int_mult(oriint_t *RES, const oriint_t *a, uint64_t b)
 
 static inline void oriint_int_imult(oriint_t *RES, oriint_t *a, int64_t b) {
   oriint_set(RES, a);
-
   if (b < 0LL) {
     oriint_int_neg(RES);
     b = -b;
@@ -243,13 +210,11 @@ static inline void oriint_int_imult(oriint_t *RES, oriint_t *a, int64_t b) {
 
 static inline void oriint_int_addandshift(oriint_t *RES, const oriint_t *a, uint64_t cH) {
   uint64_t c = 0;
-
   c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[1], a->bitsu64[1], &RES->bitsu64[0]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[2], a->bitsu64[2], &RES->bitsu64[1]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[3], a->bitsu64[3], &RES->bitsu64[2]);
-  c = oriint_addcarry_u64(c, RES->bitsu64[4], a->bitsu64[4], &RES->bitsu64[3]);
-  RES->bitsu64[4] = c + cH;  
+  for (int8_t i = 1; i < NBLOCK; i++) {
+    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i-1]);
+  }
+  RES->bitsu64[NBLOCK-1] = c + cH;  
 }
 
 static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriint_t *b) {
@@ -262,11 +227,10 @@ static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriin
   ML = pr.bitsu64[0] * MM64;
   oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
   c = oriint_int_add_c(&pr, &p);
-  RES->bitsu64[0] = pr.bitsu64[1];
-  RES->bitsu64[1] = pr.bitsu64[2];
-  RES->bitsu64[2] = pr.bitsu64[3];
-  RES->bitsu64[3] = pr.bitsu64[4];
-  RES->bitsu64[4] = c;
+  for (int8_t i = 0; i < NBLOCK - 1; i++) {
+    RES->bitsu64[i] = pr.bitsu64[i+1];
+  }
+  RES->bitsu64[NBLOCK-1] = c;
   for (int i = 1; i < Msize; i++) {
     oriint_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
     ML = (pr.bitsu64[0] + RES->bitsu64[0]) * MM64;
@@ -284,54 +248,6 @@ static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a) {
 
   oriint_montgomerymult(&p,a,RES);
   oriint_montgomerymult(RES,&R2,&p);
-}
-
-static inline void oriint_mod_mul_k1(oriint_t *RES, oriint_t *a) {
-  uint64_t ah, al, c;
-  uint64_t t[5];
-  uint64_t r512[8];
-  r512[5] = 0;
-  r512[6] = 0;
-  r512[7] = 0;
-
-  oriint_imm_umul(RES->bitsu64, a->bitsu64[0], r512);
-  oriint_imm_umul(RES->bitsu64, a->bitsu64[1], t);
-  c = oriint_addcarry_u64(0, r512[1], t[0], r512 + 1);
-  c = oriint_addcarry_u64(c, r512[2], t[1], r512 + 2);
-  c = oriint_addcarry_u64(c, r512[3], t[2], r512 + 3);
-  c = oriint_addcarry_u64(c, r512[4], t[3], r512 + 4);
-  c = oriint_addcarry_u64(c, r512[5], t[4], r512 + 5);
-  oriint_imm_umul(RES->bitsu64, a->bitsu64[2], t);
-  c = oriint_addcarry_u64(0, r512[2], t[0], r512 + 2);
-  c = oriint_addcarry_u64(c, r512[3], t[1], r512 + 3);
-  c = oriint_addcarry_u64(c, r512[4], t[2], r512 + 4);
-  c = oriint_addcarry_u64(c, r512[5], t[3], r512 + 5);
-  c = oriint_addcarry_u64(c, r512[6], t[4], r512 + 6);
-  oriint_imm_umul(RES->bitsu64, a->bitsu64[3], t);
-  c = oriint_addcarry_u64(0, r512[3], t[0], r512 + 3);
-  c = oriint_addcarry_u64(c, r512[4], t[1], r512 + 4);
-  c = oriint_addcarry_u64(c, r512[5], t[2], r512 + 5);
-  c = oriint_addcarry_u64(c, r512[6], t[3], r512 + 6);
-  c = oriint_addcarry_u64(c, r512[7], t[4], r512 + 7);
-
-  // Reduce from 512 to 320 
-  oriint_imm_umul(r512 + 4, 0x1000003D1ULL, t);
-  c = oriint_addcarry_u64(0, r512[0], t[0], r512 + 0);
-  c = oriint_addcarry_u64(c, r512[1], t[1], r512 + 1);
-  c = oriint_addcarry_u64(c, r512[2], t[2], r512 + 2);
-  c = oriint_addcarry_u64(c, r512[3], t[3], r512 + 3);
-
-  // Reduce from 320 to 256 
-  // No overflow possible here t[4]+c<=0x1000003D1ULL
-  al = oriint_umul128(t[4] + c, 0x1000003D1ULL, &ah); 
-  c = oriint_addcarry_u64(0, r512[0], al, RES->bitsu64 + 0);
-  c = oriint_addcarry_u64(c, r512[1], ah, RES->bitsu64 + 1);
-  c = oriint_addcarry_u64(c, r512[2], 0ULL, RES->bitsu64 + 2);
-  c = oriint_addcarry_u64(c, r512[3], 0ULL, RES->bitsu64 + 3);
-
-  // Probability of carry here or that this>P is very very unlikely
-  RES->bitsu64[4] = 0ULL; 
-
 }
 
 static inline void oriint_mod_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b) {
@@ -1003,10 +919,6 @@ static inline void oriint_tests() {
   oriint_set(&res, &a);
   oriint_mod_mul(&res, &b);
   oriint_print("modmul 2*3 mod P     : ", &res);
-
-  oriint_set(&res, &a);
-  oriint_mod_mul_k1(&res, &b);
-  oriint_print("k1 modmul 2*3 mod P  : ", &res);
 
   oriint_mod_add(&res, &one, &one);
   oriint_print("modadd 1+1 mod P     : ", &res);
