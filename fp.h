@@ -23,12 +23,11 @@ static inline void fp_sub(oriint_t *RES, oriint_t *a, oriint_t *b) {
 }
 
 static inline void fp_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
-    oriint_set(RES, a);
-    oriint_mod_mul(RES, b);
+    oriint_mod_mul(RES, a, b);
 }
 
 static inline void fp_inv(oriint_t *RES) {
-    oriint_mod_inv(RES);
+    oriint_modvar_inv(RES, &P, &MM64, &Msize);
 }
 
 static inline void fp2_add(fp2_t *RES, fp2_t *a, fp2_t *b) {

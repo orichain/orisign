@@ -71,13 +71,6 @@ static inline void oriint_clear(oriint_t *a) {
   }
 }
 
-static inline void oriint_2x_clear(oriint2x_t *a) {
-  for (int8_t i = 0; i < 2 * NBLOCK; i++) {
-    a->bitsu64[i] = 0ULL;
-  }
-}
-
-
 static inline bool oriint_is_zero(const oriint_t *a) {
   uint64_t acc = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
@@ -155,41 +148,6 @@ static inline void oriint_imm_mul(const uint64_t *x, uint64_t y, uint64_t *dst) 
     c = oriint_addcarry_u64(c, oriint_umul128(x[i], y, &h), carry, dst + i); carry = h;
   }
   oriint_addcarry_u64(c, oriint_umul128(x[NBLOCK-1], y, &h), carry, dst + (NBLOCK - 1));
-}
-
-static void oriint_2x_mul(oriint2x_t *RES, const oriint_t *a, const oriint_t *b) {
-  uint64_t r0 = 0, r1 = 0, r2 = 0;
-  uint64_t hi, lo;
-  oriint_2x_clear(RES);
-  for (int8_t k = 0; k < (2 * NBLOCK - 1); k++) {
-    for (int8_t i = 0; i < NBLOCK; i++) {
-      int8_t j = k - i;
-      if (j >= 0 && j < NBLOCK) {
-        lo = oriint_umul128(a->bitsu64[i], b->bitsu64[j], &hi);
-        uint64_t c = 0;
-        c = oriint_addcarry_u64(0, r0, lo, &r0);
-        c = oriint_addcarry_u64(c, r1, hi, &r1);
-        oriint_addcarry_u64(c, r2, 0, &r2);
-      }
-    }
-    RES->bitsu64[k] = r0;
-    r0 = r1;
-    r1 = r2;
-    r2 = 0;
-  }
-  RES->bitsu64[2 * NBLOCK - 1] = r0;
-}
-
-static inline void oriint_2x_low(oriint_t *dst, const oriint2x_t *src) {
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    dst->bitsu64[i] = src->bitsu64[i];
-  }
-}
-
-static inline void oriint_2x_high(oriint_t *dst, const oriint2x_t *src) {
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    dst->bitsu64[i] = src->bitsu64[i + NBLOCK];
-  }
 }
 
 static inline void oriint_int_add_1(oriint_t *RES, const oriint_t *a) {
@@ -279,35 +237,40 @@ static inline void oriint_int_addandshift(oriint_t *RES, const oriint_t *a, uint
   RES->bitsu64[NBLOCK-1] = c + cH;  
 }
 
-static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriint_t *b) {
+static inline void oriint_montgomery_mul(oriint_t *RES, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *a, const oriint_t *b) {
   oriint_t pr;
   oriint_t p;
   uint64_t ML;
   uint64_t c;
 
   oriint_imm_umul(a->bitsu64, b->bitsu64[0], pr.bitsu64);
-  ML = pr.bitsu64[0] * MM64;
-  oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
+  ML = pr.bitsu64[0] * (*mm64);
+  oriint_imm_umul(n->bitsu64, ML, p.bitsu64);
   c = oriint_int_add_c(&pr, &p);
   for (int8_t i = 0; i < NBLOCK - 1; i++) {
     RES->bitsu64[i] = pr.bitsu64[i+1];
   }
   RES->bitsu64[NBLOCK-1] = c;
-  for (int8_t i = 1; i < Msize; i++) {
+  for (int8_t i = 1; i < (*msize); i++) {
     oriint_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
-    ML = (pr.bitsu64[0] + RES->bitsu64[0]) * MM64;
-    oriint_imm_umul(P.bitsu64, ML, p.bitsu64);
+    ML = (pr.bitsu64[0] + RES->bitsu64[0]) * (*mm64);
+    oriint_imm_umul(n->bitsu64, ML, p.bitsu64);
     c = oriint_int_add_c(&pr, &p);
     oriint_int_addandshift(RES, &pr, c);
   }
-  oriint_select_ge(RES, RES, &P);
+  oriint_select_ge(RES, RES, n);
 }
 
-static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a) {
+static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
   oriint_t p;
+  oriint_montgomery_mul(&p,&P,&MM64,&Msize,a,b);
+  oriint_montgomery_mul(RES,&P,&MM64,&Msize,&R2,&p);
+}
 
-  oriint_montgomerymult(&p,a,RES);
-  oriint_montgomerymult(RES,&R2,&p);
+static inline void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
+  oriint_t p;
+  oriint_montgomery_mul(&p,n,mm64,msize,a,b);
+  oriint_montgomery_mul(RES,n,mm64,msize,r2,&p);
 }
 
 static inline void oriint_mod_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b) {
@@ -327,16 +290,7 @@ static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
   oriint_select_ge(RES, RES, &P);
 }
 
-static inline void oriint_modvar_add(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n) {
-  oriint_int_add_3(RES, a, b);
-  oriint_select_ge(RES, RES, n);
-}
-
-static inline void oriint_mod_inv(oriint_t *RES) {
-  oriint_t u;
-  oriint_t v;
-  oriint_t r;
-  oriint_t s;
+static inline void oriint_modvar_inv(oriint_t *RES, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize) {
 
 #define SWAP_ADD(x,y) x+=y;y-=x;
 #define SWAP_SUB(x,y) x-=y;y+=x;
@@ -344,6 +298,10 @@ static inline void oriint_mod_inv(oriint_t *RES) {
 #define IS_NEGATIVE(x) (x.bits64[NBLOCK-1] < 0LL)
 #define IS_POSITIVE(x) (x.bits64[NBLOCK-1] >= 0LL)
 
+  oriint_t u;
+  oriint_t v;
+  oriint_t r;
+  oriint_t s;
   oriint_t r0_P;
   oriint_t s0_P;
   oriint_t uu_u;
@@ -359,7 +317,7 @@ static inline void oriint_mod_inv(oriint_t *RES) {
   int64_t v0, u0;
   int64_t nb0;
 
-  oriint_set(&u,&P);
+  oriint_set(&u,n);
   oriint_set(&v,RES);
   oriint_clear(&r);
   oriint_set_one(&s);
@@ -397,10 +355,10 @@ static inline void oriint_mod_inv(oriint_t *RES) {
     oriint_int_imult(&uv_s,&s,uv);
     oriint_int_imult(&vu_r,&r,vu);
     oriint_int_imult(&vv_s,&s,vv);
-    uint64_t r0 = ((uu_r.bitsu64[0] + uv_s.bitsu64[0]) * MM64) & MSK62;
-    uint64_t s0 = ((vu_r.bitsu64[0] + vv_s.bitsu64[0]) * MM64) & MSK62;
-    oriint_int_mult(&r0_P,&P,r0);
-    oriint_int_mult(&s0_P,&P,s0);
+    uint64_t r0 = ((uu_r.bitsu64[0] + uv_s.bitsu64[0]) * (*mm64)) & MSK62;
+    uint64_t s0 = ((vu_r.bitsu64[0] + vv_s.bitsu64[0]) * (*mm64)) & MSK62;
+    oriint_int_mult(&r0_P,n,r0);
+    oriint_int_mult(&s0_P,n,s0);
     oriint_int_add_3(&u,&uu_u,&uv_v);
     oriint_int_add_3(&v,&vu_u,&vv_v);
     oriint_int_add_3(&r,&uu_r,&uv_s);
@@ -415,16 +373,43 @@ static inline void oriint_mod_inv(oriint_t *RES) {
   if (IS_NEGATIVE(v)) {
     oriint_int_neg(&v);
     oriint_int_neg(&s);
-    oriint_int_add_1(&s,&P);
+    oriint_int_add_1(&s,n);
   }
   if (!oriint_is_one(&v)) {
     oriint_clear(RES);
     return;
   }
   if (IS_NEGATIVE(s))
-    oriint_int_add_1(&s,&P);
-  oriint_select_ge(&s, &s, &P);
+    oriint_int_add_1(&s,n);
+  oriint_select_ge(&s, &s, n);
   oriint_set(RES, &s);
+}
+
+static void oriint_modvar_montgomery_setup(const oriint_t *n, uint64_t *mm64, uint8_t *msize) {
+  int8_t i=(2*NBLOCK)-1;
+  while(i>0 && n->bitsu32[i]==0) i--;
+  *msize = (i+1)/2;
+  int64_t x, t;
+  x = t = n->bits64[0];
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  *mm64 = (uint64_t)(-x);
+}
+
+static void oriint_modvar_setup_r2(const oriint_t *n, uint64_t *mm64, uint8_t *msize, oriint_t *r2) {
+  oriint_t one, r;
+  oriint_set_one(&one);
+  oriint_montgomery_mul(&r, n, mm64, msize, &one, &one);
+  oriint_montgomery_mul(r2, n, mm64, msize, &r, &one);
+  oriint_modvar_inv(r2, n, mm64, msize);
+}
+
+static void oriint_modvar_setup(uint64_t *mm64, uint8_t *msize, oriint_t *r2, const oriint_t *n) {
+  oriint_modvar_montgomery_setup(n, mm64, msize);
+  oriint_modvar_setup_r2(n, mm64, msize, r2);
 }
 
 static void oriint_compute_sqrt_exp(oriint_t *e) {
@@ -548,113 +533,6 @@ static void oriint_int_mod(oriint_t *R, const oriint_t *A, const oriint_t *B) {
   oriint_set(R, &remainder);
 }
 
-static void oriint_barrett_setup(oriint_t *mu, const oriint_t *n) {
-  oriint_clear(mu);
-  if (oriint_is_zero(n)) return;
-  int16_t top_bit = 0;
-  bool found = false;
-  for (int8_t i = NBLOCK - 1; i >= 0; i--) {
-    if (n->bitsu64[i] != 0 && !found) {
-      top_bit = (i * 64) + 63;
-      uint64_t tmp = n->bitsu64[i];
-      while (!(tmp & 0x8000000000000000ULL)) { tmp <<= 1; top_bit--; }
-      found = true;
-    }
-  }
-  int16_t k = top_bit + 1;
-  oriint_t rem;
-  oriint_clear(&rem);
-  rem.bitsu64[0] = 1; 
-  for (int16_t i = 2 * k; i >= 0; i--) {
-    uint64_t carry = 0;
-    for (int8_t j = 0; j < NBLOCK; j++) {
-      uint64_t next_c = (rem.bitsu64[j] >> 63);
-      rem.bitsu64[j] = (rem.bitsu64[j] << 1) | carry;
-      carry = next_c;
-    }
-    uint64_t ge_mask = oriint_ge_mask(&rem, n);
-    uint64_t final_mask = -(uint64_t)(carry != 0) | ge_mask;
-    oriint_t diff;
-    oriint_int_sub_3(&diff, &rem, n);
-    oriint_select_mask(&rem, &rem, &diff, final_mask);
-    if (i <= k) {
-      mu->bitsu64[i >> 6] |= ((1ULL << (i & 63)) & final_mask);
-    }
-  }
-}
-
-static void oriint_modvar_barrett(oriint_t *RES, const oriint2x_t *X, const oriint_t *n, const oriint_t *mu) {
-  oriint_t x_high;
-  for(int8_t i = 0; i < NBLOCK; i++) x_high.bitsu64[i] = X->bitsu64[i + NBLOCK];
-  oriint2x_t q1_full;
-  oriint_2x_mul(&q1_full, &x_high, mu);
-  oriint_t q2;
-  oriint_2x_high(&q2, &q1_full);
-  oriint2x_t r_sub_full;
-  oriint_2x_mul(&r_sub_full, &q2, n);
-  uint64_t borrow = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    borrow = oriint_subborrow_u64(borrow, X->bitsu64[i], r_sub_full.bitsu64[i], &RES->bitsu64[i]);
-  }
-  oriint_select_ge(RES, RES, n);
-}
-
-static void oriint2x_mod_div(oriint_t *Q, oriint_t *R, const oriint2x_t *dividend, const oriint_t *divisor) {
-  oriint_t q, r;
-  oriint_clear(&q);
-  oriint_clear(&r);
-  if (oriint_is_zero(divisor)) return;
-  for (int16_t i = (2 * NBLOCK * 64) - 1; i >= 0; i--) {
-    uint64_t carry_r = (r.bitsu64[NBLOCK - 1] >> 63);
-    for (int8_t j = NBLOCK - 1; j > 0; j--) {
-      r.bitsu64[j] = (r.bitsu64[j] << 1) | (r.bitsu64[j - 1] >> 63);
-    }
-    r.bitsu64[0] <<= 1;
-    uint64_t bit = (dividend->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
-    r.bitsu64[0] |= bit;
-    uint64_t ge_mask = oriint_ge_mask(&r, divisor);
-    uint64_t final_mask = -(uint64_t)(carry_r != 0) | ge_mask;
-    if (i < (NBLOCK * 64)) {
-      q.bitsu64[i >> 6] |= ((1ULL << (i & 63)) & final_mask);
-    }
-    oriint_t diff;
-    oriint_int_sub_3(&diff, &r, divisor);
-    oriint_select_mask(&r, &r, &diff, final_mask);
-  }
-  if (Q) oriint_set(Q, &q);
-  if (R) oriint_set(R, &r);
-}
-
-static void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const oriint_t *mu) {
-  oriint2x_t full;
-  oriint_2x_mul(&full, a, b);
-  if (full.bitsu64[NBLOCK] == 0) {
-    oriint_t low;
-    oriint_2x_low(&low, &full);
-    oriint_int_mod(RES, &low, n);
-    return;
-  }
-  oriint_t x_high;
-  oriint_2x_high(&x_high, &full);
-  oriint2x_t q1_mu;
-  oriint_2x_mul(&q1_mu, &x_high, mu);
-  oriint_t q2;
-  oriint_2x_high(&q2, &q1_mu);
-  oriint2x_t q2_n;
-  oriint_2x_mul(&q2_n, &q2, n);
-  uint64_t borrow = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    borrow = oriint_subborrow_u64(borrow, full.bitsu64[i], q2_n.bitsu64[i], &RES->bitsu64[i]);
-  }
-  for(int8_t k = 0; k < 3; k++) {
-    uint64_t mask = oriint_ge_mask(RES, n);
-    oriint_t diff;
-    oriint_int_sub_3(&diff, RES, n);
-    oriint_select_mask(RES, RES, &diff, mask);
-    if (mask == 0) break;
-  }
-}
-
 static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
   oriint_t result;
   oriint_t base;
@@ -662,64 +540,59 @@ static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp
   oriint_set(&base, a);
   oriint_set_one(&result);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_set(&tmp, &result);
-    oriint_mod_mul(&tmp, &result);
+    oriint_mod_mul(&tmp, &result, &result);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
     oriint_t mulres;
-    oriint_set(&mulres, &tmp);
-    oriint_mod_mul(&mulres, &base);
+    oriint_mod_mul(&mulres, &tmp, &base);
     oriint_select_mask(&result, &tmp, &mulres, mask);
   }
   oriint_set(RES, &result);
 }
 
-static void oriint_modvar_sqr(oriint_t *RES, const oriint_t *a, const oriint_t *n, const oriint_t *mu) {
-  oriint_modvar_mul(RES, a, a, n, mu);
+static void oriint_modvar_sqr(oriint_t *RES, const oriint_t *a, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
+  oriint_modvar_mul(RES, a, a, n, mm64, msize, r2);
 }
 
 static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n) {
   oriint_t result;
   oriint_t base;
-  oriint_t mu;
-
-  oriint_barrett_setup(&mu, n);
+  oriint_t r2;
+  uint64_t mm64;
+  uint8_t msize;
+  oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set_one(&result);
   oriint_int_mod(&base, a, n);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_modvar_sqr(&result, &result, n, &mu);
+    oriint_modvar_sqr(&result, &result, n, &mm64, &msize, &r2);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
     oriint_t mul_res;
-    oriint_modvar_mul(&mul_res, &result, &base, n, &mu);
+    oriint_modvar_mul(&mul_res, &result, &base, n, &mm64, &msize, &r2);
     oriint_select_mask(&result, &result, &mul_res, mask);
   }
-
   oriint_set(RES, &result);
 }
 
 static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
-  oriint_t exp, res, tmp, base;
+  oriint_t exp, res, base;
   oriint_set_one(&res);
   oriint_set(&base, a);
 
   oriint_compute_sqrt_exp(&exp);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_set(&tmp, &res);
-    oriint_mod_mul(&res, &tmp); 
+    oriint_mod_mul(&res, &res, &res); 
     uint64_t word = i >> 6;
     uint64_t bit  = (exp.bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
     oriint_t mulres;
-    oriint_set(&mulres, &res);
-    oriint_mod_mul(&mulres, &base);
+    oriint_mod_mul(&mulres, &res, &base);
     oriint_select_mask(&res, &res, &mulres, mask);
   }
   oriint_t check;
-  oriint_set(&check, &res);
-  oriint_mod_mul(&check, &res);
+  oriint_mod_mul(&check, &res, &res);
   uint64_t neq_accumulator = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
     neq_accumulator |= (check.bitsu64[i] ^ a->bitsu64[i]);
@@ -735,7 +608,9 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
 }
 
 static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, bool *is_valid) {
-  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b, mu;
+  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b, r2;
+  uint64_t mm64;
+  uint8_t msize;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
 
@@ -744,7 +619,7 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     if (is_valid) *is_valid = true;
     return;
   }
-  oriint_barrett_setup(&mu, n);
+  oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set(&q, &n_minus_1);
   uint64_t s = 0;
   while (!(q.bitsu64[0] & 1) && s < 256) {
@@ -757,7 +632,7 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     oriint_int_add_1(&exp, &one);
     oriint_int_shiftr(2, &exp);
     oriint_modvar_exp(RES, a, &exp, n);
-    oriint_modvar_sqr(&check_z, RES, n, &mu);
+    oriint_modvar_sqr(&check_z, RES, n, &mm64, &msize, &r2);
     if (is_valid) *is_valid = oriint_is_equal(&check_z, a);
     return;
   }
@@ -785,7 +660,7 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     uint64_t i = 0;
     oriint_t tt; oriint_set(&tt, &t);
     for (i = 1; i < M.bitsu64[0]; i++) {
-      oriint_modvar_sqr(&tt, &tt, n, &mu);
+      oriint_modvar_sqr(&tt, &tt, n, &mm64, &msize, &r2);
       if (oriint_is_equal(&tt, &one)) break;
     }
     if (i == M.bitsu64[0]) {
@@ -796,12 +671,12 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     uint64_t power = M.bitsu64[0] - i - 1;
     oriint_set(&b, &c);
     for (uint64_t j = 0; j < power; j++) {
-      oriint_modvar_sqr(&b, &b, n, &mu);
+      oriint_modvar_sqr(&b, &b, n, &mm64, &msize, &r2);
     }
     M.bitsu64[0] = i;
-    oriint_modvar_sqr(&c, &b, n, &mu);
-    oriint_modvar_mul(&t, &t, &c, n, &mu);
-    oriint_modvar_mul(&R, &R, &b, n, &mu);
+    oriint_modvar_sqr(&c, &b, n, &mm64, &msize, &r2);
+    oriint_modvar_mul(&t, &t, &c, n, &mm64, &msize, &r2);
+    oriint_modvar_mul(&R, &R, &b, n, &mm64, &msize, &r2);
   }
 }
 
@@ -809,11 +684,12 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
   if (n->bitsu64[0] < 2) return false;
   if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
   if (!(n->bitsu64[0] & 1)) return false;
-
-  oriint_t one, n_minus_1, d, x, mu;
+  oriint_t one, n_minus_1, d, x, r2;
+  uint64_t mm64;
+  uint8_t msize;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
-  oriint_barrett_setup(&mu, n);
+  oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set(&d, &n_minus_1);
   uint32_t s = 0;
   while (!oriint_is_zero(&d) && !(d.bitsu64[0] & 1)) {
@@ -821,7 +697,6 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
     s++;
     if (s > 1024) { printf("[ERROR] Infinite loop in s factoring!\n"); return false; }
   }
-
   uint64_t bases[] = {2, 7, 61}; 
   for (int8_t i = 0; i < 3; i++) {
     oriint_t base; oriint_clear(&base);
@@ -833,7 +708,7 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
     }
     bool composite = true;
     for (uint32_t r = 1; r < s; r++) {
-      oriint_modvar_sqr(&x, &x, n, &mu);
+      oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
       if (oriint_is_equal(&x, &n_minus_1)) {
         composite = false;
         break;
@@ -914,36 +789,26 @@ static inline int8_t oriint_getsize() {
 static void oriint_setup_mm64_msize() {
   uint64_t _mm64;
   int8_t _msize;
-
   int8_t nSize = oriint_getsize();
-  // Last digit inversions (Newton's iteration)
-  {
-    int64_t x, t;
-    x = t = P.bits64[0];
-    x = x * (2 - t * x);
-    x = x * (2 - t * x);
-    x = x * (2 - t * x);
-    x = x * (2 - t * x);
-    x = x * (2 - t * x);
-    _mm64 = (uint64_t)(-x);
-  }
-  // Size of Montgomery mult (64bits digit)
+  int64_t x, t;
+  x = t = P.bits64[0];
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  x = x * (2 - t * x);
+  _mm64 = (uint64_t)(-x);
   _msize = nSize/2;
-
-  // Menampilkan MM64 dan MSize
   printf("DEBUG - MM64  : %016llx\n", _mm64);
   printf("DEBUG - MSize : %d\n", _msize);
 }
 
 static inline void oriint_setup_r2() {
   oriint_t one, r, _r2;
-
   oriint_set_one(&one);
-  oriint_montgomerymult(&r, &one, &one);
-  oriint_montgomerymult(&_r2, &r, &one);
-  oriint_mod_inv(&_r2);
-
-  // Print R2 in hex
+  oriint_montgomery_mul(&r, &P, &MM64, &Msize, &one, &one);
+  oriint_montgomery_mul(&_r2, &P, &MM64, &Msize, &r, &one);
+  oriint_modvar_inv(&_r2, &P, &MM64, &Msize);
   printf("DEBUG - R2    : ");
   for (int8_t i = 0; i < NBLOCK; i++)
     printf("%016llx ", _r2.bitsu64[i]);
@@ -955,7 +820,9 @@ static inline void oriint_tests() {
   oriint_setup_r2();
 
   oriint_t a, b, res, check, one, exp, q, r, dividend, divisor;
-  oriint_t n_mod, mu, x_c, y_c, n_prime;
+  oriint_t n_mod, r2, x_c, y_c, n_prime;
+  uint64_t mm64;
+  uint8_t msize;
   bool ok;
   oriint_set_one(&one);
 
@@ -968,8 +835,7 @@ static inline void oriint_tests() {
   oriint_clear(&a); a.bitsu64[0] = 2;
   oriint_clear(&b); b.bitsu64[0] = 3;
 
-  oriint_set(&res, &a);
-  oriint_mod_mul(&res, &b);
+  oriint_mod_mul(&res, &a, &b);
   oriint_print("modmul 2*3 mod P     : ", &res);
 
   oriint_mod_add(&res, &one, &one);
@@ -979,27 +845,26 @@ static inline void oriint_tests() {
   oriint_print("modsub 2-1 mod P     : ", &res);
 
   // --- TEST 4-5: BARRETT ENGINE (Variable Modulus) ---
-  printf("\n----- Test 4-5: Barrett Engine (Variable Modulus) -----\n");
+  printf("\n----- Test 4-5: Modvar Engine (Montgomery With Variable Modulus) -----\n");
   oriint_clear(&n_mod); n_mod.bitsu64[0] = 11;
-  oriint_barrett_setup(&mu, &n_mod);
+  oriint_modvar_setup(&mm64, &msize, &r2, &n_mod);
 
   oriint_clear(&a); a.bitsu64[0] = 3;
   oriint_clear(&b); b.bitsu64[0] = 4;
 
-  oriint_modvar_mul(&res, &a, &b, &n_mod, &mu);
+  oriint_modvar_mul(&res, &a, &b, &n_mod, &mm64, &msize, &r2);
   printf("%-21s: %llu (Expected: 1)\n", "3 * 4 mod 11", res.bitsu64[0]);
-  printf("%-21s: %d\n", "Barrett OK?", oriint_is_equal(&res, &one));
+  printf("%-21s: %d\n", "Modvar OK?", oriint_is_equal(&res, &one));
 
   // --- TEST 6-8: MODINV & MODSQRT (Consistent Domain) ---
   printf("\n----- Test 6-8: Modinv & Modsqrt -----\n");
   oriint_set(&a, &one);
-  oriint_mod_inv(&res);
+  oriint_modvar_inv(&res, &P, &MM64, &Msize);
   oriint_print("modinv 1 mod P       : ", &res);
 
   // Test Sqrt dengan input yang dikuadratkan dulu agar masuk Montgomery Domain
   oriint_clear(&a); a.bitsu64[0] = 5;
-  oriint_set(&b, &a);
-  oriint_mod_mul(&b, &a); // b = 5*5 mod P
+  oriint_mod_mul(&b, &a, &a); // b = 5*5 mod P
   oriint_print("x                    : ", &a);
   oriint_print("a (x^2 mod P)        : ", &b);
 
@@ -1007,8 +872,7 @@ static inline void oriint_tests() {
   printf("%-21s: %d\n", "modsqrt return", ok);
   oriint_print("sqrt(a)              : ", &res);
 
-  oriint_set(&check, &res);
-  oriint_mod_mul(&check, &res);
+  oriint_mod_mul(&check, &res, &res);
   oriint_print("Verify (r^2 mod P)   : ", &check);
   printf("%-21s: %d\n", "r^2 == a ?", oriint_is_equal(&check, &b));
 

@@ -15,10 +15,6 @@ typedef union {
   int8_t bits8[NBLOCK*2*2*2];
 } oriint_t;
 
-typedef struct {
-  uint64_t bitsu64[2 * NBLOCK];
-} oriint2x_t;
-
 typedef struct { oriint_t re, im; } fp2_t;
 typedef struct { oriint_t w, x, y, z; } quaternion_t;
 typedef struct { quaternion_t b[4]; oriint_t norm; } quaternion_ideal_t;

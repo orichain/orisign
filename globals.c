@@ -8,7 +8,7 @@ const uint64_t BARRETT_MU = (((__uint128_t)1 << 64) / MODULO);
 const uint64_t NIST_THETA_SQRT2 = 181;
 
 const uint64_t MM64 = 0x0000000000000001; 
-const int Msize = 4;
+const uint8_t Msize = 4;
 const oriint_t P = {
     .bitsu64 = {
         0xffffffffffffffff, // Limb 0 (LSB)
