@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "int.h"
 #include "kat.h"
 #include "quaternion.h"
 #include "types.h"
@@ -23,38 +22,6 @@ static inline void left_ideal_from_generator(quaternion_ideal_t *RES, quaternion
     quat_norm(&RES->norm, alpha);
 }
 
-static inline bool solve_cornacchia_nist(oriint_t *n, oriint_t *x, oriint_t *y) {
-    if (oriint_is_zero(n)) {
-        oriint_clear(x);
-        oriint_clear(y);
-        return true;
-    }
-    if (oriint_is_mod4_3(n)) return false;
-    oriint_t nshr1;
-    oriint_set(&nshr1, n);
-    oriint_int_shiftr(1, &nshr1);
-    oriint_t sqrt_n;
-    oriint_int_isqrt(&sqrt_n, n);
-    oriint_t limit;
-    oriint_int_isqrt(&limit, &nshr1);
-    while (oriint_is_ge(&sqrt_n, &limit)) {
-        oriint_t sq;
-        oriint_int_sqr(&sq, &sqrt_n);
-        oriint_t rem;
-        oriint_int_sub_3(&rem, n, &sq);
-        oriint_t r;
-        if (oriint_int_issquare(&rem, &r)) {
-            oriint_set(x, &r);
-            oriint_set(y, &sqrt_n);
-            return true;
-        }
-        oriint_t one;
-        oriint_set_one(&one);
-        oriint_int_sub_2(&sqrt_n, &one);
-    }
-    return false;
-}
-
 static inline bool klpt_solve_advanced(uint64_t target_norm, Quaternion *res) {
     if (target_norm == 0) return false;
     uint64_t limit = isqrt_v9(target_norm);
@@ -71,7 +38,7 @@ static inline bool klpt_solve_advanced(uint64_t target_norm, Quaternion *res) {
         int64_t x, y;
 
         // Cornacchia tetap menjadi penyelesaian akhir yang efisien
-        if (solve_cornacchia(rem_w, &x, &y)) {
+        if (oriint_solve_cornacchia(rem_w, &x, &y)) {
             res->w = w;
             res->x = fp_from_signed(x);
             res->y = fp_from_signed(y);
