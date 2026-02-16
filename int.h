@@ -78,6 +78,15 @@ static inline bool oriint_is_zero(const oriint_t *a) {
   return acc == 0;
 }
 
+static inline bool oriint_is_one(const oriint_t *a) {
+    uint64_t acc = 0;
+    acc |= (a->bitsu64[0] ^ 1ULL);
+    for (int8_t i = 1; i < NBLOCK; i++) {
+        acc |= a->bitsu64[i];
+    }
+    return acc == 0;
+}
+
 static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
   uint64_t acc = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
@@ -285,9 +294,8 @@ static inline void oriint_mod_inv(oriint_t *RES) {
 #define SWAP_ADD(x,y) x+=y;y-=x;
 #define SWAP_SUB(x,y) x-=y;y+=x;
 #define IS_EVEN(x) ((x&1)==0)
-#define IS_ONE(x) ((x.bitsu64[0] == 1ULL)&&(x.bitsu64[1] == 0ULL)&&(x.bitsu64[2] == 0ULL)&&(x.bitsu64[3] == 0ULL)&&(x.bitsu64[4] == 0ULL))
-#define IS_NEGATIVE(x) (x.bits64[4] < 0LL)
-#define IS_POSITIVE(x) (x.bits64[4] >= 0LL)
+#define IS_NEGATIVE(x) (x.bits64[NBLOCK-1] < 0LL)
+#define IS_POSITIVE(x) (x.bits64[NBLOCK-1] >= 0LL)
 
   oriint_t r0_P;
   oriint_t s0_P;
@@ -362,7 +370,7 @@ static inline void oriint_mod_inv(oriint_t *RES) {
     oriint_int_neg(&s);
     oriint_int_add_1(&s,&P);
   }
-  if (!IS_ONE(v)) {
+  if (!oriint_is_one(&v)) {
     oriint_clear(RES);
     return;
   }
