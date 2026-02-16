@@ -1,5 +1,6 @@
 #pragma once
 #include "globals.h"
+#include "kat.h"
 #include "types.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -10,9 +11,9 @@ static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
   uint64_t h;
 
   __asm__ (
-      "mulq %[b];"          // rax * b -> rdx:rax
-      : "=a"(lo), "=d"(h)   // output
-      : "a"(a), [b]"rm"(b)  // input
+      "mulq %[b];"
+      : "=a"(lo), "=d"(h)
+      : "a"(a), [b]"rm"(b)
       );
 
   *hi = h;
@@ -107,14 +108,7 @@ static inline uint64_t oriint_is_mod4_3(const oriint_t *n) {
   return 1 ^ ((two_bits ^ 3ULL | -(two_bits ^ 3ULL)) >> 63);
 }
 
-static inline void oriint_select_flag(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t flag) {
-  uint64_t mask = -(uint64_t)(flag != 0);
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
-  }
-}
-
-static inline void oriint_select_mask(oriint_t *RES, oriint_t *a, oriint_t *b, uint64_t mask) {
+static inline void oriint_select_mask(oriint_t *RES, const oriint_t *a, oriint_t *b, uint64_t mask) {
   for (int8_t i = 0; i < NBLOCK; i++) {
     RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
   }
@@ -128,20 +122,21 @@ static inline void oriint_int_shiftr(uint32_t n, oriint_t *d) {
 }
 
 static inline void oriint_int_shiftl(uint32_t n, oriint_t *d) {
-  if (n == 0) return;
-  if (n >= 64) {
-    uint32_t blocks = n / 64;
-    uint32_t bits = n % 64;
-    for (int8_t i = NBLOCK - 1; i >= 0; i--) {
-      d->bitsu64[i] = (i >= (int8_t)blocks) ? d->bitsu64[i - (int8_t)blocks] : 0;
+  for (int8_t b = 1; b < NBLOCK; b++) {
+    uint64_t mask = -(uint64_t)(n / 64 >= (uint32_t)b);
+    for (int8_t i = NBLOCK - 1; i >= 1; i--) {
+      uint64_t shifted_val = d->bitsu64[i - 1];
+      d->bitsu64[i] = (shifted_val & mask) | (d->bitsu64[i] & ~mask);
     }
-    if (bits == 0) return;
-    n = bits;
+    d->bitsu64[0] = (0ULL & mask) | (d->bitsu64[0] & ~mask);
   }
+  uint32_t bits = n % 64;
+  uint64_t low_bits = d->bitsu64[0];
   for (int8_t i = NBLOCK - 1; i >= 1; i--) {
-    d->bitsu64[i] = oriint_shiftleft128(d->bitsu64[i-1], d->bitsu64[i], n);
+    uint64_t res = oriint_shiftleft128(d->bitsu64[i-1], d->bitsu64[i], bits & 63);
+    d->bitsu64[i] = res;
   }
-  d->bitsu64[0] <<= n;
+  d->bitsu64[0] <<= (bits & 63);
 }
 
 static inline void oriint_imm_umul(const uint64_t *x, uint64_t y, uint64_t *dst) {
@@ -163,50 +158,36 @@ static inline void oriint_imm_mul(const uint64_t *x, uint64_t y, uint64_t *dst) 
 }
 
 static void oriint_2x_mul(oriint2x_t *RES, const oriint_t *a, const oriint_t *b) {
-    uint64_t r0 = 0, r1 = 0, r2 = 0;
-    uint64_t hi, lo;
-
-    // Pastikan semua word RES bersih
-    for (int i = 0; i < NBLOCK * 2; i++) RES->bitsu64[i] = 0;
-
-    for (int k = 0; k < (2 * NBLOCK - 1); k++) {
-        for (int i = 0; i < NBLOCK; i++) {
-            int j = k - i;
-            if (j >= 0 && j < NBLOCK) {
-                // 1. Perkalian 64x64 -> 128-bit (hi:lo)
-                lo = oriint_umul128(a->bitsu64[i], b->bitsu64[j], &hi);
-                
-                // 2. Akumulasi manual ke r2:r1:r0
-                r0 += lo;
-                if (r0 < lo) { // Jika r0 overflow
-                    r1++;
-                    if (r1 == 0) r2++; // Jika r1 overflow
-                }
-                
-                r1 += hi;
-                if (r1 < hi) { // Jika r1 overflow
-                    r2++;
-                }
-            }
-        }
-        // Simpan word ke-k dan geser akumulator
-        RES->bitsu64[k] = r0;
-        r0 = r1;
-        r1 = r2;
-        r2 = 0;
+  uint64_t r0 = 0, r1 = 0, r2 = 0;
+  uint64_t hi, lo;
+  oriint_2x_clear(RES);
+  for (int8_t k = 0; k < (2 * NBLOCK - 1); k++) {
+    for (int8_t i = 0; i < NBLOCK; i++) {
+      int8_t j = k - i;
+      if (j >= 0 && j < NBLOCK) {
+        lo = oriint_umul128(a->bitsu64[i], b->bitsu64[j], &hi);
+        uint64_t c = 0;
+        c = oriint_addcarry_u64(0, r0, lo, &r0);
+        c = oriint_addcarry_u64(c, r1, hi, &r1);
+        oriint_addcarry_u64(c, r2, 0, &r2);
+      }
     }
-    // Simpan sisa di word terakhir
-    RES->bitsu64[2 * NBLOCK - 1] = r0;
+    RES->bitsu64[k] = r0;
+    r0 = r1;
+    r1 = r2;
+    r2 = 0;
+  }
+  RES->bitsu64[2 * NBLOCK - 1] = r0;
 }
 
 static inline void oriint_2x_low(oriint_t *dst, const oriint2x_t *src) {
-  for (int i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     dst->bitsu64[i] = src->bitsu64[i];
   }
 }
 
 static inline void oriint_2x_high(oriint_t *dst, const oriint2x_t *src) {
-  for (int i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < NBLOCK; i++) {
     dst->bitsu64[i] = src->bitsu64[i + NBLOCK];
   }
 }
@@ -251,6 +232,22 @@ static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
   oriint_t diff;
   oriint_int_sub_3(&diff, a, b);
   return diff.bits64[NBLOCK - 1] >= 0;
+}
+
+static inline uint64_t oriint_ge_mask(const oriint_t *a, const oriint_t *b) {
+  uint64_t borrow = 0;
+  uint64_t dummy;
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    borrow = oriint_subborrow_u64(borrow, a->bitsu64[i], b->bitsu64[i], &dummy);
+  }
+  return (borrow - 1ULL);
+}
+
+static inline void oriint_select_ge(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
+  oriint_t diff;
+  oriint_int_sub_3(&diff, a, b);
+  uint64_t mask = oriint_ge_mask(a, b);
+  oriint_select_mask(RES, a, &diff, mask);
 }
 
 static inline void oriint_int_neg(oriint_t *RES) {
@@ -303,9 +300,7 @@ static inline void oriint_montgomerymult(oriint_t *RES, const oriint_t *a, oriin
     c = oriint_int_add_c(&pr, &p);
     oriint_int_addandshift(RES, &pr, c);
   }
-  if (oriint_is_ge(RES, &P)) {
-    oriint_int_sub_2(RES, &P);
-  }
+  oriint_select_ge(RES, RES, &P);
 }
 
 static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a) {
@@ -329,16 +324,12 @@ static inline void oriint_mod_sub_1(oriint_t *RES, oriint_t *a) {
 
 static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
   oriint_int_add_3(RES, a, b);
-  if (oriint_is_ge(RES, &P)) {
-    oriint_int_sub_2(RES, &P);
-  }
+  oriint_select_ge(RES, RES, &P);
 }
 
 static inline void oriint_modvar_add(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n) {
   oriint_int_add_3(RES, a, b);
-  if (oriint_is_ge(RES, n)) {
-    oriint_int_sub_2(RES, n);
-  }
+  oriint_select_ge(RES, RES, n);
 }
 
 static inline void oriint_mod_inv(oriint_t *RES) {
@@ -432,63 +423,47 @@ static inline void oriint_mod_inv(oriint_t *RES) {
   }
   if (IS_NEGATIVE(s))
     oriint_int_add_1(&s,&P);
-  if (oriint_is_ge(&s, &P)) {
-    oriint_int_sub_2(&s,&P);
-  }
+  oriint_select_ge(&s, &s, &P);
   oriint_set(RES, &s);
 }
 
 static void oriint_compute_sqrt_exp(oriint_t *e) {
   oriint_set(e, &P);
-
   oriint_t one;
   oriint_set_one(&one);
   oriint_int_add_1(e, &one);
-
   oriint_int_shiftr(2, e);
 }
 
 static void oriint_int_sqr(oriint_t *RES, const oriint_t *a) {
-    uint64_t r0 = 0, r1 = 0, r2 = 0;
-    uint64_t hi, lo;
-    oriint_t result_low;
-
-    // Bersihkan penampung sementara
-    oriint_clear(&result_low);
-
-    for (int k = 0; k < (2 * NBLOCK - 1); k++) {
-        for (int i = 0; i < NBLOCK; i++) {
-            int j = k - i;
-            if (j >= 0 && j < NBLOCK) {
-                // Gunakan umul128 yang sama persis dengan fungsi mul kita yang sukses
-                lo = oriint_umul128(a->bitsu64[i], a->bitsu64[j], &hi);
-                
-                // Akumulasi manual 192-bit (r2:r1:r0)
-                r0 += lo;
-                if (r0 < lo) {
-                    r1++;
-                    if (r1 == 0) r2++;
-                }
-                
-                r1 += hi;
-                if (r1 < hi) {
-                    r2++;
-                }
-            }
+  uint64_t r0 = 0, r1 = 0, r2 = 0;
+  uint64_t hi, lo;
+  oriint_t result_low;
+  oriint_clear(&result_low);
+  for (int8_t k = 0; k < (2 * NBLOCK - 1); k++) {
+    for (int8_t i = 0; i < NBLOCK; i++) {
+      int8_t j = k - i;
+      if (j >= 0 && j < NBLOCK) {
+        lo = oriint_umul128(a->bitsu64[i], a->bitsu64[j], &hi);
+        r0 += lo;
+        if (r0 < lo) {
+          r1++;
+          if (r1 == 0) r2++;
         }
-        // Simpan hanya jika masih dalam jangkauan NBLOCK
-        if (k < NBLOCK) {
-            result_low.bitsu64[k] = r0;
+        r1 += hi;
+        if (r1 < hi) {
+          r2++;
         }
-        
-        // Geser kolom
-        r0 = r1;
-        r1 = r2;
-        r2 = 0;
+      }
     }
-
-    // Set hasil akhir
-    oriint_set(RES, &result_low);
+    if (k < NBLOCK) {
+      result_low.bitsu64[k] = r0;
+    }
+    r0 = r1;
+    r1 = r2;
+    r2 = 0;
+  }
+  oriint_set(RES, &result_low);
 }
 
 static void oriint_int_isqrt(oriint_t *RES, const oriint_t *n) {
@@ -496,14 +471,11 @@ static void oriint_int_isqrt(oriint_t *RES, const oriint_t *n) {
     oriint_clear(RES);
     return;
   }
-
   oriint_t op, res, one, tmp, next_res;
   oriint_set(&op, n);
   oriint_clear(&res);
-
   oriint_clear(&one);
   one.bitsu64[4] = (1ULL << 62);
-
   while (true) {
     oriint_int_sub_3(&tmp, &one, &op);
     if (tmp.bits64[NBLOCK - 1] >= 0) break;
@@ -523,7 +495,6 @@ static void oriint_int_isqrt(oriint_t *RES, const oriint_t *n) {
     }
     oriint_int_shiftr(2, &one);
   }
-
   oriint_set(RES, &res);
 }
 
@@ -532,20 +503,14 @@ static inline bool oriint_int_issquare(const oriint_t *n, oriint_t *root) {
     if (root) oriint_clear(root);
     return true;
   }
-
-  // Prefilter cepat: periksa 6 bit rendah
   uint64_t m = n->bitsu64[0] & 63ULL;
   uint64_t mask = 0x0202020202030213ULL;
   if (!((mask >> m) & 1ULL)) return false;
-
   oriint_t r, sq;
   oriint_int_isqrt(&r, n);
-
   oriint_int_sqr(&sq, &r);
-
   bool eq = oriint_is_equal(&sq, n);
   if (eq && root) oriint_set(root, &r);
-
   return eq;
 }
 
@@ -553,259 +518,182 @@ static void oriint_int_div_mod(oriint_t *Q, oriint_t *R, const oriint_t *A, cons
   oriint_t quotient, remainder;
   oriint_clear(&quotient);
   oriint_clear(&remainder);
-
   if (oriint_is_zero(B)) return;
-
   for (int16_t i = (NBLOCK * 64) - 1; i >= 0; i--) {
-    // 1. Shift left remainder 1 bit
     oriint_int_shiftl(1, &remainder);
-
-    // 2. Taruh bit ke-i dari A ke LSB remainder
     uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
     remainder.bitsu64[0] |= bit;
-
-    // 3. Gunakan isge yang baru
-    if (oriint_is_ge(&remainder, B)) {
-      oriint_int_sub_2(&remainder, B);
-      quotient.bitsu64[i >> 6] |= (1ULL << (i & 63));
-    }
+    uint64_t mask = oriint_ge_mask(&remainder, B);
+    quotient.bitsu64[i >> 6] |= ((1ULL << (i & 63)) & mask);
+    oriint_select_ge(&remainder, &remainder, B);
   }
-
   if (Q) oriint_set(Q, &quotient);
   if (R) oriint_set(R, &remainder);
 }
 
 static void oriint_int_mod(oriint_t *R, const oriint_t *A, const oriint_t *B) {
-  oriint_t remainder, tmp;
+  oriint_t remainder;
   oriint_clear(&remainder);
-
   if (oriint_is_zero(B)) {
     oriint_clear(R);
     return;
   }
-
   for (int16_t i = (NBLOCK * 64) - 1; i >= 0; i--) {
-    // remainder <<= 1
     oriint_int_shiftl(1, &remainder);
-
-    // ambil bit ke-i dari A dan taruh di LSB remainder
     uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
     remainder.bitsu64[0] |= bit;
-
-    // tmp = remainder - B
-    oriint_set(&tmp, &remainder);
-    oriint_int_sub_2(&tmp, B);
-
-    // mask = 0xFFFF..FFFF jika remainder >= B, 0 jika < B
-    uint64_t ge_mask = -(int64_t)oriint_is_ge(&remainder, B);
-
-    // pilih remainder baru: tmp jika >= B, tetap remainder jika < B
-    for (int8_t j = 0; j < NBLOCK; j++) {
-      remainder.bitsu64[j] = (tmp.bitsu64[j] & ge_mask) | (remainder.bitsu64[j] & ~ge_mask);
-    }
+    oriint_select_ge(&remainder, &remainder, B);
   }
 
   oriint_set(R, &remainder);
 }
 
 static void oriint_barrett_setup(oriint_t *mu, const oriint_t *n) {
-    oriint_clear(mu);
-    if (oriint_is_zero(n)) return;
-
-    // Cari tahu posisi bit tertinggi n agar tidak memproses 640 bit sia-sia
-    int16_t top_bit = 0;
-    for (int i = NBLOCK - 1; i >= 0; i--) {
-        if (n->bitsu64[i] != 0) {
-            top_bit = (i * 64) + 63;
-            uint64_t tmp = n->bitsu64[i];
-            while (!(tmp & 0x8000000000000000ULL)) { tmp <<= 1; top_bit--; }
-            break;
-        }
+  oriint_clear(mu);
+  if (oriint_is_zero(n)) return;
+  int16_t top_bit = 0;
+  bool found = false;
+  for (int8_t i = NBLOCK - 1; i >= 0; i--) {
+    if (n->bitsu64[i] != 0 && !found) {
+      top_bit = (i * 64) + 63;
+      uint64_t tmp = n->bitsu64[i];
+      while (!(tmp & 0x8000000000000000ULL)) { tmp <<= 1; top_bit--; }
+      found = true;
     }
-
-    // k adalah parameter Barrett. Biasanya k = top_bit + 1.
-    // Kita hitung mu = 2^(2k) / n
-    int16_t k = top_bit + 1;
-    oriint_t rem;
-    oriint_clear(&rem);
-    rem.bitsu64[0] = 1; // Start bit
-
-    // Loop hanya sebanyak 2k kali (jauh lebih cepat daripada 640 tetap)
-    for (int i = 2 * k; i >= 0; i--) {
-        // Manual shift left (Safe)
-        uint64_t c = 0;
-        for (int j = 0; j < NBLOCK; j++) {
-            uint64_t next_c = (rem.bitsu64[j] >> 63);
-            rem.bitsu64[j] = (rem.bitsu64[j] << 1) | c;
-            c = next_c;
-        }
-
-        if (c || oriint_is_ge(&rem, n)) {
-            // Manual sub (Safe)
-            uint64_t borrow = 0;
-            for (int j = 0; j < NBLOCK; j++) {
-                uint64_t p = rem.bitsu64[j];
-                uint64_t diff = p - n->bitsu64[j] - borrow;
-                if (p < n->bitsu64[j] || (p == n->bitsu64[j] && borrow)) borrow = 1;
-                else borrow = 0;
-                rem.bitsu64[j] = diff;
-            }
-            // Set bit hasil di mu
-            if (i <= k) { // Kita hanya butuh mu sebesar k bit
-                mu->bitsu64[i >> 6] |= (1ULL << (i & 63));
-            }
-        }
+  }
+  int16_t k = top_bit + 1;
+  oriint_t rem;
+  oriint_clear(&rem);
+  rem.bitsu64[0] = 1; 
+  for (int16_t i = 2 * k; i >= 0; i--) {
+    uint64_t carry = 0;
+    for (int8_t j = 0; j < NBLOCK; j++) {
+      uint64_t next_c = (rem.bitsu64[j] >> 63);
+      rem.bitsu64[j] = (rem.bitsu64[j] << 1) | carry;
+      carry = next_c;
     }
+    uint64_t ge_mask = oriint_ge_mask(&rem, n);
+    uint64_t final_mask = -(uint64_t)(carry != 0) | ge_mask;
+    oriint_t diff;
+    oriint_int_sub_3(&diff, &rem, n);
+    oriint_select_mask(&rem, &rem, &diff, final_mask);
+    if (i <= k) {
+      mu->bitsu64[i >> 6] |= ((1ULL << (i & 63)) & final_mask);
+    }
+  }
 }
 
 static void oriint_modvar_barrett(oriint_t *RES, const oriint2x_t *X, const oriint_t *n, const oriint_t *mu) {
-    // Barrett memerlukan: r = X - ((X * mu) >> (2 * 64 * NBLOCK)) * n
-    // Untuk 320-bit (NBLOCK 5), 2 * 64 * NBLOCK = 640 bit.
-    
-    oriint_t x_high;
-    // Ambil bagian atas X (X >> 320)
-    for(int i = 0; i < NBLOCK; i++) x_high.bitsu64[i] = X->bitsu64[i + NBLOCK];
-
-    // q1 = x_high * mu
-    oriint2x_t q1_full;
-    oriint_2x_mul(&q1_full, &x_high, mu);
-    
-    // q2 = q1_full_high (Ini setara dengan (X * mu) >> 640 bit jika X < n^2)
-    oriint_t q2;
-    oriint_2x_high(&q2, &q1_full);
-
-    // r_sub = q2 * n
-    oriint2x_t r_sub_full;
-    oriint_2x_mul(&r_sub_full, &q2, n);
-
-    // Hitung RES = X - r_sub_full
-    // Karena kita hanya butuh hasil mod n, kita cukup hitung NBLOCK + 1 limb
-    uint64_t borrow = 0;
-    for (int i = 0; i < NBLOCK; i++) {
-        borrow = oriint_subborrow_u64(borrow, X->bitsu64[i], r_sub_full.bitsu64[i], &RES->bitsu64[i]);
-    }
-
-    // --- KOREKSI KRUSIAL ---
-    // Hasil Barrett bisa melesat hingga 2n. Kita gunakan loop untuk memastikan RES < n.
-    // Gunakan is_ge atau manual check untuk memastikan hasil positif dan < n.
-    while (oriint_is_ge(RES, n)) {
-        oriint_int_sub_2(RES, n);
-    }
+  oriint_t x_high;
+  for(int8_t i = 0; i < NBLOCK; i++) x_high.bitsu64[i] = X->bitsu64[i + NBLOCK];
+  oriint2x_t q1_full;
+  oriint_2x_mul(&q1_full, &x_high, mu);
+  oriint_t q2;
+  oriint_2x_high(&q2, &q1_full);
+  oriint2x_t r_sub_full;
+  oriint_2x_mul(&r_sub_full, &q2, n);
+  uint64_t borrow = 0;
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    borrow = oriint_subborrow_u64(borrow, X->bitsu64[i], r_sub_full.bitsu64[i], &RES->bitsu64[i]);
+  }
+  oriint_select_ge(RES, RES, n);
 }
 
 static void oriint2x_mod_div(oriint_t *Q, oriint_t *R, const oriint2x_t *dividend, const oriint_t *divisor) {
-    oriint_t q, r;
-    oriint_clear(&q);
-    oriint_clear(&r);
-
-    if (oriint_is_zero(divisor)) return;
-
-    // Kita lakukan pembagian bit-demi-bit yang sangat aman
-    // Total bit untuk oriint2x (NBLOCK=5) adalah 640 bit
-    for (int16_t i = (2 * NBLOCK * 64) - 1; i >= 0; i--) {
-        // 1. Shift left R by 1
-        uint64_t carry_r = (r.bitsu64[NBLOCK - 1] >> 63);
-        for (int j = NBLOCK - 1; j > 0; j--) {
-            r.bitsu64[j] = (r.bitsu64[j] << 1) | (r.bitsu64[j - 1] >> 63);
-        }
-        r.bitsu64[0] <<= 1;
-
-        // 2. Ambil bit ke-i dari dividend dan masukkan ke R bit 0
-        uint64_t bit = (dividend->bitsu64[i >> 6] >> (i & 63)) & 1;
-        r.bitsu64[0] |= bit;
-
-        // 3. Jika R >= divisor, maka R = R - divisor dan bit Q ke-i = 1
-        if (carry_r || oriint_is_ge(&r, divisor)) {
-            // Manual subtraction r = r - divisor
-            uint64_t borrow = 0;
-            for (int j = 0; j < NBLOCK; j++) {
-                uint64_t p = r.bitsu64[j];
-                uint64_t s = divisor->bitsu64[j];
-                r.bitsu64[j] = p - s - borrow;
-                if (p < s || (p == s && borrow)) borrow = 1;
-                else borrow = 0;
-            }
-            
-            // Set bit ke-i pada Q
-            if (i < (NBLOCK * 64)) {
-                q.bitsu64[i >> 6] |= (1ULL << (i & 63));
-            }
-        }
+  oriint_t q, r;
+  oriint_clear(&q);
+  oriint_clear(&r);
+  if (oriint_is_zero(divisor)) return;
+  for (int16_t i = (2 * NBLOCK * 64) - 1; i >= 0; i--) {
+    uint64_t carry_r = (r.bitsu64[NBLOCK - 1] >> 63);
+    for (int8_t j = NBLOCK - 1; j > 0; j--) {
+      r.bitsu64[j] = (r.bitsu64[j] << 1) | (r.bitsu64[j - 1] >> 63);
     }
-
-    if (Q) oriint_set(Q, &q);
-    if (R) oriint_set(R, &r);
+    r.bitsu64[0] <<= 1;
+    uint64_t bit = (dividend->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
+    r.bitsu64[0] |= bit;
+    uint64_t ge_mask = oriint_ge_mask(&r, divisor);
+    uint64_t final_mask = -(uint64_t)(carry_r != 0) | ge_mask;
+    if (i < (NBLOCK * 64)) {
+      q.bitsu64[i >> 6] |= ((1ULL << (i & 63)) & final_mask);
+    }
+    oriint_t diff;
+    oriint_int_sub_3(&diff, &r, divisor);
+    oriint_select_mask(&r, &r, &diff, final_mask);
+  }
+  if (Q) oriint_set(Q, &q);
+  if (R) oriint_set(R, &r);
 }
 
-static void oriint_modvar_mul_fast(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const oriint_t *mu) {
-    oriint2x_t full;
-    // Gunakan perkalian Comba yang sudah OK di Test 13
-    oriint_2x_mul(&full, a, b);
-
-    // Reduksi menggunakan div_mod yang stabil
-    oriint_t r;
-    oriint2x_mod_div(NULL, &r, &full, n);
-    oriint_set(RES, &r);
+static void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const oriint_t *mu) {
+  oriint2x_t full;
+  oriint_2x_mul(&full, a, b);
+  if (full.bitsu64[NBLOCK] == 0) {
+    oriint_t low;
+    oriint_2x_low(&low, &full);
+    oriint_int_mod(RES, &low, n);
+    return;
+  }
+  oriint_t x_high;
+  oriint_2x_high(&x_high, &full);
+  oriint2x_t q1_mu;
+  oriint_2x_mul(&q1_mu, &x_high, mu);
+  oriint_t q2;
+  oriint_2x_high(&q2, &q1_mu);
+  oriint2x_t q2_n;
+  oriint_2x_mul(&q2_n, &q2, n);
+  uint64_t borrow = 0;
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    borrow = oriint_subborrow_u64(borrow, full.bitsu64[i], q2_n.bitsu64[i], &RES->bitsu64[i]);
+  }
+  for(int8_t k = 0; k < 3; k++) {
+    uint64_t mask = oriint_ge_mask(RES, n);
+    oriint_t diff;
+    oriint_int_sub_3(&diff, RES, n);
+    oriint_select_mask(RES, RES, &diff, mask);
+    if (mask == 0) break;
+  }
 }
 
 static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
   oriint_t result;
   oriint_t base;
   oriint_t tmp;
-
   oriint_set(&base, a);
   oriint_set_one(&result);
-
-  for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--)
-  {
-    // result = result^2
+  for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
     oriint_set(&tmp, &result);
     oriint_mod_mul(&tmp, &result);
-
-    // result = bit ? tmp * base : tmp
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
-
     oriint_t mulres;
     oriint_set(&mulres, &tmp);
     oriint_mod_mul(&mulres, &base);
-
     oriint_select_mask(&result, &tmp, &mulres, mask);
   }
-
   oriint_set(RES, &result);
+}
+
+static void oriint_modvar_sqr(oriint_t *RES, const oriint_t *a, const oriint_t *n, const oriint_t *mu) {
+  oriint_modvar_mul(RES, a, a, n, mu);
 }
 
 static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n) {
   oriint_t result;
   oriint_t base;
-  oriint_t mu; // Tambahkan variabel mu
+  oriint_t mu;
 
-  // 1. Pre-komputasi Barrett (Hanya SEKALI)
   oriint_barrett_setup(&mu, n);
-
   oriint_set_one(&result);
-  
-  // Pastikan base berada dalam range [0, n-1]
   oriint_int_mod(&base, a, n);
-
-  // Scan bit eksponen dari MSB ke LSB
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    // 2. Square: result = result * result mod n
-    // Kita pakai modvar_mul_fast yang isinya (2x_mul + barrett)
-    oriint_modvar_mul_fast(&result, &result, &result, n, &mu);
-
-    // 3. Ambil bit eksponen
+    oriint_modvar_sqr(&result, &result, n, &mu);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
-
-    // 4. Multiply: mul_res = result * base mod n
     oriint_t mul_res;
-    oriint_modvar_mul_fast(&mul_res, &result, &base, n, &mu);
-
-    // 5. Constant-time select
+    oriint_modvar_mul(&mul_res, &result, &base, n, &mu);
     oriint_select_mask(&result, &result, &mul_res, mask);
   }
 
@@ -817,276 +705,196 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
   oriint_set_one(&res);
   oriint_set(&base, a);
 
-  // 1. Hitung exponent untuk sqrt: e = (P+1)/4
   oriint_compute_sqrt_exp(&exp);
-
-  // 2. Square-and-multiply constant-time
-  // Menggunakan seluruh bit NBLOCK*64 untuk menjamin timing yang sama
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    // square res: res = res^2 mod P
     oriint_set(&tmp, &res);
     oriint_mod_mul(&res, &tmp); 
-
-    // Ambil bit eksponen secara constant-time
     uint64_t word = i >> 6;
     uint64_t bit  = (exp.bitsu64[word] >> (i & 63)) & 1ULL;
-    uint64_t mask = -(int64_t)bit; // 0xFF...F jika bit=1, 0x00...0 jika bit=0
-
-    // Siapkan kandidat perkalian: mulres = res * base mod P
+    uint64_t mask = -(int64_t)bit;
     oriint_t mulres;
     oriint_set(&mulres, &res);
     oriint_mod_mul(&mulres, &base);
-
-    // Pilih hasil: jika bit=1 pakai mulres, jika bit=0 tetap res (tmp)
     oriint_select_mask(&res, &res, &mulres, mask);
   }
-
-  // 3. Verifikasi: check = res^2 mod P
   oriint_t check;
   oriint_set(&check, &res);
   oriint_mod_mul(&check, &res);
-
-  // 4. Bandingkan check == a secara constant-time
   uint64_t neq_accumulator = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
     neq_accumulator |= (check.bitsu64[i] ^ a->bitsu64[i]);
   }
-
-  // Ubah neq_accumulator jadi mask tunggal: 0 jika sama, -1 jika beda
   uint64_t final_neq = (neq_accumulator | -neq_accumulator) >> 63;
-  uint64_t full_valid_mask = -(int64_t)(final_neq ^ 1ULL); // 0xFF...F jika cocok, 0 jika tidak
-
-  // 5. Set output: jika tidak valid, RES jadi nol
+  uint64_t full_valid_mask = -(int64_t)(final_neq ^ 1ULL);
   for (int8_t i = 0; i < NBLOCK; i++) {
     RES->bitsu64[i] = res.bitsu64[i] & full_valid_mask;
   }
-
-  // Set flag is_valid (untuk logika high-level)
   if (is_valid) {
     *is_valid = (full_valid_mask != 0);
   }
 }
 
 static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, bool *is_valid) {
-    oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b, mu;
-    oriint_set_one(&one);
-    oriint_int_sub_3(&n_minus_1, n, &one);
+  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b, mu;
+  oriint_set_one(&one);
+  oriint_int_sub_3(&n_minus_1, n, &one);
 
-    if (oriint_is_zero(a)) {
-        oriint_clear(RES);
-        if (is_valid) *is_valid = true;
-        return;
+  if (oriint_is_zero(a)) {
+    oriint_clear(RES);
+    if (is_valid) *is_valid = true;
+    return;
+  }
+  oriint_barrett_setup(&mu, n);
+  oriint_set(&q, &n_minus_1);
+  uint64_t s = 0;
+  while (!(q.bitsu64[0] & 1) && s < 256) {
+    oriint_int_shiftr(1, &q);
+    s++;
+  }
+  if (s == 1) {
+    oriint_t exp;
+    oriint_set(&exp, n);
+    oriint_int_add_1(&exp, &one);
+    oriint_int_shiftr(2, &exp);
+    oriint_modvar_exp(RES, a, &exp, n);
+    oriint_modvar_sqr(&check_z, RES, n, &mu);
+    if (is_valid) *is_valid = oriint_is_equal(&check_z, a);
+    return;
+  }
+  oriint_set(&z_exp, &n_minus_1);
+  oriint_int_shiftr(1, &z_exp); 
+  uint64_t g = 2;
+  while (g < 50) {
+    oriint_clear(&z); z.bitsu64[0] = g;
+    oriint_modvar_exp(&check_z, &z, &z_exp, n);
+    if (oriint_is_equal(&check_z, &n_minus_1)) break;
+    g++;
+  }
+  M.bitsu64[0] = s;
+  oriint_modvar_exp(&c, &z, &q, n);
+  oriint_t r_exp;
+  oriint_set(&r_exp, &q); oriint_int_add_1(&r_exp, &one); oriint_int_shiftr(1, &r_exp);
+  oriint_modvar_exp(&R, a, &r_exp, n);
+  oriint_modvar_exp(&t, a, &q, n);
+  for (;;) {
+    if (oriint_is_equal(&t, &one)) {
+      if (is_valid) *is_valid = true;
+      oriint_set(RES, &R);
+      return;
     }
-
-    // --- SETUP BARRETT SEKALI SAJA ---
-    oriint_barrett_setup(&mu, n);
-
-    // 1. Faktorkan n-1 = Q * 2^S
-    oriint_set(&q, &n_minus_1);
-    uint64_t s = 0;
-    while (!(q.bitsu64[0] & 1) && s < 256) {
-        oriint_int_shiftr(1, &q);
-        s++;
+    uint64_t i = 0;
+    oriint_t tt; oriint_set(&tt, &t);
+    for (i = 1; i < M.bitsu64[0]; i++) {
+      oriint_modvar_sqr(&tt, &tt, n, &mu);
+      if (oriint_is_equal(&tt, &one)) break;
     }
-
-    // 2. Kasus S=1 (n % 4 == 3)
-    if (s == 1) {
-        oriint_t exp;
-        oriint_set(&exp, n);
-        oriint_int_add_1(&exp, &one);
-        oriint_int_shiftr(2, &exp);
-        oriint_modvar_exp(RES, a, &exp, n); // Sudah pakai Barrett di dalam
-
-        // Verifikasi cepat
-        oriint_modvar_mul_fast(&check_z, RES, RES, n, &mu);
-        if (is_valid) *is_valid = oriint_is_equal(&check_z, a);
-        return;
+    if (i == M.bitsu64[0]) {
+      if (is_valid) *is_valid = false;
+      oriint_clear(RES);
+      return;
     }
-
-    // 3. Cari non-residu z
-    oriint_set(&z_exp, &n_minus_1);
-    oriint_int_shiftr(1, &z_exp); 
-    uint64_t g = 2;
-    while (g < 50) {
-        oriint_clear(&z); z.bitsu64[0] = g;
-        oriint_modvar_exp(&check_z, &z, &z_exp, n);
-        if (oriint_is_equal(&check_z, &n_minus_1)) break;
-        g++;
+    uint64_t power = M.bitsu64[0] - i - 1;
+    oriint_set(&b, &c);
+    for (uint64_t j = 0; j < power; j++) {
+      oriint_modvar_sqr(&b, &b, n, &mu);
     }
-
-    // 4. Inisialisasi Tonelli-Shanks
-    M.bitsu64[0] = s;
-    oriint_modvar_exp(&c, &z, &q, n);
-    oriint_t r_exp;
-    oriint_set(&r_exp, &q); oriint_int_add_1(&r_exp, &one); oriint_int_shiftr(1, &r_exp);
-    oriint_modvar_exp(&R, a, &r_exp, n);
-    oriint_modvar_exp(&t, a, &q, n);
-
-    // 5. Loop Tonelli
-    for (;;) {
-        if (oriint_is_equal(&t, &one)) {
-            if (is_valid) *is_valid = true;
-            oriint_set(RES, &R);
-            return;
-        }
-
-        uint64_t i = 0;
-        oriint_t tt; oriint_set(&tt, &t);
-        for (i = 1; i < M.bitsu64[0]; i++) {
-            oriint_modvar_mul_fast(&tt, &tt, &tt, n, &mu); // Ganti sqr + mod
-            if (oriint_is_equal(&tt, &one)) break;
-        }
-
-        if (i == M.bitsu64[0]) {
-            if (is_valid) *is_valid = false;
-            oriint_clear(RES);
-            return;
-        }
-
-        uint64_t power = M.bitsu64[0] - i - 1;
-        oriint_set(&b, &c);
-        for (uint64_t j = 0; j < power; j++) {
-            oriint_modvar_mul_fast(&b, &b, &b, n, &mu); // Ganti sqr + mod
-        }
-
-        M.bitsu64[0] = i;
-        oriint_modvar_mul_fast(&c, &b, &b, n, &mu);       // Ganti sqr + mod
-        oriint_modvar_mul_fast(&t, &t, &c, n, &mu);       // Ganti mod_mul_basic
-        oriint_modvar_mul_fast(&R, &R, &b, n, &mu);       // Ganti mod_mul_basic
-    }
+    M.bitsu64[0] = i;
+    oriint_modvar_sqr(&c, &b, n, &mu);
+    oriint_modvar_mul(&t, &t, &c, n, &mu);
+    oriint_modvar_mul(&R, &R, &b, n, &mu);
+  }
 }
 
-static bool oriint_is_prime(const oriint_t *n, int iterations) {
-    if (n->bitsu64[0] < 2) return false;
-    if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
-    if (!(n->bitsu64[0] & 1)) return false;
+static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
+  if (n->bitsu64[0] < 2) return false;
+  if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
+  if (!(n->bitsu64[0] & 1)) return false;
 
-    oriint_t one, n_minus_1, d, x, mu;
-    oriint_set_one(&one);
-    oriint_int_sub_3(&n_minus_1, n, &one);
-    
-    oriint_barrett_setup(&mu, n);
+  oriint_t one, n_minus_1, d, x, mu;
+  oriint_set_one(&one);
+  oriint_int_sub_3(&n_minus_1, n, &one);
+  oriint_barrett_setup(&mu, n);
+  oriint_set(&d, &n_minus_1);
+  uint32_t s = 0;
+  while (!oriint_is_zero(&d) && !(d.bitsu64[0] & 1)) {
+    oriint_int_shiftr(1, &d);
+    s++;
+    if (s > 1024) { printf("[ERROR] Infinite loop in s factoring!\n"); return false; }
+  }
 
-    oriint_set(&d, &n_minus_1);
-    uint32_t s = 0;
-    while (!oriint_is_zero(&d) && !(d.bitsu64[0] & 1)) {
-        oriint_int_shiftr(1, &d);
-        s++;
-        if (s > 1024) { printf("[ERROR] Infinite loop in s factoring!\n"); return false; }
+  uint64_t bases[] = {2, 7, 61}; 
+  for (int8_t i = 0; i < 3; i++) {
+    oriint_t base; oriint_clear(&base);
+    base.bitsu64[0] = bases[i];
+    if (oriint_is_ge(&base, n)) continue;
+    oriint_modvar_exp(&x, &base, &d, n);
+    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) {
+      continue;
     }
-
-    uint64_t bases[] = {2, 7, 61}; 
-    for (int i = 0; i < 3; i++) {
-        oriint_t base; oriint_clear(&base);
-        base.bitsu64[0] = bases[i];
-        
-        if (oriint_is_ge(&base, n)) continue;
-
-        oriint_modvar_exp(&x, &base, &d, n);
-
-        if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) {
-            continue;
-        }
-
-        bool composite = true;
-        for (uint32_t r = 1; r < s; r++) {
-            oriint_modvar_mul_fast(&x, &x, &x, n, &mu);
-            if (oriint_is_equal(&x, &n_minus_1)) {
-                composite = false;
-                break;
-            }
-        }
-        
-        if (composite) {
-            return false;
-        }
+    bool composite = true;
+    for (uint32_t r = 1; r < s; r++) {
+      oriint_modvar_sqr(&x, &x, n, &mu);
+      if (oriint_is_equal(&x, &n_minus_1)) {
+        composite = false;
+        break;
+      }
     }
-
-    return true;
+    if (composite) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
-    oriint_t z, target_root, r_prev, r_curr, r_next, tmp, one;
-    bool is_valid;
-
-    oriint_set_one(&one);
-
-    // 1. Hitung z = sqrt(n - 1) mod n
-    // n-1 adalah -1 dalam field mod n
-    oriint_int_sub_3(&tmp, n, &one); 
-    oriint_modvar_sqrt(&z, &tmp, n, &is_valid); 
-
-    if (!is_valid) return false;
-
-    // Cornacchia butuh z awal di paruh atas: z > n/2
-    // Ini penting agar r_curr pertama (n mod z) langsung turun di bawah n
-    oriint_t n_half;
-    oriint_set(&n_half, n);
-    oriint_int_shiftr(1, &n_half);
-
-    if (oriint_is_ge(&n_half, &z)) {
-        oriint_int_sub_3(&z, n, &z);
+  oriint_t z, target_root, r_prev, r_curr, r_next, tmp, one;
+  bool is_valid;
+  oriint_set_one(&one);
+  oriint_int_sub_3(&tmp, n, &one); 
+  oriint_modvar_sqrt(&z, &tmp, n, &is_valid); 
+  if (!is_valid) return false;
+  oriint_t n_half;
+  oriint_set(&n_half, n);
+  oriint_int_shiftr(1, &n_half);
+  uint64_t z_mask = oriint_ge_mask(&n_half, &z);
+  if (z_mask == 0) {
+    oriint_int_sub_3(&z, n, &z);
+  }
+  oriint_set(&r_prev, n);
+  oriint_set(&r_curr, &z);
+  oriint_int_isqrt(&target_root, n);
+  for (int16_t step = 0; step < NBLOCK * 64; step++) {
+    uint64_t keep_going = ~oriint_ge_mask(&target_root, &r_curr);
+    if (keep_going == 0) break; 
+    if (oriint_is_zero(&r_curr)) break;
+    oriint_int_mod(&r_next, &r_prev, &r_curr);
+    oriint_set(&r_prev, &r_curr);
+    oriint_set(&r_curr, &r_next);
+  }
+  oriint_int_sqr(&tmp, &r_curr);
+  if (oriint_is_ge(n, &tmp)) {
+    oriint_int_sub_3(&tmp, n, &tmp);
+  } else {
+    return false; 
+  }
+  if (oriint_int_issquare(&tmp, y)) {
+    oriint_set(x, &r_curr);
+    if (oriint_is_ge(y, x)) {
+      oriint_t swap;
+      oriint_set(&swap, x);
+      oriint_set(x, y);
+      oriint_set(y, &swap);
     }
+    return true;
+  }
+  return false;
+}
 
-    // 2. Setup Euclidean
-    oriint_set(&r_prev, n);
-    oriint_set(&r_curr, &z);
-    oriint_int_isqrt(&target_root, n);
-
-    // Loop Euclidean (Constant Time)
-    // Untuk 320-bit, jumlah iterasi ini sudah sangat aman
-    for (int16_t step = 0; step < NBLOCK * 64; step++) {
-        // Cek apakah r_curr masih > target_root
-        uint64_t keep_going = -(int64_t)(!oriint_is_ge(&target_root, &r_curr));
-
-        // PENGAMAN: r_curr tidak boleh 0 untuk fungsi mod
-        oriint_t safe_divisor;
-        uint64_t is_zero = -(int64_t)oriint_is_zero(&r_curr);
-        for(int i=0; i<NBLOCK; i++) {
-            safe_divisor.bitsu64[i] = (r_curr.bitsu64[i] & ~is_zero) | (one.bitsu64[i] & is_zero);
-        }
-
-        // Hitung sisa bagi
-        oriint_int_mod(&r_next, &r_prev, &safe_divisor);
-
-        // Conditional Move (C-Move) agar timing konstan
-        for (int i = 0; i < NBLOCK; i++) {
-            uint64_t r_c = r_curr.bitsu64[i];
-            uint64_t r_n = r_next.bitsu64[i];
-            r_prev.bitsu64[i] = (r_c & keep_going) | (r_prev.bitsu64[i] & ~keep_going);
-            r_curr.bitsu64[i] = (r_n & keep_going) | (r_curr.bitsu64[i] & ~keep_going);
-        }
-        
-        // Optimasi: Jika r_curr sudah 0, kita bisa berhenti (opsional, tapi merusak constant-time)
-        // Di kriptografi, kita biarkan loop berjalan sampai habis.
-    }
-
-    // 3. Verifikasi: x^2 + y^2 = n
-    // x = r_curr (sisa terakhir yang <= sqrt(n))
-    oriint_int_sqr(&tmp, &r_curr);
-
-    oriint_t n_minus_x2;
-    if (oriint_is_ge(n, &tmp)) {
-        oriint_int_sub_3(&n_minus_x2, n, &tmp);
-    } else {
-        return false; 
-    }
-
-    // Cek apakah (n - x^2) adalah bilangan kuadrat sempurna
-    if (oriint_int_issquare(&n_minus_x2, y)) {
-        oriint_set(x, &r_curr);
-        
-        // Standar Cornacchia: kembalikan x > y
-        if (oriint_is_ge(y, x)) {
-            oriint_t swap;
-            oriint_set(&swap, x);
-            oriint_set(x, y);
-            oriint_set(y, &swap);
-        }
-        return true;
-    }
-
-    return false;
+static inline void oriint_random(oriint_t *RES) {
+  oriint_clear(RES);
+  for (int8_t i = 0; i < NBLOCK-1; i++) {
+    RES->bitsu64[i] = secure_random_uint64_kat(KAT_LABEL);
+  }
 }
 
 static inline void oriint_print(const char* label, const oriint_t* val) {
@@ -1097,17 +905,17 @@ static inline void oriint_print(const char* label, const oriint_t* val) {
   printf("\n");
 }
 
-static inline int oriint_getsize() {
-  int i=(2*NBLOCK)-1;
+static inline int8_t oriint_getsize() {
+  int8_t i=(2*NBLOCK)-1;
   while(i>0 && P.bitsu32[i]==0) i--;
   return i+1;
 }
 
 static void oriint_setup_mm64_msize() {
   uint64_t _mm64;
-  int _msize;
+  int8_t _msize;
 
-  int nSize = oriint_getsize();
+  int8_t nSize = oriint_getsize();
   // Last digit inversions (Newton's iteration)
   {
     int64_t x, t;
@@ -1147,7 +955,7 @@ static inline void oriint_tests() {
   oriint_setup_r2();
 
   oriint_t a, b, res, check, one, exp, q, r, dividend, divisor;
-  oriint_t n_mod, mu, x_val, y_val, z_res;
+  oriint_t n_mod, mu, x_c, y_c, n_prime;
   bool ok;
   oriint_set_one(&one);
 
@@ -1155,7 +963,7 @@ static inline void oriint_tests() {
   printf("\n                ORISIGN V9.7 - TEST SUITE LOG");
   printf("\n==============================================================\n");
 
-  // --- TEST 1-3: MODULAR BASIC (Fixed Modulus P) ---
+  // --- TEST 1-3: MODULAR BASIC (Montgomery Domain) ---
   printf("\n----- Test 1-3: Modular Basic (Montgomery) -----\n");
   oriint_clear(&a); a.bitsu64[0] = 2;
   oriint_clear(&b); b.bitsu64[0] = 3;
@@ -1174,25 +982,37 @@ static inline void oriint_tests() {
   printf("\n----- Test 4-5: Barrett Engine (Variable Modulus) -----\n");
   oriint_clear(&n_mod); n_mod.bitsu64[0] = 11;
   oriint_barrett_setup(&mu, &n_mod);
-  
+
   oriint_clear(&a); a.bitsu64[0] = 3;
   oriint_clear(&b); b.bitsu64[0] = 4;
-  
-  oriint_modvar_mul_fast(&res, &a, &b, &n_mod, &mu);
+
+  oriint_modvar_mul(&res, &a, &b, &n_mod, &mu);
   printf("%-21s: %llu (Expected: 1)\n", "3 * 4 mod 11", res.bitsu64[0]);
   printf("%-21s: %d\n", "Barrett OK?", oriint_is_equal(&res, &one));
 
-  // --- TEST 6-8: MODINV & MODSQRT ---
+  // --- TEST 6-8: MODINV & MODSQRT (Consistent Domain) ---
   printf("\n----- Test 6-8: Modinv & Modsqrt -----\n");
+  oriint_set(&a, &one);
+  oriint_mod_inv(&res);
+  oriint_print("modinv 1 mod P       : ", &res);
+
+  // Test Sqrt dengan input yang dikuadratkan dulu agar masuk Montgomery Domain
   oriint_clear(&a); a.bitsu64[0] = 5;
-  oriint_mod_sqrt(&res, &a, &ok); 
-  oriint_print("sqrt(5) mod P        : ", &res);
+  oriint_set(&b, &a);
+  oriint_mod_mul(&b, &a); // b = 5*5 mod P
+  oriint_print("x                    : ", &a);
+  oriint_print("a (x^2 mod P)        : ", &b);
 
-  oriint_clear(&a); a.bitsu64[0] = 9;
-  oriint_modvar_sqrt(&z_res, &a, &n_mod, &ok);
-  printf("%-21s: ok=%d, val=%llu (Expected: 3 or 8)\n", "sqrt(9) mod 11", ok, z_res.bitsu64[0]);
+  oriint_mod_sqrt(&res, &b, &ok);
+  printf("%-21s: %d\n", "modsqrt return", ok);
+  oriint_print("sqrt(a)              : ", &res);
 
-  // --- TEST 9-11: ISQRT & ISSQUARE ---
+  oriint_set(&check, &res);
+  oriint_mod_mul(&check, &res);
+  oriint_print("Verify (r^2 mod P)   : ", &check);
+  printf("%-21s: %d\n", "r^2 == a ?", oriint_is_equal(&check, &b));
+
+  // --- TEST 9-11: ISQRT & ISSQUARE (Integer Domain) ---
   printf("\n----- Test 9-11: isqrt & issquare -----\n");
   oriint_clear(&a); a.bitsu64[0] = 144;
   oriint_int_isqrt(&res, &a);
@@ -1201,40 +1021,47 @@ static inline void oriint_tests() {
   bool is_sq = oriint_int_issquare(&a, &r);
   printf("%-21s: is_square=%d, root=%llu\n", "issquare(144)", is_sq, r.bitsu64[0]);
 
-  // --- TEST 12: MODEXP (The Ultimate Test) ---
-  printf("\n----- Test 12: ModExp (Barrett Optimized) -----\n");
+  // --- TEST 12: MODEXP (Fermat's Little Theorem) ---
+  printf("\n----- Test 12: ModExp (Montgomery Optimized) -----\n");
   oriint_clear(&a); a.bitsu64[0] = 2;
-  oriint_clear(&exp); exp.bitsu64[0] = 10;
-  
-  oriint_modvar_exp(&res, &a, &exp, &n_mod);
-  printf("%-21s: %llu (Expected: 1)\n", "2^10 mod 11", res.bitsu64[0]);
+  oriint_set(&exp, (oriint_t*)&P);
+  oriint_int_sub_2(&exp, &one); // exp = P - 1
+  oriint_mod_exp(&res, &a, &exp);
+  oriint_print("2^(P-1) mod P        : ", &res);
+  printf("%-21s: %d\n", "Is result 1 ?", oriint_is_equal(&res, &one));
 
   // --- TEST 13: CORNACCHIA DIAGNOSTIC ---
   printf("\n----- Test 13: Cornacchia Diagnostic -----\n");
-  oriint_t n13, x_c, y_c;
+  oriint_t n13;
   oriint_clear(&n13); n13.bitsu64[0] = 13;
-  
   bool ok_corn = oriint_solve_cornacchia(&n13, &x_c, &y_c);
   printf("Cornacchia ok?       : %d\n", ok_corn);
   if(ok_corn) {
-    printf("Result               : x=%llu, y=%llu\n", x_c.bitsu64[0], y_c.bitsu64[0]);
+    printf("Result               : x=%llu, y=%llu (Expected: 3, 2)\n", x_c.bitsu64[0], y_c.bitsu64[0]);
   }
 
   // --- TEST 14: PRIMALITY TEST (Miller-Rabin) ---
   printf("\n----- Test 14: Primality Test (Miller-Rabin) -----\n");
-  oriint_t n_prime, n_comp;
-  
+
   // Kasus 1: 17 (Prima)
   oriint_clear(&n_prime); n_prime.bitsu64[0] = 17;
   printf("Is 17 prime?         : %d (Expected: 1)\n", oriint_is_prime(&n_prime, 5));
 
-  // Kasus 2: 15 (Komposit)
-  oriint_clear(&n_comp); n_comp.bitsu64[0] = 15;
-  printf("Is 15 prime?         : %d (Expected: 0)\n", oriint_is_prime(&n_comp, 5));
-
-  // Kasus 3: Angka Prima 32-bit (2147483647 / 2^31-1)
+  // Kasus 2: 2^31-1 (Mersenne Prime)
   oriint_clear(&n_prime); n_prime.bitsu64[0] = 2147483647ULL;
   printf("Is 2^31-1 prime?     : %d (Expected: 1)\n", oriint_is_prime(&n_prime, 5));
+
+  // Kasus 3: 15 (Komposit)
+  oriint_clear(&n_prime); n_prime.bitsu64[0] = 15;
+  printf("Is 15 prime?         : %d (Expected: 0)\n", oriint_is_prime(&n_prime, 5));
+
+  // --- TEST 15: MODSUB BOUNDARY ---
+  printf("\n----- Test 15: modsub boundary -----\n");
+  oriint_clear(&a);
+  oriint_mod_sub_2(&res, &a, &one); // 0 - 1 mod P
+  oriint_set(&check, (oriint_t*)&P);
+  oriint_int_sub_2(&check, &one);
+  printf("%-21s: %d\n", "0 - 1 == P - 1 ?", oriint_is_equal(&res, &check));
 
   printf("\n----- ALL TESTS COMPLETED -----\n");
   printf("-------------------------------\n");

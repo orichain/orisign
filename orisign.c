@@ -45,11 +45,6 @@ int main() {
     const char* msg = "ORISIGN_V9.7_FINAL_PRODUCTION";
     printf("[DATA] Message: \"%s\"\n", msg);
 
-    uint8_t kat_seed[KAT_SEED_SIZE];
-    arc4random_buf(kat_seed, KAT_SEED_SIZE);
-    kat_init(kat_seed);
-    printf("[KAT] Deterministic RNG: ENABLED (RFC 6979 style)\n");
-
     printf("[SIGN] Executing SQISIGN Protocol...\n");
     printf("[SIGN] Searching for smooth isogeny path (KLPT Algorithm)...\n");
     

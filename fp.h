@@ -8,19 +8,18 @@
 #include <sys/endian.h>
 
 static inline void fp_from_signed(oriint_t *RES, oriint_t *a) {
-    if (a->bits64[4] < 0LL) {
-        oriint_int_add_3(RES, a, &P);
-    } else {
-        oriint_set(RES, a);
-    }
+    uint64_t mask = -(uint64_t)((a->bits64[NBLOCK - 1]) >> 63);
+    oriint_t tmp;
+    oriint_int_add_3(&tmp, a, &P);
+    oriint_select_mask(RES, a, &tmp, mask);
 }
 
 static inline void fp_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
-    oriint_int_add_3(RES, a, b);
+    oriint_mod_add(RES, a, b);
 }
 
 static inline void fp_sub(oriint_t *RES, oriint_t *a, oriint_t *b) {
-    oriint_int_sub_3(RES, a, b);
+    oriint_mod_sub_2(RES, a, b);
 }
 
 static inline void fp_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
