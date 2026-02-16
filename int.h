@@ -353,7 +353,7 @@ static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
   }
 }
 
-static inline void oriint_modnonp_add(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n) {
+static inline void oriint_modvar_add(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n) {
     oriint_int_add_3(RES, a, b);
     if (oriint_is_ge(RES, n)) {
         oriint_int_sub_2(RES, n);
@@ -677,7 +677,7 @@ static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp
   oriint_set(RES, &result);
 }
 
-static void oriint_modnonp_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n) {
+static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n) {
     oriint_t result;
     oriint_t base;
     oriint_t tmp;
@@ -766,7 +766,7 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
   }
 }
 
-static void oriint_modnonp_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, bool *is_valid) {
+static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, bool *is_valid) {
     oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b;
     oriint_set_one(&one);
     oriint_int_sub_3(&n_minus_1, n, &one);
@@ -791,7 +791,7 @@ static void oriint_modnonp_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t
         oriint_set(&exp, n);
         oriint_int_add_1(&exp, &one);
         oriint_int_shiftr(2, &exp); // (n+1)/4
-        oriint_modnonp_exp(RES, a, &exp, n);
+        oriint_modvar_exp(RES, a, &exp, n);
         
         // Verifikasi
         oriint_int_sqr(&tmp, RES);
@@ -806,18 +806,18 @@ static void oriint_modnonp_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t
     uint64_t g = 2;
     while (g < 50) {
         oriint_clear(&z); z.bitsu64[0] = g;
-        oriint_modnonp_exp(&check_z, &z, &z_exp, n);
+        oriint_modvar_exp(&check_z, &z, &z_exp, n);
         if (oriint_is_equal(&check_z, &n_minus_1)) break;
         g++;
     }
 
     // 4. Inisialisasi Tonelli-Shanks
     M.bitsu64[0] = s;
-    oriint_modnonp_exp(&c, &z, &q, n);
+    oriint_modvar_exp(&c, &z, &q, n);
     oriint_t r_exp;
     oriint_set(&r_exp, &q); oriint_int_add_1(&r_exp, &one); oriint_int_shiftr(1, &r_exp);
-    oriint_modnonp_exp(&R, a, &r_exp, n);
-    oriint_modnonp_exp(&t, a, &q, n);
+    oriint_modvar_exp(&R, a, &r_exp, n);
+    oriint_modvar_exp(&t, a, &q, n);
 
     // 5. Loop Tonelli
     for (;;) {
@@ -865,7 +865,7 @@ static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y)
 
     // 1. Hitung z = sqrt(n - 1) mod n  => ini adalah sqrt(-1) mod n
     oriint_int_sub_3(&tmp, n, &one); 
-    oriint_modnonp_sqrt(&z, &tmp, n, &is_valid); 
+    oriint_modvar_sqrt(&z, &tmp, n, &is_valid); 
     
     if (!is_valid) return false;
 
@@ -1117,7 +1117,7 @@ static inline void oriint_tests() {
   printf("\n----- Test 15-16: Modnonp (Variable Modulus) -----\n");
   
   oriint_t n_mod, x_val, y_val, z_res;
-  // Kita pilih n yang memenuhi n % 4 == 3 agar modnonp_sqrt bekerja
+  // Kita pilih n yang memenuhi n % 4 == 3 agar modvar_sqrt bekerja
   // Contoh: n = 11
   oriint_clear(&n_mod); n_mod.bitsu64[0] = 11;
   oriint_clear(&a);     a.bitsu64[0] = 3;
@@ -1132,7 +1132,7 @@ static inline void oriint_tests() {
   // Test 16: Modular Sqrt Non-P
   // Mencari sqrt(9) mod 11. Hasilnya bisa 3 atau 8 (11-3)
   oriint_clear(&a); a.bitsu64[0] = 9;
-  oriint_modnonp_sqrt(&z_res, &a, &n_mod, &ok);
+  oriint_modvar_sqrt(&z_res, &a, &n_mod, &ok);
   printf("%-21s: ok=%d, val=%llu\n", "sqrt(9) mod 11", ok, z_res.bitsu64[0]);
 
   // --- TEST 17: Ultimate Diagnostic ---
@@ -1148,15 +1148,15 @@ static inline void oriint_tests() {
   oriint_clear(&six_exp); six_exp.bitsu64[0] = 6;
 
   // Test 1: Dasar perpangkatan (Harus 12)
-  oriint_modnonp_exp(&res_exp, &a12, &one_exp, &n13);
+  oriint_modvar_exp(&res_exp, &a12, &one_exp, &n13);
   printf("Diagnostic 1 (12^1 mod 13)  : %llu\n", res_exp.bitsu64[0]);
 
   // Test 2: Kriteria Euler (Harus 12 jika -1 adalah quadratic residue)
-  oriint_modnonp_exp(&res_exp, &a12, &six_exp, &n13);
+  oriint_modvar_exp(&res_exp, &a12, &six_exp, &n13);
   printf("Diagnostic 2 (12^6 mod 13)  : %llu\n", res_exp.bitsu64[0]);
 
   // Test 3: Tonelli-Shanks Sqrt
-  oriint_modnonp_sqrt(&z_c, &a12, &n13, &ok_sqrt);
+  oriint_modvar_sqrt(&z_c, &a12, &n13, &ok_sqrt);
   printf("Diagnostic 3 (sqrt ok?)     : %d\n", ok_sqrt);
   if(ok_sqrt) printf("   Value z                  : %llu\n", z_c.bitsu64[0]);
 
