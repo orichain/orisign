@@ -1,4 +1,4 @@
-#pragma onc
+#pragma once
 #include "globals.h"
 #include "kat.h"
 #include "types.h"
