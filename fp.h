@@ -80,12 +80,12 @@ static inline bool fp2_equal(fp2_t *a, fp2_t *b) {
 
 static inline void fp2_pack(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
   size_t offset = 0;
-  for (size_t i = 0; i < NBLOCK; i++) {
+  for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be = htobe64(a->re.bitsu64[i]);
     memcpy(out + offset, &v_be, sizeof(uint64_t));
     offset += sizeof(uint64_t);
   }
-  for (size_t i = 0; i < NBLOCK; i++) {
+  for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be = htobe64(a->im.bitsu64[i]);
     memcpy(out + offset, &v_be, sizeof(uint64_t));
     offset += sizeof(uint64_t);
@@ -94,18 +94,20 @@ static inline void fp2_pack(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
 
 static inline void fp2_unpack(fp2_t *RES, const uint8_t in[2 * FP_BYTES]) {
   size_t offset = 0;
-  for (size_t i = 0; i < NBLOCK; i++) {
+  for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be;
     memcpy(&v_be, in + offset, sizeof(uint64_t));
     RES->re.bitsu64[i] = be64toh(v_be);
     offset += sizeof(uint64_t);
   }
-  for (size_t i = 0; i < NBLOCK; i++) {
+  RES->re.bitsu64[NBLOCK-1] = 0ULL;
+  for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be;
     memcpy(&v_be, in + offset, sizeof(uint64_t));
     RES->im.bitsu64[i] = be64toh(v_be);
     offset += sizeof(uint64_t);
   }
+  RES->im.bitsu64[NBLOCK-1] = 0ULL;
 }
 
 static inline void fp2_mul_scalar(fp2_t *RES, fp2_t *a, oriint_t *b) {
