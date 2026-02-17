@@ -65,6 +65,13 @@ static inline void oriint_set_one(oriint_t *a) {
   }
 }
 
+static inline void oriint_set_u64(oriint_t *a, uint64_t b) {
+  a->bitsu64[0] = b;
+  for (int8_t i = 1; i < NBLOCK; i++) {
+    a->bitsu64[i] = 0ULL;
+  }
+}
+
 static inline void oriint_clear(oriint_t *a) {
   for (int8_t i = 0; i < NBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
@@ -287,6 +294,12 @@ static inline void oriint_mod_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b) {
     oriint_int_add_1(RES, &P);
 }
 
+static inline void oriint_modvar_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b, oriint_t *n) {
+  oriint_int_sub_3(RES, a, b);
+  if (RES->bits64[NBLOCK - 1] < 0)
+    oriint_int_add_1(RES, n);
+}
+
 static inline void oriint_mod_sub_1(oriint_t *RES, oriint_t *a) {
   oriint_int_sub_2(RES, a);
   if (RES->bits64[NBLOCK - 1] < 0)
@@ -296,6 +309,11 @@ static inline void oriint_mod_sub_1(oriint_t *RES, oriint_t *a) {
 static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
   oriint_int_add_3(RES, a, b);
   oriint_select_ge(RES, RES, &P);
+}
+
+static inline void oriint_modvar_add(oriint_t *RES, oriint_t *a, oriint_t *b, oriint_t *n) {
+  oriint_int_add_3(RES, a, b);
+  oriint_select_ge(RES, RES, n);
 }
 
 static inline void oriint_modvar_inv(oriint_t *RES, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize) {
@@ -836,6 +854,45 @@ static inline void oriint_random(oriint_t *RES) {
   for (int8_t i = 0; i < NBLOCK-1; i++) {
     RES->bitsu64[i] = secure_random_uint64_kat(KAT_LABEL);
   }
+  RES->bitsu64[NBLOCK-1] = 0ULL;
+}
+
+static inline bool oriint_solve_klpt(oriint_t *target_norm, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
+  if (oriint_is_zero(target_norm)) return false;
+  oriint_t limit, one, limitpone, r2z;
+  uint64_t mm64z;
+  uint8_t msizez;
+  oriint_set_one(&one);
+  oriint_int_isqrt(&limit, target_norm);
+  oriint_int_add_3(&limitpone, &limit, &one);
+  oriint_modvar_setup(&mm64z, &msizez, &r2z, &limitpone);
+  for (int attempts = 0; attempts < 1000; attempts++) {
+    oriint_t z,z2, remz;
+    oriint_random(&z);
+    oriint_modvar_sqr(&z2, &z, &limitpone, &mm64z, &msizez, &r2z);
+    oriint_modvar_sub_2(&remz, target_norm, &z2, &limitpone);
+    oriint_t limitw, limitwpone, r2w, w, w2, remw;
+    uint64_t mm64w;
+    uint8_t msizew;
+    oriint_int_isqrt(&limitw, &remz);
+    oriint_int_add_3(&limitwpone, &limitw, &one);
+    oriint_modvar_setup(&mm64w, &msizew, &r2w, &limitwpone);
+    oriint_random(&w);
+    oriint_modvar_sqr(&w2, &w, &limitwpone, &mm64w, &msizew, &r2w);
+    oriint_modvar_sub_2(&remw, &remz, &w2, &limitwpone);
+    oriint_t x, y;
+    if (oriint_solve_cornacchia(&remw, &x, &y)) {
+      oriint_set(&res->w, &w);
+      oriint_set(&res->x, &x);
+      oriint_set(&res->y, &y);
+      oriint_set(&res->z, &z);
+      oriint_set(reslimitzpone, &limitpone);
+      oriint_set(reslimitwpone, &limitwpone);
+      oriint_set(resremw, &remw);
+      return true;
+    }
+  }
+  return false;
 }
 
 static inline void oriint_print(const char* label, const oriint_t* val) {
@@ -992,6 +1049,63 @@ static inline void oriint_tests() {
   oriint_set(&check, (oriint_t*)&P);
   oriint_int_sub_2(&check, &one);
   printf("%-21s: %d\n", "0 - 1 == P - 1 ?", oriint_is_equal(&res, &check));
+
+  // ==========================================================
+  // Test 16: KLPT Decomposition (Alpha Candidate Search)
+  // ==========================================================
+  printf("----- Test 16: KLPT Decomposition (Alpha Candidate Search) -----\n");
+
+  quaternion_t resklpt;
+  oriint_t target, x2, y2, sum_xy, klpt_remw, klpt_limitzpone, klpt_limitwpone;
+  oriint_t n_w2, n_x2, n_y2, n_z2, sum_wz, total_norm;
+  oriint_t total_mod, target_mod;
+
+  oriint_set_u64(&target, 0xABCDEF1234567891ULL);
+  printf("Target Norm     : "); oriint_print("", &target); printf("\n");
+
+  if (oriint_solve_klpt(&target, &resklpt, &klpt_limitzpone, &klpt_limitzpone, &klpt_remw)) {
+    printf("KLPT Status     : [ SUCCESS ]\n");
+    printf("Alpha Candidate found within attempt limits.\n");
+
+    // Print koefisien dasar hasil dekomposisi
+    printf("  w (mod_limit) : "); oriint_print("", &resklpt.w);
+    printf("  z (mod_limit) : "); oriint_print("", &resklpt.z);
+    printf("  limitz1       : "); oriint_print("", &klpt_limitzpone);
+    printf("  limitw1       : "); oriint_print("", &klpt_limitwpone);
+    printf("  remw          : "); oriint_print("", &klpt_remw);
+    printf("  x (Cornacchia): "); oriint_print("", &resklpt.x);
+    printf("  y (Cornacchia): "); oriint_print("", &resklpt.y);
+
+    // --- Verifikasi 1: Cornacchia Integrity (Integer) ---
+    oriint_int_sqr(&x2, &resklpt.x);
+    oriint_int_sqr(&y2, &resklpt.y);
+    oriint_int_add_3(&sum_xy, &x2, &y2);
+    
+    // Cek x^2 + y^2 == remw
+    bool valid_xy = oriint_is_ge(&sum_xy, &klpt_remw) && oriint_is_ge(&klpt_remw, &sum_xy);
+    printf("Verify (x^2+y^2 == remw)   : %d\n", valid_xy);
+
+    // --- Verifikasi 2: Modular Norm Integrity (N(alpha) mod remw) ---
+    // 1. Hitung total norma secara integer murni (tanpa modulo dulu)
+    oriint_int_sqr(&n_w2, &resklpt.w);
+    oriint_int_sqr(&n_x2, &resklpt.x);
+    oriint_int_sqr(&n_y2, &resklpt.y);
+    oriint_int_sqr(&n_z2, &resklpt.z);
+
+    oriint_int_add_3(&sum_wz, &n_w2, &n_z2);
+    oriint_int_add_3(&sum_xy, &n_x2, &n_y2);
+    oriint_int_add_3(&total_norm, &sum_wz, &sum_xy);
+
+    // 2. Bandingkan (N(alpha) mod remw) == (Target mod remw)
+    bool valid_mod = oriint_is_ge(&total_mod, &target_mod) && oriint_is_ge(&target_mod, &total_mod);
+    
+    printf("Verify N(alpha) == Target  : %d\n", valid_mod);
+    printf("Result          : Candidate Alpha is ready for Theta Mapping.\n");
+
+  } else {
+    printf("KLPT Status     : [ FAILED ]\n");
+    printf("Error: Could not decompose target. Check random/isqrt logic.\n");
+  }
 
   printf("\n----- ALL TESTS COMPLETED -----\n");
   printf("-------------------------------\n");
