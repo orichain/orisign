@@ -582,22 +582,18 @@ static void oriint_modvar_sqr(oriint_t *RES, const oriint_t *a, const oriint_t *
   oriint_modvar_mul(RES, a, a, n, mm64, msize, r2);
 }
 
-static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n) {
+static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
   oriint_t result;
   oriint_t base;
-  oriint_t r2;
-  uint64_t mm64;
-  uint8_t msize;
-  oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set_one(&result);
   oriint_int_mod(&base, a, n);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_modvar_sqr(&result, &result, n, &mm64, &msize, &r2);
+    oriint_modvar_sqr(&result, &result, n, mm64, msize, r2);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
     oriint_t mul_res;
-    oriint_modvar_mul(&mul_res, &result, &base, n, &mm64, &msize, &r2);
+    oriint_modvar_mul(&mul_res, &result, &base, n, mm64, msize, r2);
     oriint_select_mask(&result, &result, &mul_res, mask);
   }
   oriint_set(RES, &result);
@@ -634,10 +630,8 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
   }
 }
 
-static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, bool *is_valid) {
-  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b, r2;
-  uint64_t mm64;
-  uint8_t msize;
+static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, bool *is_valid) {
+  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
 
@@ -646,7 +640,6 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     if (is_valid) *is_valid = true;
     return;
   }
-  oriint_modvar_setup(&mm64, &msize, &r2, n);
   oriint_set(&q, &n_minus_1);
   uint64_t s = 0;
   while (oriint_is_even(&q) && s < 256) {
@@ -658,8 +651,8 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     oriint_set(&exp, n);
     oriint_int_add_1(&exp, &one);
     oriint_int_shiftr(2, &exp);
-    oriint_modvar_exp(RES, a, &exp, n);
-    oriint_modvar_sqr(&check_z, RES, n, &mm64, &msize, &r2);
+    oriint_modvar_exp(RES, a, &exp, n, mm64, msize, r2);
+    oriint_modvar_sqr(&check_z, RES, n, mm64, msize, r2);
     if (is_valid) *is_valid = oriint_is_equal(&check_z, a);
     return;
   }
@@ -668,16 +661,16 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
   uint64_t g = 2;
   while (g < 50) {
     oriint_clear(&z); z.bitsu64[0] = g;
-    oriint_modvar_exp(&check_z, &z, &z_exp, n);
+    oriint_modvar_exp(&check_z, &z, &z_exp, n, mm64, msize, r2);
     if (oriint_is_equal(&check_z, &n_minus_1)) break;
     g++;
   }
   M.bitsu64[0] = s;
-  oriint_modvar_exp(&c, &z, &q, n);
+  oriint_modvar_exp(&c, &z, &q, n, mm64, msize, r2);
   oriint_t r_exp;
   oriint_set(&r_exp, &q); oriint_int_add_1(&r_exp, &one); oriint_int_shiftr(1, &r_exp);
-  oriint_modvar_exp(&R, a, &r_exp, n);
-  oriint_modvar_exp(&t, a, &q, n);
+  oriint_modvar_exp(&R, a, &r_exp, n, mm64, msize, r2);
+  oriint_modvar_exp(&t, a, &q, n, mm64, msize, r2);
   for (;;) {
     if (oriint_is_equal(&t, &one)) {
       if (is_valid) *is_valid = true;
@@ -687,7 +680,7 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     uint64_t i = 0;
     oriint_t tt; oriint_set(&tt, &t);
     for (i = 1; i < M.bitsu64[0]; i++) {
-      oriint_modvar_sqr(&tt, &tt, n, &mm64, &msize, &r2);
+      oriint_modvar_sqr(&tt, &tt, n, mm64, msize, r2);
       if (oriint_is_equal(&tt, &one)) break;
     }
     if (i == M.bitsu64[0]) {
@@ -698,12 +691,12 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
     uint64_t power = M.bitsu64[0] - i - 1;
     oriint_set(&b, &c);
     for (uint64_t j = 0; j < power; j++) {
-      oriint_modvar_sqr(&b, &b, n, &mm64, &msize, &r2);
+      oriint_modvar_sqr(&b, &b, n, mm64, msize, r2);
     }
     M.bitsu64[0] = i;
-    oriint_modvar_sqr(&c, &b, n, &mm64, &msize, &r2);
-    oriint_modvar_mul(&t, &t, &c, n, &mm64, &msize, &r2);
-    oriint_modvar_mul(&R, &R, &b, n, &mm64, &msize, &r2);
+    oriint_modvar_sqr(&c, &b, n, mm64, msize, r2);
+    oriint_modvar_mul(&t, &t, &c, n, mm64, msize, r2);
+    oriint_modvar_mul(&R, &R, &b, n, mm64, msize, r2);
   }
 }
 
@@ -755,7 +748,7 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
 
     if (oriint_is_ge(&base, n)) continue;
 
-    oriint_modvar_exp(&x, &base, &d, n);
+    oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
     if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
 
     bool composite = true;
@@ -776,7 +769,7 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
   return true;
 }
 
-static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y) {
+static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, oriint_t *x, oriint_t *y) {
   // 1. Filter Dasar: n harus ganjil dan > 1
   if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
 
@@ -794,7 +787,7 @@ static bool oriint_solve_cornacchia(const oriint_t *n, oriint_t *x, oriint_t *y)
   oriint_int_sub_3(&n_minus_1, n, &one);
 
   // 4. Cari z sehingga z^2 = -1 mod n
-  oriint_modvar_sqrt(&z, &n_minus_1, n, &is_valid);
+  oriint_modvar_sqrt(&z, &n_minus_1, n, mm64, msize, r2, &is_valid);
   if (!is_valid) return false;
 
   // Normalisasi z: pilih z = min(z, n - z) 
@@ -871,17 +864,18 @@ static inline bool oriint_solve_klpt(oriint_t *target_norm, quaternion_t *res, o
     oriint_random(&z);
     oriint_modvar_sqr(&z2, &z, &limitpone, &mm64z, &msizez, &r2z);
     oriint_modvar_sub_2(&remz, target_norm, &z2, &limitpone);
-    oriint_t limitw, limitwpone, r2w, w, w2, remw;
-    uint64_t mm64w;
-    uint8_t msizew;
+    oriint_t limitw, limitwpone, r2w, r2rw, w, w2, remw;
+    uint64_t mm64w, mm64rw;
+    uint8_t msizew, msizerw;
     oriint_int_isqrt(&limitw, &remz);
     oriint_int_add_3(&limitwpone, &limitw, &one);
     oriint_modvar_setup(&mm64w, &msizew, &r2w, &limitwpone);
     oriint_random(&w);
     oriint_modvar_sqr(&w2, &w, &limitwpone, &mm64w, &msizew, &r2w);
     oriint_modvar_sub_2(&remw, &remz, &w2, &limitwpone);
+    oriint_modvar_setup(&mm64rw, &msizerw, &r2rw, &remw);
     oriint_t x, y;
-    if (oriint_solve_cornacchia(&remw, &x, &y)) {
+    if (oriint_solve_cornacchia(&remw, &mm64rw, &msizerw, &r2rw, &x, &y)) {
       oriint_set(&res->w, &w);
       oriint_set(&res->x, &x);
       oriint_set(&res->y, &y);
@@ -1021,7 +1015,13 @@ static inline void oriint_tests() {
   printf("\n----- Test 13: Cornacchia Diagnostic -----\n");
   oriint_t n13;
   oriint_clear(&n13); n13.bitsu64[0] = 13;
-  bool ok_corn = oriint_solve_cornacchia(&n13, &x_c, &y_c);
+
+  oriint_t r213;
+  uint64_t mm6413;
+  uint8_t msize13;
+  oriint_modvar_setup(&mm6413, &msize13, &r213, &n13);
+
+  bool ok_corn = oriint_solve_cornacchia(&n13, &mm6413, &msize13, &r213, &x_c, &y_c);
   printf("Cornacchia ok?       : %d\n", ok_corn);
   if(ok_corn) {
     printf("Result               : x=%llu, y=%llu (Expected: 3, 2)\n", x_c.bitsu64[0], y_c.bitsu64[0]);
