@@ -12,4 +12,5 @@ extern const oriint_t P;
 extern const uint8_t Msize;
 extern const oriint_t R2;
 extern const uint64_t MSK62;
-
+extern const oriint_t THETA_SQRT2;
+extern const oriint_t NORM_IDEAL;

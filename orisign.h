@@ -6,335 +6,239 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/endian.h>
-
+#include <time.h>
 #include "constants.h"
 #include "fips202.h"
-#include "ideal_old.h"
-#include "theta_old.h"
+#include "int.h"
+#include "theta.h"
 #include "types.h"
-#include "utilities.h"
-#include "fp_old.h"
+#include "fp.h"
+#include "quaternion.h"
 
-/* ============================================================
- * 1. CORE UTILITIES & CONSTANT-TIME
- * ============================================================ */
-
-static inline ThetaNullPoint_Fp2 get_nist_baseline_theta(void)
-{
-    const fp2old_t a = { .re = NIST_THETA_SQRT2, .im = 0 };
-    const fp2old_t b = { .re = 1,                 .im = 0 };
-    const fp2old_t c = { .re = 1,                 .im = 0 };
-    const fp2old_t d = { .re = 0,                 .im = 0 };
-    return (ThetaNullPoint_Fp2){ a, b, c, d };
-}
-
-static inline void apply_isogeny_chain_challenge(ThetaNullPoint_Fp2 *T, const uint8_t chal[HASHES_BYTES])
-{
-    _Static_assert(SQ_POWER_OLD <= (HASHES_BYTES * 8), "Error: SQ_POWER lebih besar dari jumlah bit yang tersedia di challenge hash!");
-    for (int i = 0; i < SQ_POWER_OLD; i++) {
-        uint8_t byte = chal[i >> 3];
-        uint64_t bit = (uint64_t)((byte >> (i & 7)) & 1u);
-
-        fp2old_t xT;
-        xT.re = ct_select_u64(T->c.re, T->b.re, bit);
-        xT.im = ct_select_u64(T->c.im, T->b.im, bit);
-
-        eval_sq_isogeny_velu_theta(T, xT);
-        canonicalize_theta(T);
-    }
-}
-
-/* ============================================================
- * 2. CHALLENGE HASH (Hardened against Struct Padding)
- * ============================================================ */
-static inline void get_nist_challenge_v3(uint8_t *hash_out, const char* msg, ThetaNullPoint_Fp2 comm, ThetaNullPoint_Fp2 pk)
-{
-    shake256incctx ctx;
-    shake256_inc_init(&ctx);
-    shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
-    shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
-
-    uint8_t buf[FP2_BYTES_OLD];
-    ThetaCompressed_Fp2 cc = theta_compress(comm);
-    ThetaCompressed_Fp2 pkc = theta_compress(pk);
-
-    fp2_pack(buf, cc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-    fp2_pack(buf, cc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-    fp2_pack(buf, cc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-
-    fp2_pack(buf, pkc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-    fp2_pack(buf, pkc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-    fp2_pack(buf, pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES_OLD);
-
-    shake256_inc_finalize(&ctx);
-    shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
-}
-
-/* ============================================================
- * 3. KEY GENERATION & DERIVATION
- * ============================================================ */
-
-/* ============================================================
- * FUTURE OPTIMIZED VERSION (v10 candidate)
- * ============================================================ */
-static inline void apply_quaternion_action_to_theta(ThetaNullPoint_Fp2 *T, Quaternion q)
-{
-    // 1. Pra-komputasi (Hanya 4 kali encode, bukan 16)
-    uint64_t w = fp_encode_signed(q.w);
-    uint64_t x = fp_encode_signed(q.x);
-    uint64_t y = fp_encode_signed(q.y);
-    uint64_t z = fp_encode_signed(q.z);
-
-    // Simpan koordinat lama untuk menghindari aliasing
-    fp2old_t a = T->a, b = T->b, c = T->c, d = T->d;
-
-    // 2. Linear Combination dengan register lokal
-    // Batch 1: a' dan b'
-    T->a = fp2_add(fp2_add(fp2_mul_scalar(a, w), fp2_mul_scalar(b, x)),
-                   fp2_add(fp2_mul_scalar(c, y), fp2_mul_scalar(d, z)));
-
-    T->b = fp2_add(fp2_sub(fp2_mul_scalar(b, w), fp2_mul_scalar(a, x)),
-                   fp2_sub(fp2_mul_scalar(d, y), fp2_mul_scalar(c, z)));
-
-    // Batch 2: c' dan d'
-    T->c = fp2_sub(fp2_sub(fp2_mul_scalar(c, w), fp2_mul_scalar(d, x)),
-                   fp2_sub(fp2_mul_scalar(a, y), fp2_mul_scalar(b, z)));
-
-    T->d = fp2_add(fp2_sub(fp2_mul_scalar(d, w), fp2_mul_scalar(c, x)),
-                   fp2_sub(fp2_mul_scalar(b, y), fp2_mul_scalar(a, z)));
-
+static inline void apply_isogeny_chain_challenge(thetanullpoint_t *T, const uint8_t chal[HASHES_BYTES]) {
+  for (int i = 0; i < SQ_POWER; i++) {
+    uint8_t byte = chal[i >> 3];
+    uint64_t bit = (uint64_t)((byte >> (i & 7)) & 1u);
+    uint64_t mask = -(uint64_t)(bit != 0);
+    fp2_t xT;
+    oriint_select_mask(&xT.re, &T->c.re, &T->b.re, mask);
+    oriint_select_mask(&xT.im, &T->c.im, &T->b.im, mask);
+    eval_sq_isogeny_velu_theta(T, &xT);
     canonicalize_theta(T);
+  }
 }
 
-static inline ThetaNullPoint_Fp2 derive_public_key(QuaternionIdeal sk_I)
-{
-    ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
-    
-    // Konsistensi 1: Gunakan Full Ideal Action untuk transformasi koordinat
-    apply_quaternion_action_to_theta(&T, sk_I.b[0]);
-    
-    // Konsistensi 2: Jalankan rantai isogeni berdasarkan norma rahasia
-    // Ini mensimulasikan jalur isogeni rahasia phi_I
-    apply_quaternion_to_theta_chain(&T, sk_I.norm);
-    
-    canonicalize_theta(&T);
-
-    return T;
+static inline void get_challenge(uint8_t *hash_out, const char* msg, thetanullpoint_t *comm, thetanullpoint_t *pk) {
+  shake256incctx ctx;
+  shake256_inc_init(&ctx);
+  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
+  uint8_t buf[FP2_BYTES];
+  thetacompressed_t cc,pkc;
+  theta_compress(&cc, comm);
+  theta_compress(&pkc, pk);
+  fp2_pack(buf, &cc.b); 
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &cc.c); 
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &cc.d); 
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.b);
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.c); 
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.d); 
+  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  shake256_inc_finalize(&ctx);
+  shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
 }
 
-/**
- * @brief Key Generation V9.7 - NIST PQC Standard
- * Menghasilkan Secret Key berupa Ideal Kuaternion dengan Norma Prima.
- * Menggunakan CSPRNG Hardware dan Solver KLPT Probabilistik.
- */
-static inline QuaternionIdeal keygen_v9(void)
-{
-    QuaternionIdeal sk;
-    memset(&sk, 0, sizeof(sk));
+static inline void apply_quaternion_action_to_theta(thetanullpoint_t *T, quaternion_t *q) {
+  oriint_t w,x,y,z;
+  fp2_t a,b,c,d,aw,bx,cy,dz,bw,ax,dy,cz,cw,dx,ay,bz,dw,cx,by,az;
+  fp2_t awbx,cydz,bwax,dycz,cwdx,aybz,dwcx,byaz;
+  oriint_set(&w,&q->w);
+  oriint_set(&x,&q->x);
+  oriint_set(&y,&q->y);
+  oriint_set(&z,&q->z);
+  fp2_set(&a,&T->a);
+  fp2_set(&b,&T->b);
+  fp2_set(&c,&T->c);
+  fp2_set(&d,&T->d);
+  fp2_mul_scalar(&aw,&a,&w);
+  fp2_mul_scalar(&bx,&b,&x);
+  fp2_mul_scalar(&cy,&c,&y);
+  fp2_mul_scalar(&dz,&d,&z);
+  fp2_mul_scalar(&bw,&b,&w);
+  fp2_mul_scalar(&ax,&a,&x);
+  fp2_mul_scalar(&dy,&d,&y);
+  fp2_mul_scalar(&cz,&c,&z);
+  fp2_mul_scalar(&cw,&c,&w);
+  fp2_mul_scalar(&dx,&d,&x);
+  fp2_mul_scalar(&ay,&a,&y);
+  fp2_mul_scalar(&bz,&b,&z);
+  fp2_mul_scalar(&dw,&d,&w);
+  fp2_mul_scalar(&cx,&c,&x);
+  fp2_mul_scalar(&by,&b,&y);
+  fp2_mul_scalar(&az,&a,&z);
+  fp2_add(&awbx,&aw,&bx);
+  fp2_add(&cydz,&cy,&dz);
+  fp2_sub(&bwax,&bw,&ax);
+  fp2_sub(&dycz,&dy,&cz);
+  fp2_sub(&cwdx,&cw,&dx);
+  fp2_sub(&aybz,&ay,&bz);
+  fp2_sub(&dwcx,&dw,&cx);
+  fp2_sub(&byaz,&by,&az);
+  fp2_add(&T->a,&awbx,&cydz);
+  fp2_add(&T->b,&bwax,&dycz);
+  fp2_sub(&T->c,&cwdx,&aybz);
+  fp2_add(&T->d,&dwcx,&byaz);
+  canonicalize_theta(T);
+}
 
-    uint64_t candidate = 0;
-    bool found_prime = false;
+static inline void derive_public_key(thetanullpoint_t *T, quaternion_ideal_t *sk_I) {
+  get_baseline_theta(T);
+  apply_quaternion_action_to_theta(T, &sk_I->b[0]);
+  apply_quaternion_to_theta_chain(T, &sk_I->norm);
+  canonicalize_theta(T);
+}
 
-    /* * 1. SEARCH FOR PRIME NORM
-     * Kita mencari bilangan prima yang memenuhi syarat p = 3 (mod 4) 
-     * di sekitar NIST_NORM_IDEAL menggunakan entropi hardware.
-     */
-    for (uint64_t attempts = 0; attempts < 100000; attempts++) {
-        // Mengambil entropi dari hardware (RDRAND / OpenBSD getentropy)
-        uint64_t rnd = secure_random_hardware();  
-        
-        // Membuat kandidat di rentang [NIST_NORM_IDEAL, NIST_NORM_IDEAL + 2000]
-        candidate = (NIST_NORM_IDEAL + (rnd % 2000ULL)) | 1ULL;
+static inline void keygen(quaternion_ideal_t *RES) {
+  memset(RES, 0, sizeof(quaternion_ideal_t));
+  oriint_t candidate;
+  oriint_clear(&candidate);
+  for (;;) {
+    oriint_random(&candidate);
+    if (
+        oriint_is_mod4_3(&candidate) &&
+        oriint_is_prime(&candidate, 40)
+       )
+    {
+      break;
+    }
+  }
+  oriint_set(&RES->norm, &candidate);
+  quaternion_t alpha;
+  oriint_t klpt_remw,klpt_limitzpone,klpt_limitwpone;
+  for (;;) {
+    if (oriint_solve_klpt(&RES->norm, &alpha, &klpt_limitzpone, &klpt_limitwpone, &klpt_remw)) {
+      quat_set(&RES->b[0], &alpha);
+      quaternion_t q0;
+      quaternion_t q1;
+      quaternion_t q2;
+      quat_set_01(&q0);
+      quat_set_02(&q1);
+      quat_set_03(&q2);
+      quat_mul(&RES->b[1], &alpha, &q0);
+      quat_mul(&RES->b[2], &alpha, &q1);
+      quat_mul(&RES->b[3], &alpha, &q2);
+      quat_norm(&RES->norm, &alpha);
+      break;
+    }
+  }
+}
 
-        // Syarat: p % 4 == 3 (mempermudah sqrt modular) dan harus Prima
-        if ((candidate & 3ULL) == 3ULL && candidate >= 7 &&
-            is_prime_miller_rabin_nist(candidate, 40)) 
-        {
-            found_prime = true;
+static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t *pk_theta) {
+    clock_t s_klpt = clock();
+    quaternion_t alpha_selected;
+    for (;;) {
+        oriint_t target,offset;
+        oriint_random_128(&offset);
+        oriint_int_add_3(&target, &NORM_IDEAL, &offset);
+        quaternion_t alpha_cand;
+        oriint_t klpt_remw,klpt_limitzpone,klpt_limitwpone;
+        if (oriint_solve_klpt(&target, &alpha_cand, &klpt_limitzpone, &klpt_limitwpone, &klpt_remw)) {
+            quat_set(&alpha_selected, &alpha_cand);
             break;
         }
     }
+    clock_t e_klpt = clock();
+    printf("  [SIGN LOG] KLPT Solver       : %.4f ms\n", (double)(e_klpt - s_klpt) * 1000 / CLOCKS_PER_SEC);
 
-    // Fallback jika tidak ditemukan (sangat jarang)
-    if (!found_prime) {
-        candidate = (NIST_NORM_IDEAL % 4 == 3) ? NIST_NORM_IDEAL : 34127;
-    }
+    clock_t s_theta = clock();
+    thetanullpoint_t T;
+    get_baseline_theta(&T);
+    apply_quaternion_action_to_theta(&T, &alpha_selected);
+    canonicalize_theta(&T);
+    clock_t e_theta = clock();
+    printf("  [SIGN LOG] Theta Action      : %.4f ms\n", (double)(e_theta - s_theta) * 1000 / CLOCKS_PER_SEC);
 
-    sk.norm = candidate;
-
-    /* * 2. GENERATE QUATERNION BASIS (b[0])
-     * Kita menggunakan klpt_solve_advanced (Versi New) untuk mencari 
-     * w, x, y, z secara acak sehingga w^2 + x^2 + y^2 + z^2 = sk.norm tepat.
-     */
-    Quaternion alpha;
-    bool solved = klpt_solve_advanced(sk.norm, &alpha);
-
-    if (solved) {
-        // Jika solver berhasil, kita mendapatkan basis yang sempurna
-        sk.b[0] = alpha;
-    } else {
-        /* * Fallback: Jika solver gagal (hampir mustahil untuk norma prima),
-         * kita buat basis sederhana agar program tidak crash.
-         */
-        sk.b[0].w = 1;
-        sk.b[0].x = 1;
-        sk.b[0].y = 1;
-        sk.b[0].z = (int64_t)isqrt_v9(sk.norm - 3);
-    }
-
-    /* * 3. EXPAND IDEAL BASIS
-     * Membangun basis O*alpha untuk melengkapi Ideal rahasia.
-     * Ini memastikan Anchor Point pada Public Key tidak nol.
-     */
-    sk.b[1] = quat_mul(sk.b[0], (Quaternion){0, 1, 0, 0}); // alpha * i
-    sk.b[2] = quat_mul(sk.b[0], (Quaternion){0, 0, 1, 0}); // alpha * j
-    sk.b[3] = quat_mul(sk.b[0], (Quaternion){0, 0, 0, 1}); // alpha * k
-
-    return sk;
+    clock_t s_hash = clock();
+    get_challenge(sig_out->challenge_val, msg, &T, pk_theta);
+    theta_compress(&sig_out->src, &T);
+    memset(&alpha_selected, 0, sizeof(quaternion_t));
+    clock_t e_hash = clock();
+    printf("  [SIGN LOG] Hash & Compress   : %.4f ms\n", (double)(e_hash - s_hash) * 1000 / CLOCKS_PER_SEC);
 }
 
-/* ============================================================
- * 4. SIGN & VERIFY
- * ============================================================ */
+static inline bool verify(const char *msg, signature_t *sig, thetanullpoint_t *pk_theta) {
+    if (theta_is_infinity(pk_theta)) return false;
+    
+    clock_t s_prep = clock();
+    thetanullpoint_t src,tgt;
+    theta_decompress(&src,&sig->src);
+    theta_set(&tgt,&src);
+    clock_t e_prep = clock();
+    printf("  [VRFY LOG] Decompress & Set  : %.4f ms\n", (double)(e_prep - s_prep) * 1000 / CLOCKS_PER_SEC);
 
-static inline bool is_alpha_secure(Quaternion alpha, uint64_t target_norm)
-{
-    if (alpha.w == 0 || alpha.x == 0 || alpha.y == 0 || alpha.z == 0)
-        return false;
-
-    if (alpha.w == alpha.x || alpha.w == alpha.y || alpha.w == alpha.z ||
-        alpha.x == alpha.y || alpha.x == alpha.z || alpha.y == alpha.z)
-        return false;
-
-    uint64_t norm = quat_norm(alpha);
-    if (norm == 0) return false;
-
-    __uint128_t lower = ((__uint128_t)target_norm * 85ULL) / 100ULL;
-    __uint128_t upper = ((__uint128_t)target_norm * 115ULL) / 100ULL;
-    if ((__uint128_t)norm < lower || (__uint128_t)norm > upper) return false;
-
-    __uint128_t limit = ((__uint128_t)target_norm * 80ULL) / 100ULL;
-    if (((__uint128_t)alpha.w * alpha.w) > limit ||
-        ((__uint128_t)alpha.x * alpha.x) > limit ||
-        ((__uint128_t)alpha.y * alpha.y) > limit ||
-        ((__uint128_t)alpha.z * alpha.z) > limit)
-        return false;
-
-    if (__builtin_popcountll(norm) < 6) return false;
-    return true;
-}
-
-static inline bool sign_v9(SQISignature_V9 *sig_out, const char* msg, QuaternionIdeal sk_I)
-{
-    _Static_assert(sizeof(uint64_t) == 8, "Entropy must be 64-bit");
-    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I);
-    uint64_t total_resets = 0;
-
-    while (total_resets <= MAX_SIGN_RESETS) {
-        Quaternion alpha_selected;
-        bool found = false;
-
-        for (uint64_t attempt = 0; attempt < MAX_SIGN_ATTEMPTS; attempt++) {
-            uint64_t target = NIST_NORM_IDEAL + (attempt * 13ULL);
-            Quaternion alpha_cand;
-            if (klpt_full_action(target, MODULO, &alpha_cand)) {
-                if (alpha_cand.w > 0 && is_alpha_secure(alpha_cand, target)) {
-                    alpha_selected = alpha_cand;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) { total_resets++; continue; }
-
-        ThetaNullPoint_Fp2 T = get_nist_baseline_theta();
-        apply_quaternion_action_to_theta(&T, alpha_selected);
-        canonicalize_theta(&T);
-
-        get_nist_challenge_v3(sig_out->challenge_val, msg, T, pk_theta);
-
-        sig_out->src = theta_compress(T);
-        
-        memset(&alpha_selected, 0, sizeof(alpha_selected));
-        return true;
-    }
-    return false;
-}
-
-static inline bool verify_v9(const char* msg, SQISignature_V9 *sig, ThetaNullPoint_Fp2 pk_theta)
-{
-    // 1. Derivasi Public Key dengan pengecekan titik tak hingga
-    if (theta_is_infinity(pk_theta)) return false; 
-
-    // 2. Dekompresi titik signature
-    ThetaNullPoint_Fp2 src = theta_decompress(sig->src);
-    ThetaNullPoint_Fp2 tgt = src;
+    clock_t s_chain = clock();
     apply_isogeny_chain_challenge(&tgt, sig->challenge_val);
     canonicalize_theta(&tgt);
+    clock_t e_chain = clock();
+    printf("  [VRFY LOG] Isogeny Chain     : %.4f ms\n", (double)(e_chain - s_chain) * 1000 / CLOCKS_PER_SEC);
 
-    // Pastikan titik yang didekompresi bukan sampah memori atau titik tak hingga
-    if (theta_is_infinity(src) || theta_is_infinity(tgt)) return false;
+    if (theta_is_infinity(&src) || theta_is_infinity(&tgt)) return false;
 
-    // 3. Verifikasi Challenge Hash (Cek integritas pesan & kunci)
+    clock_t s_hash = clock();
     uint8_t check[HASHES_BYTES];
-    get_nist_challenge_v3(check, msg, src, pk_theta);
+    get_challenge(check, msg, &src, pk_theta);
     if (memcmp(check, sig->challenge_val, HASHES_BYTES) != 0) return false;
+    clock_t e_hash = clock();
+    printf("  [VRFY LOG] Challenge Hash    : %.4f ms\n", (double)(e_hash - s_hash) * 1000 / CLOCKS_PER_SEC);
 
-    // 4. Rekonstruksi Jalur Isogeni (The "Climb")
-    ThetaNullPoint_Fp2 W = src;
+    clock_t s_reconst = clock();
+    thetanullpoint_t W;
+    theta_set(&W, &src);
     apply_isogeny_chain_challenge(&W, sig->challenge_val);
-    
-    // Gunakan canonicalize_theta yang sudah kita perbaiki tadi
     canonicalize_theta(&W);
+    clock_t e_reconst = clock();
+    printf("  [VRFY LOG] Reconstruction    : %.4f ms\n", (double)(e_reconst - s_reconst) * 1000 / CLOCKS_PER_SEC);
 
-    // 5. Constant-time Comparison
-    // Membandingkan b, c, dan d (karena a sudah dipaksa jadi 1 oleh canonicalize)
     uint64_t diff = 0;
-    diff |= (uint64_t)(!fp2_equal(W.b, tgt.b));
-    diff |= (uint64_t)(!fp2_equal(W.c, tgt.c));
-    diff |= (uint64_t)(!fp2_equal(W.d, tgt.d));
-    
-    // Pastikan W tidak berakhir di infinity setelah challenge
-    diff |= (uint64_t)theta_is_infinity(W);
-
+    diff |= (uint64_t)(!fp2_equal(&W.b, &tgt.b));
+    diff |= (uint64_t)(!fp2_equal(&W.c, &tgt.c));
+    diff |= (uint64_t)(!fp2_equal(&W.d, &tgt.d));
+    diff |= (uint64_t)theta_is_infinity(&W);
     return (diff == 0);
 }
 
-/* ============================================================
- * 5. SERIALIZATION
- * ============================================================ */
-
-static inline bool serialize_sig(uint8_t *out, size_t out_len, const SQISignature_V9 sig)
-{
-    if (!out) return false;
-    size_t needed = HASHES_BYTES + (FP2_SIGNC_OLD * FP2_BYTES_OLD);
-    if (out_len < needed) return false;
-    
-    memcpy(out, sig.challenge_val, HASHES_BYTES);
-
-    size_t pos = HASHES_BYTES;
-    fp2_pack(out + pos, sig.src.b); pos += FP2_BYTES_OLD;
-    fp2_pack(out + pos, sig.src.c); pos += FP2_BYTES_OLD;
-    fp2_pack(out + pos, sig.src.d); pos += FP2_BYTES_OLD;
-
-    return true;
+static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t *sig) {
+  if (!out) return false;
+  if (out_len < COMPRESSED_SIG_SIZE) return false;
+  memcpy(out, sig->challenge_val, HASHES_BYTES);
+  size_t pos = HASHES_BYTES;
+  fp2_pack(out + pos, &sig->src.b);
+  pos += FP2_BYTES;
+  fp2_pack(out + pos, &sig->src.c); 
+  pos += FP2_BYTES;
+  fp2_pack(out + pos, &sig->src.d); 
+  pos += FP2_BYTES;
+  return true;
 }
 
-static inline bool deserialize_sig(SQISignature_V9 *sig, const uint8_t *in, size_t in_len)
-{
-    if (!sig || !in) return false;
-    size_t needed = HASHES_BYTES + (FP2_SIGNC_OLD * FP2_BYTES_OLD);
-    if (in_len < needed) return false;
-
-    memset(sig, 0, sizeof(*sig));
-    memcpy(sig->challenge_val, in, HASHES_BYTES);
-
-    size_t pos = HASHES_BYTES;
-
-    sig->src.b = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
-    sig->src.c = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
-    sig->src.d = fp2_unpack(in + pos); pos += FP2_BYTES_OLD;
-
-    return true;
+static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t in_len) {
+  if (!sig || !in) return false;
+  if (in_len < COMPRESSED_SIG_SIZE) return false;
+  memset(sig, 0, sizeof(signature_t));
+  memcpy(sig->challenge_val, in, HASHES_BYTES);
+  size_t pos = HASHES_BYTES;
+  fp2_unpack(&sig->src.b, in + pos); 
+  pos += FP2_BYTES;
+  fp2_unpack(&sig->src.c, in + pos); 
+  pos += FP2_BYTES;
+  fp2_unpack(&sig->src.d, in + pos); 
+  pos += FP2_BYTES;
+  return true;
 }
+
 

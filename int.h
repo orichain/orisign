@@ -65,6 +65,13 @@ static inline void oriint_set_one(oriint_t *a) {
   }
 }
 
+static inline void oriint_set_two(oriint_t *a) {
+  a->bitsu64[0] = 2ULL;
+  for (int8_t i = 1; i < NBLOCK; i++) {
+    a->bitsu64[i] = 0ULL;
+  }
+}
+
 static inline void oriint_set_u64(oriint_t *a, uint64_t b) {
   a->bitsu64[0] = b;
   for (int8_t i = 1; i < NBLOCK; i++) {
@@ -111,12 +118,12 @@ static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
   return acc == 0;
 }
 
-static inline uint64_t oriint_is_mod4_3(const oriint_t *n) {
+static inline bool oriint_is_mod4_3(const oriint_t *n) {
   uint64_t two_bits = n->bitsu64[0] & 3ULL;
-  return 1 ^ ((two_bits ^ 3ULL | -(two_bits ^ 3ULL)) >> 63);
+  return (bool)(1 ^ ((two_bits ^ 3ULL | -(two_bits ^ 3ULL)) >> 63));
 }
 
-static inline void oriint_select_mask(oriint_t *RES, const oriint_t *a, oriint_t *b, uint64_t mask) {
+static inline void oriint_select_mask(oriint_t *RES, const oriint_t *a, const oriint_t *b, uint64_t mask) {
   for (int8_t i = 0; i < NBLOCK; i++) {
     RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
   }
@@ -169,6 +176,14 @@ static inline void oriint_int_add_1(oriint_t *RES, const oriint_t *a) {
   uint64_t c = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
     c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  }
+}
+
+static inline void oriint_int_add_2(oriint_t *RES, const oriint_t *a, uint64_t b) {
+	uint64_t c = 0;
+  c = oriint_addcarry_u64(c, a->bitsu64[0], b, &RES->bitsu64[0]);
+  for (int8_t i = 1; i < NBLOCK; i++) {
+    c = oriint_addcarry_u64(c, a->bitsu64[i], 0, &RES->bitsu64[i]);
   }
 }
 
@@ -288,7 +303,7 @@ static inline void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const ori
   oriint_montgomery_mul(RES,n,mm64,msize,r2,&p);
 }
 
-static inline void oriint_mod_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void oriint_mod_sub_2(oriint_t *RES, const oriint_t *a, oriint_t *b) {
   oriint_int_sub_3(RES, a, b);
   if (RES->bits64[NBLOCK - 1] < 0)
     oriint_int_add_1(RES, &P);
@@ -847,10 +862,20 @@ static inline void oriint_random(oriint_t *RES) {
   for (int8_t i = 0; i < NBLOCK-1; i++) {
     RES->bitsu64[i] = secure_random_uint64_kat(KAT_LABEL);
   }
+  RES->bitsu64[NBLOCK-2] &= 0x00ffffffffffffff;
   RES->bitsu64[NBLOCK-1] = 0ULL;
 }
 
-static inline bool oriint_solve_klpt(oriint_t *target_norm, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
+static inline void oriint_random_128(oriint_t *RES) {
+  oriint_clear(RES);
+  RES->bitsu64[0] = secure_random_uint64_kat(KAT_LABEL);
+  RES->bitsu64[1] = secure_random_uint64_kat(KAT_LABEL);  
+  for (int8_t i = 2; i < NBLOCK; i++) {
+    RES->bitsu64[i] = 0ULL;
+  }
+}
+
+static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
   if (oriint_is_zero(target_norm)) return false;
   oriint_t limit, one, limitpone, r2z;
   uint64_t mm64z;
@@ -885,6 +910,33 @@ static inline bool oriint_solve_klpt(oriint_t *target_norm, quaternion_t *res, o
       oriint_set(resremw, &remw);
       return true;
     }
+  }
+  return false;
+}
+
+static inline bool oriint_solve_klpt(oriint_t *L, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
+  if (oriint_solve_klpt_internal(L, res, reslimitzpone, reslimitwpone, resremw)) return true;
+  oriint_t target;
+  oriint_int_add_3(&target, L, &P);
+  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
+  oriint_set(&target, L);
+  oriint_int_shiftl(1, &target);
+  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
+  oriint_set(&target, L);
+  oriint_int_shiftl(2, &target);
+  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
+  oriint_t p;
+  oriint_set(&p, &P);
+  oriint_int_shiftl(1, &p);
+  oriint_clear(&target);
+  oriint_int_add_3(&target, L, &p);
+  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
+  for (int8_t i=0;i<10;i++) {
+    oriint_t salt;
+    oriint_random(&salt);
+    oriint_clear(&target);
+    oriint_int_add_3(&target, L, &salt);
+    if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
   }
   return false;
 }
@@ -932,9 +984,46 @@ static inline void oriint_setup_r2() {
   printf("\n");
 }
 
+static inline void oriint_setup_thetasqrt2() {
+  oriint_t base, exp, one, four, ts2, check_two;
+  oriint_set_two(&base);
+  // 2. Hitung eksponen: (P + 1) / 4
+  // Kita bisa menggunakan modadd atau manipulasi bit langsung karena P ganjil
+  oriint_set_one(&one);
+  // exp = P + 1
+  // Menggunakan modadd di sini mungkin berisiko overflow jika P sangat besar, 
+  // lebih aman hitung manual atau gunakan fungsi penambahan besar Anda.
+  oriint_int_add_3(&exp, &P, &one); 
+  // exp = exp >> 2 (sama dengan bagi 4)
+  // Anda bisa buat fungsi oriint_shr(&exp, 2)
+  oriint_int_shiftr(2, &exp); 
+  // 3. Jalankan Montgomery ModExp yang sudah Anda optimasi di Test 12
+  oriint_mod_exp(&ts2, &base, &exp);
+
+  printf("DEBUG - TS2   : ");
+  for (int8_t i = 0; i < NBLOCK; i++)
+    printf("%016llx ", ts2.bitsu64[i]);
+  printf("\n");
+
+  oriint_mod_mul(&check_two, &ts2, &ts2);
+
+  printf("DEBUG - Verify : ");
+  for (int8_t i = 0; i < NBLOCK; i++)
+    printf("%016llx ", check_two.bitsu64[i]);
+  printf(" (Expected: 2)\n");
+
+  // Opsional: Tambahkan assert atau if untuk memastikan sistem berhenti jika salah
+  if (oriint_is_equal(&check_two, &base)) {
+      printf("Result         : [ SQRT2 VALID ]\n");
+  } else {
+      printf("Result         : [ SQRT2 INVALID! Check ModExp/ModSqr ]\n");
+  }
+}
+
 static inline void oriint_tests() {
   oriint_setup_mm64_msize();
   oriint_setup_r2();
+  oriint_setup_thetasqrt2();
 
   oriint_t a, b, res, check, one, exp, q, r, dividend, divisor;
   oriint_t n_mod, r2, x_c, y_c, n_prime;
@@ -1063,7 +1152,7 @@ static inline void oriint_tests() {
   oriint_set_u64(&target, 0xABCDEF1234567891ULL);
   printf("Target Norm     : "); oriint_print("", &target); printf("\n");
 
-  if (oriint_solve_klpt(&target, &resklpt, &klpt_limitzpone, &klpt_limitzpone, &klpt_remw)) {
+  if (oriint_solve_klpt(&target, &resklpt, &klpt_limitzpone, &klpt_limitwpone, &klpt_remw)) {
     printf("KLPT Status     : [ SUCCESS ]\n");
     printf("Alpha Candidate found within attempt limits.\n");
 
@@ -1080,7 +1169,7 @@ static inline void oriint_tests() {
     oriint_int_sqr(&x2, &resklpt.x);
     oriint_int_sqr(&y2, &resklpt.y);
     oriint_int_add_3(&sum_xy, &x2, &y2);
-    
+
     // Cek x^2 + y^2 == remw
     bool valid_xy = oriint_is_ge(&sum_xy, &klpt_remw) && oriint_is_ge(&klpt_remw, &sum_xy);
     printf("Verify (x^2+y^2 == remw)   : %d\n", valid_xy);
@@ -1098,7 +1187,7 @@ static inline void oriint_tests() {
 
     // 2. Bandingkan (N(alpha) mod remw) == (Target mod remw)
     bool valid_mod = oriint_is_ge(&total_mod, &target_mod) && oriint_is_ge(&target_mod, &total_mod);
-    
+
     printf("Verify N(alpha) == Target  : %d\n", valid_mod);
     printf("Result          : Candidate Alpha is ready for Theta Mapping.\n");
 

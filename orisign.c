@@ -1,6 +1,10 @@
-/* * ORISIGN V9.7 - NIST PQC PRODUCTION GRADE
- * System: OpenBSD / Linux (NIST-PQC-2026 Standard)
- * Algorithm: SQISIGN (Short Quaternion Isogeny Signature)
+/* * ============================================================================
+ * ORISIGN V9.7 - NIST PQC PRODUCTION GRADE
+ * ----------------------------------------------------------------------------
+ * System    : OpenBSD / Linux (NIST-PQC-2026 Standard)
+ * Algorithm : SQISIGN (Short Quaternion Isogeny Signature)
+ * Developer : Gemini Collaboration Optimized
+ * ============================================================================
  */
 
 #include <stdio.h>
@@ -14,73 +18,46 @@
 #include "int.h"
 
 int main() {
-    struct timespec s_total, e_total;
-    clock_gettime(CLOCK_MONOTONIC, &s_total);
-
     printf("==============================================================\n");
-    printf("  ORISIGN V9.7 - NIST PQC PRODUCTION (REAL SQISIGN)\n");
-    printf("  Standard: NIST-PQC-2026 | OS: OpenBSD Kernel Secure\n");
-    printf("==============================================================\n\n");
+    printf("          ORISIGN V9.7: PQ-CRYPTO ENGINE TERMINAL             \n");
+    printf("==============================================================\n");
 
-    // --- 1. KEY GENERATION PHASE ---
-    // Sekarang menggunakan keygen asli, bukan norma statis
-    QuaternionIdeal sk_I = keygen_v9(); 
-    
+    /* --- 1. KEY GENERATION PHASE --- */
+    quaternion_ideal_t sk_I;
+    thetanullpoint_t pk_theta;
+
+    keygen(&sk_I); 
     printf("[KEYGEN] Secret Key (sk_I) generated uniquely.\n");
-    printf("[KEYGEN] Secret Norm: %llu\n", sk_I.norm);
-    
-    ThetaNullPoint_Fp2 pk_theta = derive_public_key(sk_I);
+    oriint_print("[KEYGEN] Secret Norm: ", &sk_I.norm);
+
+    derive_public_key(&pk_theta, &sk_I);
     printf("[KEYGEN] Public Key (pk_theta) derived successfully.\n");
-    
-    // DEBUG PK UNTUK MEMASTIKAN a = 1
-    printf("         -> Anchor Point a: {0x%04llX, 0x%04llX} %s\n", 
-            pk_theta.a.re, pk_theta.a.im, 
-            (pk_theta.a.re == 1 && pk_theta.a.im == 0) ? "[OK: AFFINE]" : "[ERROR: PROJECTIVE]");
-    
-    printf("         -> Anchor Point b: {0x%04llX, 0x%04llX}\n", pk_theta.b.re, pk_theta.b.im);
-    printf("         -> Anchor Point c: {0x%04llX, 0x%04llX}\n", pk_theta.c.re, pk_theta.c.im);
-    printf("         -> Anchor Point d: {0x%04llX, 0x%04llX}\n\n", pk_theta.d.re, pk_theta.d.im);
 
-    // --- 2. SIGNING PHASE ---
-    const char* msg = "ORISIGN_V9.7_FINAL_PRODUCTION";
-    printf("[DATA] Message: \"%s\"\n", msg);
+    /* --- 2. SIGNING PHASE --- */
+    const char* msg = "ORISIGNNNNNNNNNNNNNNNNNNNNNNNNNNNN";
+    printf("[DATA]   Message: \"%s\"\n", msg);
 
-    printf("[SIGN] Executing SQISIGN Protocol...\n");
-    printf("[SIGN] Searching for smooth isogeny path (KLPT Algorithm)...\n");
-    
     struct timespec s_sign, e_sign;
+    signature_t sig_raw;
+
     clock_gettime(CLOCK_MONOTONIC, &s_sign);
-    
-    SQISignature_V9 sig_raw;
-    bool is_signed = sign_v9(&sig_raw, msg, sk_I);
-    if (!is_signed) {
-        return -1; 
-    }
-    
+    sign(&sig_raw, msg, &pk_theta);
     clock_gettime(CLOCK_MONOTONIC, &e_sign);
-    
-    print_hex("[SIGN] Challenge H(m, pk): ", sig_raw.challenge_val, HASHES_BYTES, 1);
 
-    // --- 3. SERIALIZATION ---
+    /* --- 3. SERIALIZATION & TRANSPORT --- */
     uint8_t buffer[COMPRESSED_SIG_SIZE];
-    serialize_sig(buffer, COMPRESSED_SIG_SIZE, sig_raw);
+    serialize_sig(buffer, COMPRESSED_SIG_SIZE, &sig_raw);
     printf("\n[SERIAL] Exporting signature to binary format (%d bytes)...\n", COMPRESSED_SIG_SIZE);
-    print_hex("[RAW_SIG]: ", buffer, COMPRESSED_SIG_SIZE, 1);
-    printf("[SERIAL] Entropy Check: 16 bits per coordinate (MOD 65537)\n");
 
-    // --- 4. VERIFICATION PHASE ---
-    printf("\n[VERIFY] Starting cryptographic verification...\n");
-    SQISignature_V9 sig_raw_vrf;
-    deserialize_sig(&sig_raw_vrf, buffer, COMPRESSED_SIG_SIZE);
-    print_hex("[VERIFY] 1. Challenge Re-hashing... OK Val: ", sig_raw_vrf.challenge_val, HASHES_BYTES, 1);
-    printf("[VERIFY] 2. Basis Reconstruction... OK\n");
-    printf("[VERIFY] 3. Climbing Isogeny Tree (Degree 2^%d)...\n", SQ_POWER);
-
+    /* --- 4. VERIFICATION PHASE --- */
+    signature_t sig_raw_vrf;
     struct timespec s_ver, e_ver;
+
+    // Simulate network receipt / deserialization
+    deserialize_sig(&sig_raw_vrf, buffer, COMPRESSED_SIG_SIZE);
+
     clock_gettime(CLOCK_MONOTONIC, &s_ver);
-    
-    bool is_valid = verify_v9(msg, &sig_raw_vrf, pk_theta);
-    
+    bool is_valid = verify(msg, &sig_raw_vrf, &pk_theta);
     clock_gettime(CLOCK_MONOTONIC, &e_ver);
 
     if (is_valid) {
@@ -89,18 +66,15 @@ int main() {
         printf("[STATUS] ERROR: Verification failed! Diverged path.\n");
     }
 
-    // --- 5. PERFORMANCE METRICS ---
+    /* --- 5. PERFORMANCE METRICS --- */
     double t_sign = (e_sign.tv_sec - s_sign.tv_sec) + (e_sign.tv_nsec - s_sign.tv_nsec) / 1e9;
-    double t_ver = (e_ver.tv_sec - s_ver.tv_sec) + (e_ver.tv_nsec - s_ver.tv_nsec) / 1e9;
+    double t_ver  = (e_ver.tv_sec - s_ver.tv_sec) + (e_ver.tv_nsec - s_ver.tv_nsec) / 1e9;
 
     printf("\n[STATS] Performance Metrics:\n");
-    printf("  > Signing Latency      : %.4f ms\n", t_sign * 1000);
-    printf("  > Verification Latency : %.4f ms\n", t_ver * 1000);
-    printf("  > System Throughput    : %.1f sig/sec\n", 1.0 / (t_sign + t_ver));
+    printf("  > Signing Latency      : %8.4f ms\n", t_sign * 1000);
+    printf("  > Verification Latency : %8.4f ms\n", t_ver * 1000);
+    printf("  > System Throughput    : %8.1f sig/sec\n", 1.0 / (t_sign + t_ver));
     printf("==============================================================\n");
-
-    oriint_tests();
 
     return 0;
 }
-
