@@ -884,7 +884,7 @@ static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_
   oriint_int_isqrt(&limit, target_norm);
   oriint_int_add_3(&limitpone, &limit, &one);
   oriint_modvar_setup(&mm64z, &msizez, &r2z, &limitpone);
-  for (int attempts = 0; attempts < 1000; attempts++) {
+  for (int attempts = 0; attempts < 25; attempts++) {
     oriint_t z,z2, remz;
     oriint_random(&z);
     oriint_modvar_sqr(&z2, &z, &limitpone, &mm64z, &msizez, &r2z);
