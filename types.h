@@ -28,6 +28,7 @@ typedef struct {
 typedef struct {
   uint8_t challenge_val[HASHES_BYTES];
   thetacompressed_t src;
+  uint8_t salt[SALT_LEN];
 } signature_t;
 
 typedef struct {

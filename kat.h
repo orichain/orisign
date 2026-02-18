@@ -97,4 +97,24 @@ static inline uint64_t secure_random_uint64_kat(const char *label) {
   return drbg_generate_safe(label);
 }
 
+static inline void secure_random_buf_kat(uint8_t *out, size_t len, const char *label) {
+    if (!global_kat_ctx.enabled) {
+        uint8_t kat_seed[KAT_SEED_SIZE];
+        arc4random_buf(kat_seed, KAT_SEED_SIZE);
+        kat_init(kat_seed);
+    }
+
+    size_t n = len / 8;
+    size_t rem = len % 8;
+    uint64_t *out64 = (uint64_t *)out;
+
+    for (size_t i = 0; i < n; i++) {
+        out64[i] = drbg_generate_safe(label);
+    }
+
+    if (rem) {
+        uint64_t last = drbg_generate_safe(label);
+        memcpy(out + len - rem, &last, rem);
+    }
+}
 

@@ -37,6 +37,13 @@ static inline void quat_add(quaternion_t *RES, quaternion_t *a, quaternion_t *b)
   fp_add(&RES->z, &a->z, &b->z);
 }
 
+static inline void quat_add_scalar(quaternion_t *RES, quaternion_t *a, oriint_t *b) {
+  fp_add(&RES->w, &a->w, b);
+  fp_add(&RES->x, &a->x, b);
+  fp_add(&RES->y, &a->y, b);
+  fp_add(&RES->z, &a->z, b);
+}
+
 static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b) {
   oriint_t v0;
   oriint_t v1;
@@ -115,4 +122,12 @@ static inline void quat_norm(oriint_t *RES, quaternion_t *a) {
   fp_add(&n5, &n4, &n2);
   fp_add(RES, &n5, &n3);
 }
+
+static inline void quat_conj(quaternion_t *RES, quaternion_t *a) {
+    oriint_set(&RES->w, &a->w);
+    oriint_int_neg_2(&RES->x, &a->x);
+    oriint_int_neg_2(&RES->y, &a->y);
+    oriint_int_neg_2(&RES->z, &a->z);
+}
+
 

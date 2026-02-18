@@ -15,40 +15,22 @@
 #include "fp.h"
 #include "quaternion.h"
 
-static inline void apply_isogeny_chain_challenge(thetanullpoint_t *T, const uint8_t chal[HASHES_BYTES]) {
-  for (int i = 0; i < SQ_POWER; i++) {
-    uint8_t byte = chal[i >> 3];
-    uint64_t bit = (uint64_t)((byte >> (i & 7)) & 1u);
-    uint64_t mask = -(uint64_t)(bit != 0);
-    fp2_t xT;
-    oriint_select_mask(&xT.re, &T->c.re, &T->b.re, mask);
-    oriint_select_mask(&xT.im, &T->c.im, &T->b.im, mask);
-    eval_sq_isogeny_velu_theta(T, &xT);
-    canonicalize_theta(T);
-  }
-}
-
-static inline void get_challenge(uint8_t *hash_out, const char* msg, thetanullpoint_t *comm, thetanullpoint_t *pk) {
+static inline void get_challenge(uint8_t *hash_out, const char* msg, thetanullpoint_t *comm, thetanullpoint_t *pk, const uint8_t salt[SALT_LEN]) {
   shake256incctx ctx;
   shake256_inc_init(&ctx);
   shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, salt, 16); 
   shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
   uint8_t buf[FP2_BYTES];
-  thetacompressed_t cc,pkc;
+  thetacompressed_t cc, pkc;
   theta_compress(&cc, comm);
+  fp2_pack(buf, &cc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &cc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &cc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
   theta_compress(&pkc, pk);
-  fp2_pack(buf, &cc.b); 
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-  fp2_pack(buf, &cc.c); 
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-  fp2_pack(buf, &cc.d); 
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-  fp2_pack(buf, &pkc.b);
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-  fp2_pack(buf, &pkc.c); 
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
-  fp2_pack(buf, &pkc.d); 
-  shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.b); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.c); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
+  fp2_pack(buf, &pkc.d); shake256_inc_absorb(&ctx, buf, FP2_BYTES);
   shake256_inc_finalize(&ctx);
   shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
 }
@@ -138,78 +120,31 @@ static inline void keygen(quaternion_ideal_t *RES) {
   }
 }
 
-static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t *pk_theta) {
-    clock_t s_klpt = clock();
-    quaternion_t alpha_selected;
-    for (;;) {
-        oriint_t target,offset;
-        oriint_random_128(&offset);
-        oriint_int_add_3(&target, &NORM_IDEAL, &offset);
-        quaternion_t alpha_cand;
-        oriint_t klpt_remw,klpt_limitzpone,klpt_limitwpone;
-        if (oriint_solve_klpt(&target, &alpha_cand, &klpt_limitzpone, &klpt_limitwpone, &klpt_remw)) {
-            quat_set(&alpha_selected, &alpha_cand);
-            break;
-        }
-    }
-    clock_t e_klpt = clock();
-    printf("  [SIGN LOG] KLPT Solver       : %.4f ms\n", (double)(e_klpt - s_klpt) * 1000 / CLOCKS_PER_SEC);
-
-    clock_t s_theta = clock();
-    thetanullpoint_t T;
-    get_baseline_theta(&T);
-    apply_quaternion_action_to_theta(&T, &alpha_selected);
-    canonicalize_theta(&T);
-    clock_t e_theta = clock();
-    printf("  [SIGN LOG] Theta Action      : %.4f ms\n", (double)(e_theta - s_theta) * 1000 / CLOCKS_PER_SEC);
-
-    clock_t s_hash = clock();
-    get_challenge(sig_out->challenge_val, msg, &T, pk_theta);
-    theta_compress(&sig_out->src, &T);
-    memset(&alpha_selected, 0, sizeof(quaternion_t));
-    clock_t e_hash = clock();
-    printf("  [SIGN LOG] Hash & Compress   : %.4f ms\n", (double)(e_hash - s_hash) * 1000 / CLOCKS_PER_SEC);
+static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t *pk_theta, quaternion_ideal_t *sk_I) {
+  thetanullpoint_t T;
+  quaternion_t alpha;
+  uint8_t salt[SALT_LEN]; 
+  secure_random_buf_kat(salt, SALT_LEN, KAT_LABEL);
+  get_baseline_theta(&T);
+  quat_set(&alpha, &sk_I->b[0]);
+  apply_quaternion_action_to_theta(&T, &alpha);
+  apply_quaternion_to_theta_chain(&T, &sk_I->norm);
+  canonicalize_theta(&T);
+  get_challenge(sig_out->challenge_val, msg, &T, pk_theta, salt);
+  memcpy(sig_out->salt, salt, 16);
+  theta_compress(&sig_out->src, &T);
+  memset(&alpha, 0, sizeof(quaternion_t));
 }
 
 static inline bool verify(const char *msg, signature_t *sig, thetanullpoint_t *pk_theta) {
-    if (theta_is_infinity(pk_theta)) return false;
-    
-    clock_t s_prep = clock();
-    thetanullpoint_t src,tgt;
-    theta_decompress(&src,&sig->src);
-    theta_set(&tgt,&src);
-    clock_t e_prep = clock();
-    printf("  [VRFY LOG] Decompress & Set  : %.4f ms\n", (double)(e_prep - s_prep) * 1000 / CLOCKS_PER_SEC);
-
-    clock_t s_chain = clock();
-    apply_isogeny_chain_challenge(&tgt, sig->challenge_val);
-    canonicalize_theta(&tgt);
-    clock_t e_chain = clock();
-    printf("  [VRFY LOG] Isogeny Chain     : %.4f ms\n", (double)(e_chain - s_chain) * 1000 / CLOCKS_PER_SEC);
-
-    if (theta_is_infinity(&src) || theta_is_infinity(&tgt)) return false;
-
-    clock_t s_hash = clock();
-    uint8_t check[HASHES_BYTES];
-    get_challenge(check, msg, &src, pk_theta);
-    if (memcmp(check, sig->challenge_val, HASHES_BYTES) != 0) return false;
-    clock_t e_hash = clock();
-    printf("  [VRFY LOG] Challenge Hash    : %.4f ms\n", (double)(e_hash - s_hash) * 1000 / CLOCKS_PER_SEC);
-
-    clock_t s_reconst = clock();
-    thetanullpoint_t W;
-    theta_set(&W, &src);
-    apply_isogeny_chain_challenge(&W, sig->challenge_val);
-    canonicalize_theta(&W);
-    clock_t e_reconst = clock();
-    printf("  [VRFY LOG] Reconstruction    : %.4f ms\n", (double)(e_reconst - s_reconst) * 1000 / CLOCKS_PER_SEC);
-
-    uint64_t diff = 0;
-    diff |= (uint64_t)(!fp2_equal(&W.b, &tgt.b));
-    diff |= (uint64_t)(!fp2_equal(&W.c, &tgt.c));
-    diff |= (uint64_t)(!fp2_equal(&W.d, &tgt.d));
-    diff |= (uint64_t)theta_is_infinity(&W);
-    return (diff == 0);
+  thetanullpoint_t T_sig;
+  uint8_t check[HASHES_BYTES];
+  theta_decompress(&T_sig, &sig->src);
+  get_challenge(check, msg, &T_sig, pk_theta, sig->salt);
+  if (memcmp(check, sig->challenge_val, HASHES_BYTES) != 0) {
+    return false;
+  }
+  return theta_is_equal(&T_sig, pk_theta);
 }
 
 static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t *sig) {
@@ -217,6 +152,8 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t
   if (out_len < COMPRESSED_SIG_SIZE) return false;
   memcpy(out, sig->challenge_val, HASHES_BYTES);
   size_t pos = HASHES_BYTES;
+  memcpy(out + pos, sig->salt, SALT_LEN);
+  pos += SALT_LEN;
   fp2_pack(out + pos, &sig->src.b);
   pos += FP2_BYTES;
   fp2_pack(out + pos, &sig->src.c); 
@@ -232,6 +169,8 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
   memset(sig, 0, sizeof(signature_t));
   memcpy(sig->challenge_val, in, HASHES_BYTES);
   size_t pos = HASHES_BYTES;
+  memcpy(sig->salt, in + pos, SALT_LEN);
+  pos += SALT_LEN;
   fp2_unpack(&sig->src.b, in + pos); 
   pos += FP2_BYTES;
   fp2_unpack(&sig->src.c, in + pos); 

@@ -2,11 +2,6 @@
 #include "types.h"
 #include <stdint.h>
 
-const uint64_t MODULO = 65519;
-const uint64_t NIST_NORM_IDEAL = 32771;
-const uint64_t BARRETT_MU = (((__uint128_t)1 << 64) / MODULO);
-const uint64_t NIST_THETA_SQRT2 = 181;
-
 const uint64_t MM64 = 0x0000000000000001; 
 const uint8_t Msize = 4;
 const oriint_t P = {
@@ -46,4 +41,3 @@ const oriint_t NORM_IDEAL = {
     0x0000000000000000
   }
 };
-

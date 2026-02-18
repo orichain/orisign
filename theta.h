@@ -117,3 +117,7 @@ static inline void theta_set(thetanullpoint_t *RES, thetanullpoint_t *a) {
   fp2_set(&RES->d, &a->d);
 }
 
+static inline bool theta_is_equal(thetanullpoint_t *a, thetanullpoint_t *b) {
+  return (fp2_is_equal(&a->a, &b->a) & fp2_is_equal(&a->b, &b->b) & fp2_is_equal(&a->c, &b->c) & fp2_is_equal(&a->d, &b->d));
+}
+

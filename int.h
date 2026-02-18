@@ -238,10 +238,17 @@ static inline void oriint_select_ge(oriint_t *RES, const oriint_t *a, const orii
   oriint_select_mask(RES, a, &diff, mask);
 }
 
-static inline void oriint_int_neg(oriint_t *RES) {
+static inline void oriint_int_neg_1(oriint_t *RES) {
   uint64_t c = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
     c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[i], &RES->bitsu64[i]);
+  }
+}
+
+static inline void oriint_int_neg_2(oriint_t *RES, oriint_t *a) {
+  uint64_t c = 0;
+  for (int8_t i = 0; i < NBLOCK; i++) {
+    c = oriint_subborrow_u64(c, 0ULL, a->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
@@ -252,7 +259,7 @@ static inline void oriint_int_mult(oriint_t *RES, const oriint_t *a, uint64_t b)
 static inline void oriint_int_imult(oriint_t *RES, oriint_t *a, int64_t b) {
   oriint_set(RES, a);
   if (b < 0LL) {
-    oriint_int_neg(RES);
+    oriint_int_neg_1(RES);
     b = -b;
   }
   oriint_imm_mul(RES->bitsu64, b, RES->bitsu64);
@@ -412,8 +419,8 @@ static inline void oriint_modvar_inv(oriint_t *RES, const oriint_t *n, const uin
     oriint_int_shiftr(62, &s);
   }
   if (IS_NEGATIVE(v)) {
-    oriint_int_neg(&v);
-    oriint_int_neg(&s);
+    oriint_int_neg_1(&v);
+    oriint_int_neg_1(&s);
     oriint_int_add_1(&s,n);
   }
   if (!oriint_is_one(&v)) {
@@ -898,6 +905,8 @@ static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_
     oriint_random(&w);
     oriint_modvar_sqr(&w2, &w, &limitwpone, &mm64w, &msizew, &r2w);
     oriint_modvar_sub_2(&remw, &remz, &w2, &limitwpone);
+    if (remw.bitsu64[0] < 2 || oriint_is_even(&remw)) continue;
+    if ((remw.bitsu64[0] & 3ULL) != 1) continue;
     oriint_modvar_setup(&mm64rw, &msizerw, &r2rw, &remw);
     oriint_t x, y;
     if (oriint_solve_cornacchia(&remw, &mm64rw, &msizerw, &r2rw, &x, &y)) {

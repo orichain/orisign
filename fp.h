@@ -50,6 +50,10 @@ static inline void fp2_mul(fp2_t *RES, fp2_t *a, fp2_t *b) {
   fp_add(&RES->im, &ad, &bc);
 }
 
+static inline void fp2_sqr(fp2_t *RES, fp2_t *a) {
+  fp2_mul(RES, a, a);
+}
+
 static inline void fp2_inv(fp2_t *RES, fp2_t *a) {
   oriint_t a2;
   oriint_t b2;
@@ -74,7 +78,7 @@ static inline bool fp2_is_zero(fp2_t *a) {
   return (oriint_is_zero(&a->re) & oriint_is_zero(&a->im));
 }
 
-static inline bool fp2_equal(fp2_t *a, fp2_t *b) {
+static inline bool fp2_is_equal(fp2_t *a, fp2_t *b) {
   return (oriint_is_equal(&a->re, &b->re) & oriint_is_equal(&a->im, &b->im));
 }
 
