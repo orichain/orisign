@@ -15,6 +15,36 @@
 #include "fp.h"
 #include "quaternion.h"
 
+static inline void apply_quaternion_to_theta_chain(thetanullpoint_t *T, oriint_t *challenge) {
+  fp2_t tmp[SQ_POWER];
+  fp2_t prod[SQ_POWER];
+  for (int i = 0; i < SQ_POWER; i++) {
+    uint64_t word  = (uint64_t)i >> 6;
+    uint64_t shift = (uint64_t)i & 63;
+    uint64_t bit   = (challenge->bitsu64[word] >> shift) & 1ULL;
+    uint64_t mask  = (uint64_t)-(int64_t)bit;
+    fp2_select_mask(&tmp[i], &T->b, &T->c, mask);
+    eval_sq_isogeny_velu_theta(T, &tmp[i]);
+    if (i == 0) prod[0] = tmp[0];
+    else fp2_mul(&prod[i], &prod[i-1], &tmp[i]);
+  }
+  fp2_t total_inv;
+  fp2_inv(&total_inv, &prod[SQ_POWER-1]);
+  for (int i = SQ_POWER-1; i >= 0; i--) {
+    fp2_t inv_step;
+    if (i == 0) {
+      inv_step = total_inv;
+    } else {
+      fp2_mul(&inv_step, &prod[i-1], &total_inv);
+    }
+    fp2_mul(&T->a, &T->a, &inv_step);
+    fp2_mul(&T->b, &T->b, &inv_step);
+    fp2_mul(&T->c, &T->c, &inv_step);
+    fp2_mul(&T->d, &T->d, &inv_step);
+  }
+  canonicalize_theta(T);
+}
+
 static inline void get_challenge(uint8_t *hash_out, const char* msg, thetanullpoint_t *comm, thetanullpoint_t *pk, const uint8_t salt[SALT_LEN]) {
   shake256incctx ctx;
   shake256_inc_init(&ctx);

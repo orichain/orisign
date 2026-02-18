@@ -1,9 +1,6 @@
 #pragma once
 
-#include <stdint.h>
 #include <stdbool.h>
-
-#include "constants.h"
 #include "fp.h"
 #include "types.h"
 
@@ -83,24 +80,6 @@ static inline void eval_sq_isogeny_velu_theta(thetanullpoint_t *T, fp2_t *xT) {
   fp2_sub(&T->b, &apb2, &xcpd2);
   fp2_add(&T->c, &amb2, &xcmd2);
   fp2_sub(&T->d, &amb2, &xcmd2);
-}
-
-static inline void apply_quaternion_to_theta_chain(thetanullpoint_t *T, oriint_t *challenge) {
-  for (int i = 0; i < SQ_POWER; i++) {
-    uint64_t word  = (uint64_t)i >> 6;
-    uint64_t shift = (uint64_t)i & 63;
-    uint64_t bit = (challenge->bitsu64[word] >> shift) & 1ULL;
-    uint64_t mask = (uint64_t)-(int64_t)bit;
-    fp2_t xK;
-    fp2_select_mask(&xK, &T->b, &T->c, mask);
-    eval_sq_isogeny_velu_theta(T, &xK);
-    canonicalize_theta(T);  
-  }
-}
-
-static inline void apply_ideal_to_theta_chain(thetanullpoint_t *T, oriint_t *challenge) {
-  if (theta_is_infinity(T)) return;
-  apply_quaternion_to_theta_chain(T, challenge);
 }
 
 static inline void get_baseline_theta(thetanullpoint_t *RES) {

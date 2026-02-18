@@ -60,17 +60,13 @@ static inline void fp2_inv(fp2_t *RES, fp2_t *a) {
   oriint_t norm;
   oriint_t im0;
   oriint_t zero;
-
   oriint_clear(&zero);
   fp_mul(&a2, &a->re, &a->re);
   fp_mul(&b2, &a->im, &a->im);
   fp_add(&norm, &a2, &b2);
   fp_inv(&norm);
-
   fp_mul(&RES->re, &a->re, &norm);
-
   fp_mul(&im0, &a->im, &norm);
-
   fp_sub(&RES->im, &zero, &im0);
 }
 
