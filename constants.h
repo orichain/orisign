@@ -3,7 +3,7 @@
 
 #define NBLOCK 5
 #define SQ_POWER 256
-#define DOMAIN_SEP "ORISIGN-V9.7-NIST-PQC-2026"
+#define DOMAIN_SEP "ORISIGN"
 #define HASHES_BYTES 32
 #define SALT_LEN 16
 
