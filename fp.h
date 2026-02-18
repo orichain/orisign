@@ -78,7 +78,34 @@ static inline bool fp2_is_equal(fp2_t *a, fp2_t *b) {
   return (oriint_is_equal(&a->re, &b->re) & oriint_is_equal(&a->im, &b->im));
 }
 
-static inline void fp2_pack(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
+// Gunakan ukuran baru: FP_BYTES (32 byte), bukan 2 * FP_BYTES
+static inline void fp2_pack(uint8_t out[FP_BYTES], const fp2_t *a) {
+    size_t offset = 0;
+    // Kita hanya ambil bagian Real (re)
+    for (size_t i = 0; i < NBLOCK-1; i++) {
+        uint64_t v_be = htobe64(a->re.bitsu64[i]);
+        memcpy(out + offset, &v_be, sizeof(uint64_t));
+        offset += sizeof(uint64_t);
+    }
+}
+
+static inline void fp2_unpack(fp2_t *RES, const uint8_t in[FP_BYTES]) {
+    size_t offset = 0;
+    for (size_t i = 0; i < NBLOCK-1; i++) {
+        uint64_t v_be;
+        memcpy(&v_be, in + offset, sizeof(uint64_t));
+        RES->re.bitsu64[i] = be64toh(v_be);
+        offset += sizeof(uint64_t);
+    }
+    RES->re.bitsu64[NBLOCK-1] = 0ULL;
+    
+    // Set bagian imajiner ke nol secara manual karena tidak dikirim lewat network
+    for (size_t i = 0; i < NBLOCK; i++) {
+        RES->im.bitsu64[i] = 0ULL;
+    }
+}
+
+static inline void fp2_pack_asli(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
   size_t offset = 0;
   for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be = htobe64(a->re.bitsu64[i]);
@@ -92,7 +119,7 @@ static inline void fp2_pack(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
   }
 }
 
-static inline void fp2_unpack(fp2_t *RES, const uint8_t in[2 * FP_BYTES]) {
+static inline void fp2_unpack_asli(fp2_t *RES, const uint8_t in[2 * FP_BYTES]) {
   size_t offset = 0;
   for (size_t i = 0; i < NBLOCK-1; i++) {
     uint64_t v_be;

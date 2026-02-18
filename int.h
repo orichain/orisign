@@ -304,6 +304,10 @@ static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
   oriint_montgomery_mul(RES,&P,&MM64,&Msize,&R2,&p);
 }
 
+static inline void oriint_mod_sqr(oriint_t *RES, oriint_t *a) {
+  oriint_mod_mul(RES, a, a);
+}
+
 static inline void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
   oriint_t p;
   oriint_montgomery_mul(&p,n,mm64,msize,a,b);
@@ -548,23 +552,6 @@ static inline bool oriint_int_issquare(const oriint_t *n, oriint_t *root) {
   return eq;
 }
 
-static void oriint_int_div_mod(oriint_t *Q, oriint_t *R, const oriint_t *A, const oriint_t *B) {
-  oriint_t quotient, remainder;
-  oriint_clear(&quotient);
-  oriint_clear(&remainder);
-  if (oriint_is_zero(B)) return;
-  for (int16_t i = (NBLOCK * 64) - 1; i >= 0; i--) {
-    oriint_int_shiftl(1, &remainder);
-    uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
-    remainder.bitsu64[0] |= bit;
-    uint64_t mask = oriint_ge_mask(&remainder, B);
-    quotient.bitsu64[i >> 6] |= ((1ULL << (i & 63)) & mask);
-    oriint_select_ge(&remainder, &remainder, B);
-  }
-  if (Q) oriint_set(Q, &quotient);
-  if (R) oriint_set(R, &remainder);
-}
-
 static void oriint_int_mod(oriint_t *R, const oriint_t *A, const oriint_t *B) {
   oriint_t remainder;
   oriint_clear(&remainder);
@@ -589,7 +576,7 @@ static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp
   oriint_set(&base, a);
   oriint_set_one(&result);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_mod_mul(&tmp, &result, &result);
+    oriint_mod_sqr(&tmp, &result);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
@@ -628,7 +615,7 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
 
   oriint_compute_sqrt_exp(&exp);
   for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_mod_mul(&res, &res, &res); 
+    oriint_mod_sqr(&res, &res); 
     uint64_t word = i >> 6;
     uint64_t bit  = (exp.bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
@@ -637,7 +624,7 @@ static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
     oriint_select_mask(&res, &res, &mulres, mask);
   }
   oriint_t check;
-  oriint_mod_mul(&check, &res, &res);
+  oriint_mod_sqr(&check, &res);
   uint64_t neq_accumulator = 0;
   for (int8_t i = 0; i < NBLOCK; i++) {
     neq_accumulator |= (check.bitsu64[i] ^ a->bitsu64[i]);
@@ -723,11 +710,8 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
 }
 
 static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
-  // 1. Penanganan Kasus Dasar & Angka Kecil (Sieve)
   if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
   if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
-
-  // Trial Division dengan beberapa bilangan prima pertama (Sangat Cepat)
   static const uint16_t small_primes[] = {
     3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67
   };
@@ -736,43 +720,31 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
       return (n->bitsu64[0] == small_primes[i]);
     }
   }
-
-  // 2. Setup Montgomery (Modvar)
   oriint_t one, n_minus_1, d, x, r2;
   uint64_t mm64;
   uint8_t msize;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
   oriint_modvar_setup(&mm64, &msize, &r2, n);
-
-  // 3. Miller-Rabin dengan Basis Terpilih
-  // Untuk 320-bit, menggunakan 12 basis deterministik + Random iterations
   oriint_set(&d, &n_minus_1);
   uint32_t s = 0;
   while (!oriint_is_zero(&d) && oriint_is_even(&d)) {
     oriint_int_shiftr(1, &d);
     s++;
   }
-
-  // Basis statis yang menutupi determinisme hingga 2^64
   uint64_t bases[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
   int8_t num_static = sizeof(bases) / sizeof(bases[0]);
-
   for (int8_t i = 0; i < (num_static + iterations); i++) {
     oriint_t base;
     oriint_clear(&base);
     if (i < num_static) {
       base.bitsu64[0] = bases[i];
     } else {
-      // Basis acak untuk NIST Level 1
       base.bitsu64[0] = (secure_random_uint64_kat(KAT_LABEL) % (n->bitsu64[0] - 3)) + 2;
     }
-
     if (oriint_is_ge(&base, n)) continue;
-
     oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
     if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
-
     bool composite = true;
     for (uint32_t r = 1; r < s; r++) {
       oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
@@ -783,75 +755,41 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
     }
     if (composite) return false;
   }
-
-  // 4. Tahap Final: Lucas Test (Opsional tapi direkomendasikan untuk Production)
-  // Dalam prakteknya, dengan 12 basis + iterations di atas,
-  // probabilitas error sudah < 10^-20. Untuk SQISIGN ini sudah sangat aman.
-
   return true;
 }
 
 static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, oriint_t *x, oriint_t *y) {
-  // 1. Filter Dasar: n harus ganjil dan > 1
   if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
-
-  // 2. Syarat Matematis: Untuk x^2 + y^2 = n, n harus = 1 mod 4
-  // (Pengecualian n=2, tapi sudah difilter oleh is_even)
   if ((n->bitsu64[0] & 3ULL) != 1) return false;
-
-  // 3. Primality Check: Cornacchia membutuhkan n sebagai bilangan prima
-  // Kita gunakan Miller-Rabin yang sudah kita perkuat sebelumnya
   if (!oriint_is_prime(n, 12)) return false;
-
   oriint_t z, one, n_minus_1, target_root;
   bool is_valid;
   oriint_set_one(&one);
   oriint_int_sub_3(&n_minus_1, n, &one);
-
-  // 4. Cari z sehingga z^2 = -1 mod n
   oriint_modvar_sqrt(&z, &n_minus_1, n, mm64, msize, r2, &is_valid);
   if (!is_valid) return false;
-
-  // Normalisasi z: pilih z = min(z, n - z) 
-  // agar deret r_curr mengecil lebih cepat
   oriint_t n_minus_z;
   oriint_int_sub_3(&n_minus_z, n, &z);
   if (oriint_is_ge(&z, &n_minus_z)) {
     oriint_set(&z, &n_minus_z);
   }
-
-  // 5. Limited Euclidean Algorithm (Descent)
   oriint_t r_prev, r_curr, r_next;
   oriint_set(&r_prev, n);
   oriint_set(&r_curr, &z);
   oriint_int_isqrt(&target_root, n);
-
-  // Loop berhenti tepat saat r_curr < sqrt(n)
   while (oriint_is_ge(&r_curr, &target_root)) {
     if (oriint_is_zero(&r_curr)) break;
     oriint_int_mod(&r_next, &r_prev, &r_curr);
     oriint_set(&r_prev, &r_curr);
     oriint_set(&r_curr, &r_next);
-
-    // Safety break untuk integritas loop
     if (oriint_is_equal(&r_prev, &r_curr)) break;
   }
-
-  // 6. Verifikasi Akhir: diff = n - r_curr^2
   oriint_t r_sq, diff;
   oriint_int_sqr(&r_sq, &r_curr);
-
-  // n - r_curr^2
   oriint_int_sub_3(&diff, n, &r_sq);
-
-  // Pastikan hasil pengurangan positif melalui check MSB
   if (diff.bits64[NBLOCK - 1] < 0) return false;
-
-  // Jika diff adalah kuadrat sempurna, maka y = sqrt(diff)
   if (oriint_int_issquare(&diff, y)) {
     oriint_set(x, &r_curr);
-
-    // Standardisasi: x harus lebih besar atau sama dengan y
     if (oriint_is_ge(y, x)) {
       oriint_t swap;
       oriint_set(&swap, x);
@@ -994,39 +932,16 @@ static inline void oriint_setup_r2() {
 }
 
 static inline void oriint_setup_thetasqrt2() {
-  oriint_t base, exp, one, four, ts2, check_two;
+  oriint_t base, exp, one, four, ts2;
   oriint_set_two(&base);
-  // 2. Hitung eksponen: (P + 1) / 4
-  // Kita bisa menggunakan modadd atau manipulasi bit langsung karena P ganjil
   oriint_set_one(&one);
-  // exp = P + 1
-  // Menggunakan modadd di sini mungkin berisiko overflow jika P sangat besar, 
-  // lebih aman hitung manual atau gunakan fungsi penambahan besar Anda.
   oriint_int_add_3(&exp, &P, &one); 
-  // exp = exp >> 2 (sama dengan bagi 4)
-  // Anda bisa buat fungsi oriint_shr(&exp, 2)
   oriint_int_shiftr(2, &exp); 
-  // 3. Jalankan Montgomery ModExp yang sudah Anda optimasi di Test 12
   oriint_mod_exp(&ts2, &base, &exp);
-
   printf("DEBUG - TS2   : ");
   for (int8_t i = 0; i < NBLOCK; i++)
     printf("%016llx ", ts2.bitsu64[i]);
   printf("\n");
-
-  oriint_mod_mul(&check_two, &ts2, &ts2);
-
-  printf("DEBUG - Verify : ");
-  for (int8_t i = 0; i < NBLOCK; i++)
-    printf("%016llx ", check_two.bitsu64[i]);
-  printf(" (Expected: 2)\n");
-
-  // Opsional: Tambahkan assert atau if untuk memastikan sistem berhenti jika salah
-  if (oriint_is_equal(&check_two, &base)) {
-      printf("Result         : [ SQRT2 VALID ]\n");
-  } else {
-      printf("Result         : [ SQRT2 INVALID! Check ModExp/ModSqr ]\n");
-  }
 }
 
 static inline void oriint_tests() {
@@ -1079,7 +994,7 @@ static inline void oriint_tests() {
 
   // Test Sqrt dengan input yang dikuadratkan dulu agar masuk Montgomery Domain
   oriint_clear(&a); a.bitsu64[0] = 5;
-  oriint_mod_mul(&b, &a, &a); // b = 5*5 mod P
+  oriint_mod_sqr(&b, &a); // b = 5*5 mod P
   oriint_print("x                    : ", &a);
   oriint_print("a (x^2 mod P)        : ", &b);
 
@@ -1087,7 +1002,7 @@ static inline void oriint_tests() {
   printf("%-21s: %d\n", "modsqrt return", ok);
   oriint_print("sqrt(a)              : ", &res);
 
-  oriint_mod_mul(&check, &res, &res);
+  oriint_mod_sqr(&check, &res);
   oriint_print("Verify (r^2 mod P)   : ", &check);
   printf("%-21s: %d\n", "r^2 == a ?", oriint_is_equal(&check, &b));
 

@@ -60,13 +60,6 @@ static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b)
   fp_mul(&v5, &a->z, &b->z);
   fp_sub(&RES->w, &v4, &v5);
 
-  oriint_clear(&v0);
-  oriint_clear(&v1);
-  oriint_clear(&v2);
-  oriint_clear(&v3);
-  oriint_clear(&v4);
-  oriint_clear(&v5);
-
   fp_mul(&v0, &a->w, &b->x);
   fp_mul(&v1, &a->x, &b->w);
   fp_add(&v2, &v0, &v1);
@@ -75,13 +68,6 @@ static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b)
   fp_mul(&v5, &a->y, &b->z);
   fp_add(&RES->x, &v4, &v5);
 
-  oriint_clear(&v0);
-  oriint_clear(&v1);
-  oriint_clear(&v2);
-  oriint_clear(&v3);
-  oriint_clear(&v4);
-  oriint_clear(&v5);
-
   fp_mul(&v0, &a->w, &b->y);
   fp_mul(&v1, &a->x, &b->z);
   fp_sub(&v2, &v0, &v1);
@@ -89,13 +75,6 @@ static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b)
   fp_add(&v4, &v2, &v3);
   fp_mul(&v5, &a->z, &b->x);
   fp_add(&RES->y, &v4, &v5);
-
-  oriint_clear(&v0);
-  oriint_clear(&v1);
-  oriint_clear(&v2);
-  oriint_clear(&v3);
-  oriint_clear(&v4);
-  oriint_clear(&v5);
 
   fp_mul(&v0, &a->w, &b->z);
   fp_mul(&v1, &a->y, &b->x);

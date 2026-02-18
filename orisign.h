@@ -210,4 +210,23 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
   return true;
 }
 
+static inline bool serialize_pk(uint8_t *out, size_t out_len, const thetanullpoint_t *pk) {
+  if (!out || out_len < PK_SERIALIZED_SIZE) return false;
+  size_t pos = 0;
+  fp2_pack(out + pos, &pk->b); pos += FP2_BYTES;
+  fp2_pack(out + pos, &pk->c); pos += FP2_BYTES;
+  fp2_pack(out + pos, &pk->d); pos += FP2_BYTES;
+  return true;
+}
+
+static inline bool deserialize_pk(thetanullpoint_t *pk, const uint8_t *in, size_t in_len) {
+  if (!pk || !in || in_len < PK_SERIALIZED_SIZE) return false;
+  memset(pk, 0, sizeof(thetanullpoint_t));
+  pk->a.re.bitsu64[0] = 1ULL; 
+  size_t pos = 0;
+  fp2_unpack(&pk->b, in + pos); pos += FP2_BYTES;
+  fp2_unpack(&pk->c, in + pos); pos += FP2_BYTES;
+  fp2_unpack(&pk->d, in + pos); pos += FP2_BYTES;
+  return true;
+}
 

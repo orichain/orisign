@@ -38,19 +38,3 @@ typedef struct {
   bool initialized;
 } kat_context_t;
 
-typedef struct { uint64_t re, im; } fp2old_t;
-typedef struct { uint64_t w, x, y, z; } Quaternion;
-typedef struct { Quaternion b[4]; uint64_t norm; } QuaternionIdeal;
-typedef struct { fp2old_t a, b, c, d; } ThetaNullPoint_Fp2;
-
-typedef struct { 
-  fp2old_t b;
-  fp2old_t c;
-  fp2old_t d; 
-} ThetaCompressed_Fp2;
-
-typedef struct {
-  uint8_t challenge_val[HASHES_BYTES];
-  ThetaCompressed_Fp2 src;
-} SQISignature_V9;
-
