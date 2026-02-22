@@ -15,12 +15,12 @@
 #include "quaternion.h"
 #include "utilities.h"
 
-void msg_to_quaternion(quaternion_t *q_msg, const char *msg) {
+void msg_to_quaternion(quaternion_t *q_msg, const uint8_t *msg, size_t len) {
   uint8_t hash[2 * HASHES_BYTES];
   shake256incctx ctx;
   shake256_inc_init(&ctx);
   shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
-  shake256_inc_absorb(&ctx, (const uint8_t*)msg, strlen(msg));
+  shake256_inc_absorb(&ctx, msg, len);
   shake256_inc_finalize(&ctx);
   shake256_inc_squeeze(hash, 2 * HASHES_BYTES, &ctx);
   uint64_t w_be1, x_be1, y_be1, z_be1;
@@ -48,85 +48,50 @@ void msg_to_quaternion(quaternion_t *q_msg, const char *msg) {
   oriint_set_u128(&q_msg->z, be64toh(z_be1) | 1, be64toh(z_be2) | 1);
 }
 
-static inline void theta_noncommutative(thetanullpoint_t *T, quaternion_t *q) {
+static inline void theta_noncommutative(thetanullpoint_t *T, const quaternion_t *q) {
   oriint_t w,x,y,z;
   fp2_t a,b,c,d,aw,bx,cy,dz,bw,ax,dy,cz,cw,dx,ay,bz,dw,cx,by,az;
   fp2_t awbx,cydz,bwax,dycz,cwdx,aybz,dwcx,byaz;
-  oriint_set(&w,&q->w);
-  oriint_set(&x,&q->x);
-  oriint_set(&y,&q->y);
-  oriint_set(&z,&q->z);
-  fp2_set(&a,&T->a);
-  fp2_set(&b,&T->b);
-  fp2_set(&c,&T->c);
-  fp2_set(&d,&T->d);
-  fp2_mul_scalar(&aw,&a,&w);
-  fp2_mul_scalar(&bx,&b,&x);
-  fp2_mul_scalar(&cy,&c,&y);
-  fp2_mul_scalar(&dz,&d,&z);
-  fp2_mul_scalar(&bw,&b,&w);
-  fp2_mul_scalar(&ax,&a,&x);
-  fp2_mul_scalar(&dy,&d,&y);
-  fp2_mul_scalar(&cz,&c,&z);
-  fp2_mul_scalar(&cw,&c,&w);
-  fp2_mul_scalar(&dx,&d,&x);
-  fp2_mul_scalar(&ay,&a,&y);
-  fp2_mul_scalar(&bz,&b,&z);
-  fp2_mul_scalar(&dw,&d,&w);
-  fp2_mul_scalar(&cx,&c,&x);
-  fp2_mul_scalar(&by,&b,&y);
-  fp2_mul_scalar(&az,&a,&z);
-  fp2_add(&awbx,&aw,&bx);
-  fp2_add(&cydz,&cy,&dz);
-  fp2_sub(&bwax,&bw,&ax);
-  fp2_sub(&dycz,&dy,&cz);
-  fp2_sub(&cwdx,&cw,&dx);
-  fp2_sub(&aybz,&ay,&bz);
-  fp2_sub(&dwcx,&dw,&cx);
-  fp2_sub(&byaz,&by,&az);
+  oriint_set(&w,&q->w); oriint_set(&x,&q->x);
+  oriint_set(&y,&q->y); oriint_set(&z,&q->z);
+  fp2_set(&a,&T->a); fp2_set(&b,&T->b);
+  fp2_set(&c,&T->c); fp2_set(&d,&T->d);
+  fp2_mul_scalar(&aw,&a,&w); fp2_mul_scalar(&bx,&b,&x);
+  fp2_mul_scalar(&cy,&c,&y); fp2_mul_scalar(&dz,&d,&z);
+  fp2_mul_scalar(&bw,&b,&w); fp2_mul_scalar(&ax,&a,&x);
+  fp2_mul_scalar(&dy,&d,&y); fp2_mul_scalar(&cz,&c,&z);
+  fp2_mul_scalar(&cw,&c,&w); fp2_mul_scalar(&dx,&d,&x);
+  fp2_mul_scalar(&ay,&a,&y); fp2_mul_scalar(&bz,&b,&z);
+  fp2_mul_scalar(&dw,&d,&w); fp2_mul_scalar(&cx,&c,&x);
+  fp2_mul_scalar(&by,&b,&y); fp2_mul_scalar(&az,&a,&z);
+  fp2_add(&awbx,&aw,&bx); fp2_add(&cydz,&cy,&dz);
+  fp2_sub(&bwax,&bw,&ax); fp2_sub(&dycz,&dy,&cz);
+  fp2_sub(&cwdx,&cw,&dx); fp2_sub(&aybz,&ay,&bz);
+  fp2_sub(&dwcx,&dw,&cx); fp2_sub(&byaz,&by,&az);
   fp2_add(&T->a,&awbx,&cydz);
   fp2_add(&T->b,&bwax,&dycz);
   fp2_sub(&T->c,&cwdx,&aybz);
   fp2_add(&T->d,&dwcx,&byaz);
-  canonicalize_theta(T);
-  explicit_bzero(&w, sizeof(oriint_t));
-  explicit_bzero(&x, sizeof(oriint_t));
-  explicit_bzero(&y, sizeof(oriint_t));
-  explicit_bzero(&z, sizeof(oriint_t));
-  explicit_bzero(&a, sizeof(fp2_t)); 
-  explicit_bzero(&b, sizeof(fp2_t));
-  explicit_bzero(&c, sizeof(fp2_t)); 
-  explicit_bzero(&d, sizeof(fp2_t));
-  explicit_bzero(&aw, sizeof(fp2_t) * 16);
-  explicit_bzero(&awbx, sizeof(fp2_t) * 8);
-}
-
-static inline void theta_commutative(thetanullpoint_t *T, const quaternion_t *q) {
-  fp2_t ta, tb, tc, td;
-  fp2_mul_scalar(&ta, &T->a, &q->w);
-  fp2_mul_scalar(&ta, &ta,   &q->y);
-  fp2_mul_scalar(&tb, &T->b, &q->x);
-  fp2_mul_scalar(&tb, &tb,   &q->z);
-  fp2_mul_scalar(&tc, &T->c, &q->y);
-  fp2_mul_scalar(&tc, &tc,   &q->w);
-  fp2_mul_scalar(&td, &T->d, &q->z);
-  fp2_mul_scalar(&td, &td,   &q->x);
-  fp2_set(&T->a, &ta);
-  fp2_set(&T->b, &tb);
-  fp2_set(&T->c, &tc);
-  fp2_set(&T->d, &td);
-  canonicalize_theta(T);
-  explicit_bzero(&ta, sizeof(fp2_t));
-  explicit_bzero(&tb, sizeof(fp2_t));
-  explicit_bzero(&tc, sizeof(fp2_t));
-  explicit_bzero(&td, sizeof(fp2_t));
+  canonicalize_theta(T); 
+  explicit_bzero(&w, sizeof(oriint_t)); explicit_bzero(&x, sizeof(oriint_t));
+  explicit_bzero(&y, sizeof(oriint_t)); explicit_bzero(&z, sizeof(oriint_t));
+  explicit_bzero(&a, sizeof(fp2_t)); explicit_bzero(&b, sizeof(fp2_t));
+  explicit_bzero(&c, sizeof(fp2_t)); explicit_bzero(&d, sizeof(fp2_t));
+  explicit_bzero(&aw, sizeof(fp2_t)); explicit_bzero(&bx, sizeof(fp2_t)); explicit_bzero(&cy, sizeof(fp2_t));
+  explicit_bzero(&dz, sizeof(fp2_t)); explicit_bzero(&bw, sizeof(fp2_t)); explicit_bzero(&ax, sizeof(fp2_t));
+  explicit_bzero(&dy, sizeof(fp2_t)); explicit_bzero(&cz, sizeof(fp2_t)); explicit_bzero(&cw, sizeof(fp2_t));
+  explicit_bzero(&dx, sizeof(fp2_t)); explicit_bzero(&ay, sizeof(fp2_t)); explicit_bzero(&bz, sizeof(fp2_t));
+  explicit_bzero(&dw, sizeof(fp2_t)); explicit_bzero(&cx, sizeof(fp2_t)); explicit_bzero(&by, sizeof(fp2_t));
+  explicit_bzero(&az, sizeof(fp2_t)); explicit_bzero(&awbx, sizeof(fp2_t)); explicit_bzero(&cydz, sizeof(fp2_t));
+  explicit_bzero(&bwax, sizeof(fp2_t)); explicit_bzero(&dycz, sizeof(fp2_t)); explicit_bzero(&cwdx, sizeof(fp2_t));
+  explicit_bzero(&aybz, sizeof(fp2_t)); explicit_bzero(&dwcx, sizeof(fp2_t)); explicit_bzero(&byaz, sizeof(fp2_t));
 }
 
 static inline void derive_publickey(thetanullpoint_t *T, const quaternion_ideal_t *sk_I) {
   get_baseline_theta(T);
   quaternion_t skoffset;
   quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
-  theta_commutative(T, &skoffset);
+  theta_noncommutative(T, &skoffset);
   canonicalize_theta(T);
   explicit_bzero(&skoffset, sizeof(quaternion_t));
 }
@@ -165,29 +130,14 @@ static inline void keygen(quaternion_ideal_t *RES) {
   }
 }
 
-void derive_shared_secret(uint8_t *key_out, const char *msg, const thetanullpoint_t *remote_pk, const quaternion_ideal_t *sk_I) {
-  thetanullpoint_t T;
-  quaternion_t skoffset, qm;
-  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
-  theta_set(&T, remote_pk);
-  msg_to_quaternion(&qm, msg);
-  theta_commutative(&T, &skoffset);
-  theta_commutative(&T, &qm);
-  canonicalize_theta(&T);
-  shake256(key_out, HASHES_BYTES, (uint8_t *)&T, sizeof(thetanullpoint_t));
-  explicit_bzero(&T, sizeof(thetanullpoint_t));
-  explicit_bzero(&skoffset, sizeof(quaternion_t));
-  explicit_bzero(&qm, sizeof(quaternion_t));
-}
-
-static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t *pk_theta, quaternion_ideal_t *sk_I) {
+static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, thetanullpoint_t *pk_theta, quaternion_ideal_t *sk_I) {
   thetanullpoint_t T;
   quaternion_t skoffset, qm;
   quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
   get_baseline_theta(&T);
-  msg_to_quaternion(&qm, msg);
-  theta_commutative(&T, &skoffset);
-  theta_commutative(&T, &qm);
+  msg_to_quaternion(&qm, msg, len);
+  theta_noncommutative(&T, &skoffset);
+  theta_noncommutative(&T, &qm);
   canonicalize_theta(&T);
   theta_compress(&sig_out->src, &T);
   explicit_bzero(&skoffset, sizeof(quaternion_t));
@@ -195,13 +145,13 @@ static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t 
   explicit_bzero(&T, sizeof(thetanullpoint_t));
 }
 
-static inline bool verify(const char *msg, const signature_t *sig_in, const thetanullpoint_t *pk_theta) {
+static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig_in, const thetanullpoint_t *pk_theta) {
   thetanullpoint_t T_check, T_sig;
   quaternion_t qm;
   theta_decompress(&T_sig, &sig_in->src);
   theta_set(&T_check, pk_theta);
-  msg_to_quaternion(&qm, msg);
-  theta_commutative(&T_check, &qm);
+  msg_to_quaternion(&qm, msg, len);
+  theta_noncommutative(&T_check, &qm);
   canonicalize_theta(&T_check);
   bool result = theta_is_equal(&T_check, &T_sig);
   explicit_bzero(&qm, sizeof(quaternion_t));
@@ -218,6 +168,8 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t
   pos += FP2_SERIALIZED_BYTES;
   fp2_pack(out + pos, &sig->src.c); 
   pos += FP2_SERIALIZED_BYTES;
+  fp2_pack(out + pos, &sig->src.d); 
+  pos += FP2_SERIALIZED_BYTES;
   return true;
 }
 
@@ -230,26 +182,26 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
   pos += FP2_SERIALIZED_BYTES;
   fp2_unpack(&sig->src.c, in + pos); 
   pos += FP2_SERIALIZED_BYTES;
-  fp2_clear(&sig->src.d);
+  fp2_unpack(&sig->src.d, in + pos); 
+  pos += FP2_SERIALIZED_BYTES;
   return true;
 }
 
-static inline bool serialize_pk(uint8_t *out, size_t out_len, const thetanullpoint_t *pk) {
-  if (!out || out_len < PK_BYTES) return false;
+static inline bool serialize_pk(uint8_t out[PK_BYTES], const thetanullpoint_t *pk) {
   size_t pos = 0;
   fp2_pack(out + pos, &pk->b); pos += FP2_SERIALIZED_BYTES;
   fp2_pack(out + pos, &pk->c); pos += FP2_SERIALIZED_BYTES;
+  fp2_pack(out + pos, &pk->d); pos += FP2_SERIALIZED_BYTES;
   return true;
 }
 
-static inline bool deserialize_pk(thetanullpoint_t *pk, const uint8_t *in, size_t in_len) {
-  if (!pk || !in || in_len < PK_BYTES) return false;
+static inline bool deserialize_pk(thetanullpoint_t *pk, const uint8_t in[PK_BYTES]) {
   memset(pk, 0, sizeof(thetanullpoint_t));
   pk->a.re.bitsu64[0] = 1ULL; 
   size_t pos = 0;
   fp2_unpack(&pk->b, in + pos); pos += FP2_SERIALIZED_BYTES;
   fp2_unpack(&pk->c, in + pos); pos += FP2_SERIALIZED_BYTES;
-  fp2_clear(&pk->d);
+  fp2_unpack(&pk->d, in + pos); pos += FP2_SERIALIZED_BYTES;
   return true;
 }
 
@@ -344,7 +296,7 @@ static inline void derive_address(char *out_str, size_t *out_len, const thetanul
   uint8_t pk_serialized[PK_BYTES];
   uint8_t addr_data[HASHES_BYTES + 4]; 
   uint8_t hash_tmp[HASHES_BYTES];
-  serialize_pk(pk_serialized, PK_BYTES, pk);
+  serialize_pk(pk_serialized, pk);
   shake256(addr_data, HASHES_BYTES, pk_serialized, PK_BYTES);
   shake256(hash_tmp, HASHES_BYTES, addr_data, HASHES_BYTES);
   memcpy(addr_data + HASHES_BYTES, hash_tmp, 4);
@@ -355,3 +307,4 @@ static inline void derive_address(char *out_str, size_t *out_len, const thetanul
   explicit_bzero(addr_data, sizeof(addr_data));
   explicit_bzero(hash_tmp, sizeof(hash_tmp));
 }
+

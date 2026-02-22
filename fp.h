@@ -59,7 +59,7 @@ static inline void fp2_sqr(fp2_t *RES, const fp2_t *a) {
   fp2_mul(RES, a, a);
 }
 
-static inline void fp2_inv(fp2_t *RES, fp2_t *a) {
+static inline void fp2_inv(fp2_t *RES, const fp2_t *a) {
   oriint_t a2;
   oriint_t b2;
   oriint_t norm;
@@ -83,7 +83,7 @@ static inline bool fp2_is_equal(fp2_t *a, fp2_t *b) {
   return (oriint_is_equal(&a->re, &b->re) & oriint_is_equal(&a->im, &b->im));
 }
 
-static inline void fp2_pack(uint8_t out[FP_BYTES], const fp2_t *a) {
+static inline void fp2_pack(uint8_t out[FP2_SERIALIZED_BYTES], const fp2_t *a) {
     size_t offset = 0;
     for (size_t i = 0; i < NBLOCK-1; i++) {
         uint64_t v_be = htobe64(a->re.bitsu64[i]);
@@ -92,7 +92,7 @@ static inline void fp2_pack(uint8_t out[FP_BYTES], const fp2_t *a) {
     }
 }
 
-static inline void fp2_unpack(fp2_t *RES, const uint8_t in[FP_BYTES]) {
+static inline void fp2_unpack(fp2_t *RES, const uint8_t in[FP2_SERIALIZED_BYTES]) {
     size_t offset = 0;
     for (size_t i = 0; i < NBLOCK-1; i++) {
         uint64_t v_be;

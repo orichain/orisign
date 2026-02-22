@@ -5,16 +5,9 @@
 #include "types.h"
 
 static inline void canonicalize_theta(thetanullpoint_t *T) {
-  if (fp2_is_zero(&T->a)) {
-    fp2_clear(&T->a);
-    fp2_clear(&T->b);
-    fp2_clear(&T->c);
-    fp2_clear(&T->d);
-    return;
-  }
   fp2_t inva;
-  fp2_inv(&inva, &T->a);
-  fp2_set_one(&T->a);
+  fp2_inv(&inva, &T->a); 
+  fp2_mul(&T->a, &T->a, &inva);
   fp2_mul(&T->b, &T->b, &inva);
   fp2_mul(&T->c, &T->c, &inva);
   fp2_mul(&T->d, &T->d, &inva);
