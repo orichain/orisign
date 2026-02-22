@@ -14,7 +14,7 @@ static inline void fp_from_signed(oriint_t *RES, oriint_t *a) {
   oriint_select_mask(RES, a, &tmp, mask);
 }
 
-static inline void fp_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void fp_add(oriint_t *RES, oriint_t *a, const oriint_t *b) {
   oriint_mod_add(RES, a, b);
 }
 
@@ -22,7 +22,7 @@ static inline void fp_sub(oriint_t *RES, const oriint_t *a, oriint_t *b) {
   oriint_mod_sub_2(RES, a, b);
 }
 
-static inline void fp_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void fp_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
   oriint_mod_mul(RES, a, b);
 }
 
@@ -35,12 +35,17 @@ static inline void fp2_add(fp2_t *RES, fp2_t *a, fp2_t *b) {
   fp_add(&RES->im, &a->im, &b->im);
 }
 
+static inline void fp2_add_scalar(fp2_t *RES, fp2_t *a, const oriint_t *b) {
+  fp_add(&RES->re, &a->re, b);
+  fp_add(&RES->im, &a->im, b);
+}
+
 static inline void fp2_sub(fp2_t *RES, fp2_t *a, fp2_t *b) {
   fp_sub(&RES->re, &a->re, &b->re);
   fp_sub(&RES->im, &a->im, &b->im);
 }
 
-static inline void fp2_mul(fp2_t *RES, fp2_t *a, fp2_t *b) {
+static inline void fp2_mul(fp2_t *RES, const fp2_t *a, const fp2_t *b) {
   oriint_t ac, bd, ad, bc;
   fp_mul(&ac, &a->re, &b->re);
   fp_mul(&bd, &a->im, &b->im);
@@ -50,7 +55,7 @@ static inline void fp2_mul(fp2_t *RES, fp2_t *a, fp2_t *b) {
   fp_add(&RES->im, &ad, &bc);
 }
 
-static inline void fp2_sqr(fp2_t *RES, fp2_t *a) {
+static inline void fp2_sqr(fp2_t *RES, const fp2_t *a) {
   fp2_mul(RES, a, a);
 }
 
@@ -78,10 +83,8 @@ static inline bool fp2_is_equal(fp2_t *a, fp2_t *b) {
   return (oriint_is_equal(&a->re, &b->re) & oriint_is_equal(&a->im, &b->im));
 }
 
-// Gunakan ukuran baru: FP_BYTES (32 byte), bukan 2 * FP_BYTES
 static inline void fp2_pack(uint8_t out[FP_BYTES], const fp2_t *a) {
     size_t offset = 0;
-    // Kita hanya ambil bagian Real (re)
     for (size_t i = 0; i < NBLOCK-1; i++) {
         uint64_t v_be = htobe64(a->re.bitsu64[i]);
         memcpy(out + offset, &v_be, sizeof(uint64_t));
@@ -98,46 +101,12 @@ static inline void fp2_unpack(fp2_t *RES, const uint8_t in[FP_BYTES]) {
         offset += sizeof(uint64_t);
     }
     RES->re.bitsu64[NBLOCK-1] = 0ULL;
-    
-    // Set bagian imajiner ke nol secara manual karena tidak dikirim lewat network
     for (size_t i = 0; i < NBLOCK; i++) {
         RES->im.bitsu64[i] = 0ULL;
     }
 }
 
-static inline void fp2_pack_asli(uint8_t out[2 * FP_BYTES], const fp2_t *a) {
-  size_t offset = 0;
-  for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be = htobe64(a->re.bitsu64[i]);
-    memcpy(out + offset, &v_be, sizeof(uint64_t));
-    offset += sizeof(uint64_t);
-  }
-  for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be = htobe64(a->im.bitsu64[i]);
-    memcpy(out + offset, &v_be, sizeof(uint64_t));
-    offset += sizeof(uint64_t);
-  }
-}
-
-static inline void fp2_unpack_asli(fp2_t *RES, const uint8_t in[2 * FP_BYTES]) {
-  size_t offset = 0;
-  for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
-    memcpy(&v_be, in + offset, sizeof(uint64_t));
-    RES->re.bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
-  }
-  RES->re.bitsu64[NBLOCK-1] = 0ULL;
-  for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
-    memcpy(&v_be, in + offset, sizeof(uint64_t));
-    RES->im.bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
-  }
-  RES->im.bitsu64[NBLOCK-1] = 0ULL;
-}
-
-static inline void fp2_mul_scalar(fp2_t *RES, fp2_t *a, oriint_t *b) {
+static inline void fp2_mul_scalar(fp2_t *RES, fp2_t *a, const oriint_t *b) {
   fp_mul(&RES->re, &a->re, b);
   fp_mul(&RES->im, &a->im, b);
 }
@@ -152,7 +121,7 @@ static inline void fp2_clear(fp2_t *RES) {
   oriint_clear(&RES->im);
 }
 
-static inline void fp2_set(fp2_t *RES, fp2_t *a) {
+static inline void fp2_set(fp2_t *RES, const fp2_t *a) {
   oriint_set(&RES->re, &a->re);
   oriint_set(&RES->im, &a->im);
 }
@@ -166,4 +135,3 @@ static inline void fp2_set_thetasqrt2(fp2_t *RES) {
   oriint_set(&RES->re, &THETA_SQRT2);
   oriint_clear(&RES->im);
 }
-

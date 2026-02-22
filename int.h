@@ -1,10 +1,12 @@
 #pragma once
 #include "globals.h"
-#include "kat.h"
 #include "types.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/endian.h>
 
 static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
   uint64_t lo;
@@ -18,6 +20,19 @@ static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
 
   *hi = h;
   return lo;
+}
+
+static inline uint64_t oriint_udiv128(uint64_t lo, uint64_t hi, uint64_t divisor, uint64_t *quot) {
+  uint64_t r;
+  uint64_t q;
+
+  __asm__ (
+      "divq %[div];"
+      : "=a"(q), "=d"(r)
+      : "a"(lo), "d"(hi), [div]"rm"(divisor)
+      );
+  *quot = q;
+  return r;
 }
 
 static inline uint64_t oriint_shiftright128(uint64_t a, uint64_t b, unsigned char n) {
@@ -75,6 +90,14 @@ static inline void oriint_set_two(oriint_t *a) {
 static inline void oriint_set_u64(oriint_t *a, uint64_t b) {
   a->bitsu64[0] = b;
   for (int8_t i = 1; i < NBLOCK; i++) {
+    a->bitsu64[i] = 0ULL;
+  }
+}
+
+static inline void oriint_set_u128(oriint_t *a, uint64_t b, uint64_t c) {
+  a->bitsu64[0] = b;
+  a->bitsu64[1] = c;
+  for (int8_t i = 2; i < NBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
@@ -216,6 +239,21 @@ static inline void oriint_int_sub_3(oriint_t *RES, const oriint_t *a, const orii
   }
 }
 
+static uint64_t oriint_int_mod_u64(const oriint_t *n, uint64_t divisor) {
+    uint64_t remainder = 0;
+    for (int8_t i = NBLOCK - 1; i >= 0; i--) {
+        uint64_t hi = remainder;
+        uint64_t lo = n->bitsu64[i];
+        uint64_t quot;
+        __asm__ (
+            "divq %[div];"
+            : "=a"(quot), "=d"(remainder)
+            : "a"(lo), "d"(hi), [div]"rm"(divisor)
+        );
+    }
+    return remainder;
+}
+
 static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
   oriint_t diff;
   oriint_int_sub_3(&diff, a, b);
@@ -298,7 +336,7 @@ static inline void oriint_montgomery_mul(oriint_t *RES, const oriint_t *n, const
   oriint_select_ge(RES, RES, n);
 }
 
-static inline void oriint_mod_mul(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void oriint_mod_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
   oriint_t p;
   oriint_montgomery_mul(&p,&P,&MM64,&Msize,a,b);
   oriint_montgomery_mul(RES,&P,&MM64,&Msize,&R2,&p);
@@ -332,7 +370,7 @@ static inline void oriint_mod_sub_1(oriint_t *RES, oriint_t *a) {
     oriint_int_add_1(RES, &P);
 }
 
-static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, oriint_t *b) {
+static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, const oriint_t *b) {
   oriint_int_add_3(RES, a, b);
   oriint_select_ge(RES, RES, &P);
 }
@@ -710,52 +748,52 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
 }
 
 static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
-  if (n->bitsu64[0] == 2 || n->bitsu64[0] == 3) return true;
-  if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
-  static const uint16_t small_primes[] = {
-    3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67
-  };
-  for (int i = 0; i < 18; i++) {
-    if (n->bitsu64[0] % small_primes[i] == 0) {
-      return (n->bitsu64[0] == small_primes[i]);
+    if (oriint_is_even(n)) return false;
+    if (oriint_is_one(n) || oriint_is_zero(n)) return false;
+    static const uint16_t small_primes[] = {
+        3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 
+        61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127
+    };
+    for (int i = 0; i < 30; i++) {
+        if (oriint_int_mod_u64(n, small_primes[i]) == 0) {
+            oriint_t sp_tmp;
+            oriint_set_u64(&sp_tmp, small_primes[i]);
+            return oriint_is_equal(n, &sp_tmp);
+        }
     }
-  }
-  oriint_t one, n_minus_1, d, x, r2;
-  uint64_t mm64;
-  uint8_t msize;
-  oriint_set_one(&one);
-  oriint_int_sub_3(&n_minus_1, n, &one);
-  oriint_modvar_setup(&mm64, &msize, &r2, n);
-  oriint_set(&d, &n_minus_1);
-  uint32_t s = 0;
-  while (!oriint_is_zero(&d) && oriint_is_even(&d)) {
-    oriint_int_shiftr(1, &d);
-    s++;
-  }
-  uint64_t bases[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
-  int8_t num_static = sizeof(bases) / sizeof(bases[0]);
-  for (int8_t i = 0; i < (num_static + iterations); i++) {
-    oriint_t base;
-    oriint_clear(&base);
-    if (i < num_static) {
-      base.bitsu64[0] = bases[i];
-    } else {
-      base.bitsu64[0] = (secure_random_uint64_kat(KAT_LABEL) % (n->bitsu64[0] - 3)) + 2;
+    oriint_t n_minus_1, d, x, r2, one;
+    uint64_t mm64;
+    uint8_t msize;
+    oriint_set_one(&one);
+    oriint_int_sub_3(&n_minus_1, n, &one);
+    oriint_set(&d, &n_minus_1);
+    uint32_t s = 0;
+    while (oriint_is_even(&d)) {
+        oriint_int_shiftr(1, &d);
+        s++;
     }
-    if (oriint_is_ge(&base, n)) continue;
-    oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
-    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
-    bool composite = true;
-    for (uint32_t r = 1; r < s; r++) {
-      oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
-      if (oriint_is_equal(&x, &n_minus_1)) {
-        composite = false;
-        break;
-      }
+    oriint_modvar_setup(&mm64, &msize, &r2, n);
+    static const uint64_t bases[] = {
+        2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL
+    };
+    for (int i = 0; i < 9; i++) {
+        oriint_t base;
+        oriint_clear(&base);
+        base.bitsu64[0] = bases[i];
+        if (oriint_is_ge(&base, n)) continue;
+        oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
+        if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
+        bool composite = true;
+        for (uint32_t r = 1; r < s; r++) {
+            oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
+            if (oriint_is_equal(&x, &n_minus_1)) {
+                composite = false;
+                break;
+            }
+        }
+        if (composite) return false;
     }
-    if (composite) return false;
-  }
-  return true;
+    return true;
 }
 
 static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, oriint_t *x, oriint_t *y) {
@@ -798,26 +836,38 @@ static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, con
     }
     return true;
   }
-
   return false;
 }
 
 static inline void oriint_random(oriint_t *RES) {
   oriint_clear(RES);
+  uint8_t buffer[32];
+  size_t offset = 0;
+  arc4random_buf(buffer, sizeof(buffer));
   for (int8_t i = 0; i < NBLOCK-1; i++) {
-    RES->bitsu64[i] = secure_random_uint64_kat(KAT_LABEL);
+    uint64_t v_be;
+    memcpy(&v_be, buffer + offset, sizeof(uint64_t));
+    RES->bitsu64[i] = be64toh(v_be);
+    offset += sizeof(uint64_t);
+  }
+  RES->bitsu64[NBLOCK-1] = 0ULL;
+  oriint_select_ge(RES, RES, &P);
+}
+
+static inline void oriint_random_test(oriint_t *RES) {
+  oriint_clear(RES);
+  uint8_t buffer[32];
+  size_t offset = 0;
+  arc4random_buf(buffer, sizeof(buffer));
+  for (int8_t i = 0; i < NBLOCK-1; i++) {
+    uint64_t v_be;
+    memcpy(&v_be, buffer + offset, sizeof(uint64_t));
+    RES->bitsu64[i] = be64toh(v_be);
+    offset += sizeof(uint64_t);
   }
   RES->bitsu64[NBLOCK-2] &= 0x00ffffffffffffff;
   RES->bitsu64[NBLOCK-1] = 0ULL;
-}
-
-static inline void oriint_random_128(oriint_t *RES) {
-  oriint_clear(RES);
-  RES->bitsu64[0] = secure_random_uint64_kat(KAT_LABEL);
-  RES->bitsu64[1] = secure_random_uint64_kat(KAT_LABEL);  
-  for (int8_t i = 2; i < NBLOCK; i++) {
-    RES->bitsu64[i] = 0ULL;
-  }
+  oriint_select_ge(RES, RES, &P);
 }
 
 static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
@@ -843,8 +893,6 @@ static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_
     oriint_random(&w);
     oriint_modvar_sqr(&w2, &w, &limitwpone, &mm64w, &msizew, &r2w);
     oriint_modvar_sub_2(&remw, &remz, &w2, &limitwpone);
-    if (remw.bitsu64[0] < 2 || oriint_is_even(&remw)) continue;
-    if ((remw.bitsu64[0] & 3ULL) != 1) continue;
     oriint_modvar_setup(&mm64rw, &msizerw, &r2rw, &remw);
     oriint_t x, y;
     if (oriint_solve_cornacchia(&remw, &mm64rw, &msizerw, &r2rw, &x, &y)) {
@@ -1123,4 +1171,3 @@ static inline void oriint_tests() {
   printf("\n----- ALL TESTS COMPLETED -----\n");
   printf("-------------------------------\n");
 }
-

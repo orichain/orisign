@@ -2,7 +2,7 @@
 #include "fp.h"
 #include "types.h"
 
-static inline void quat_set(quaternion_t *RES, quaternion_t *a) {
+static inline void quat_set(quaternion_t *RES, const quaternion_t *a) {
   oriint_set(&RES->w, &a->w);
   oriint_set(&RES->x, &a->x);
   oriint_set(&RES->y, &a->y);
@@ -44,7 +44,7 @@ static inline void quat_add_scalar(quaternion_t *RES, quaternion_t *a, oriint_t 
   fp_add(&RES->z, &a->z, b);
 }
 
-static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b) {
+static inline void quat_mul(quaternion_t *RES, const quaternion_t *a, const quaternion_t *b) {
   oriint_t v0;
   oriint_t v1;
   oriint_t v2;
@@ -85,28 +85,9 @@ static inline void quat_mul(quaternion_t *RES, quaternion_t *a, quaternion_t *b)
   fp_add(&RES->z, &v4, &v5);
 }
 
-static inline void quat_norm(oriint_t *RES, quaternion_t *a) {
-  oriint_t n0;
-  oriint_t n1;
-  oriint_t n2;
-  oriint_t n3;
-  oriint_t n4;
-  oriint_t n5;
-
-  fp_mul(&n0, &a->w, &a->w);
-  fp_mul(&n1, &a->x, &a->x);
-  fp_mul(&n2, &a->y, &a->y);
-  fp_mul(&n3, &a->z, &a->z);
-  fp_add(&n4, &n0, &n1);
-  fp_add(&n5, &n4, &n2);
-  fp_add(RES, &n5, &n3);
+static inline void quat_mul_scalar(quaternion_t *RES, quaternion_t *a, const oriint_t *b) {
+  oriint_mod_mul(&RES->w, &a->w, b);
+  oriint_mod_mul(&RES->x, &a->x, b);
+  oriint_mod_mul(&RES->y, &a->y, b);
+  oriint_mod_mul(&RES->z, &a->z, b);
 }
-
-static inline void quat_conj(quaternion_t *RES, quaternion_t *a) {
-    oriint_set(&RES->w, &a->w);
-    oriint_int_neg_2(&RES->x, &a->x);
-    oriint_int_neg_2(&RES->y, &a->y);
-    oriint_int_neg_2(&RES->z, &a->z);
-}
-
-

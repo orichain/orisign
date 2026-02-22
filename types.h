@@ -26,15 +26,6 @@ typedef struct {
 } thetacompressed_t;
 
 typedef struct {
-  uint8_t challenge_val[HASHES_BYTES];
   thetacompressed_t src;
-  uint8_t salt[SALT_LEN];
 } signature_t;
-
-typedef struct {
-  bool enabled;
-  uint8_t seed[KAT_SEED_SIZE];
-  uint64_t counter;
-  bool initialized;
-} kat_context_t;
 
