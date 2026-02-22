@@ -89,5 +89,21 @@ Encoded_Sig          [ 96 bytes]: c68051d5161702474abfb11e41d5a6de3db7f63d0eb1d8
   ➤ Network Payload  : 192 bytes (Total Wire Size)
 ==============================================================
 ```
+
+## Installation
+
+The main development and testing environment currently uses **OpenBSD-7.8**.
+
+```bash
+git clone https://github.com/orichain/orisign.git
+cd orisign
+gmake clean all
+./orisign
+```
+
+## License
+
+This project is licensed under GNU Affero General Public License - see the [LICENSE](https://github.com/orichain/orisign/blob/main/LICENSE) file for details.
+
 ---
 

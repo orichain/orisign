@@ -1,7 +1,6 @@
 
 #pragma once
 
-#include "fips202.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -39,45 +38,3 @@ static inline bool b58enc(char *b58, size_t *b58sz, const void *data, size_t bin
   return true;
 }
 
-static inline int kdf(uint8_t *out, size_t outlen,
-        const uint8_t *key, size_t key_len,
-        const uint8_t *info, size_t info_len)
-{
-    if ((key_len > UINT32_MAX) ||
-            (info_len > UINT32_MAX))
-        return -1;
-    if (!out && outlen)
-        return -1;
-    shake256incctx st;
-    uint8_t buffer[4];
-    shake256_inc_init(&st);
-    const uint8_t tag = 0xFF;
-    shake256_inc_absorb(&st, &tag, 1);
-    const uint8_t key_header = 0x01;
-    shake256_inc_absorb(&st, &key_header, 1);
-    buffer[0] = (uint8_t)(key_len >> 24);
-    buffer[1] = (uint8_t)(key_len >> 16);
-    buffer[2] = (uint8_t)(key_len >> 8);
-    buffer[3] = (uint8_t)(key_len);
-    shake256_inc_absorb(&st, buffer, 4);
-    if (key && key_len)
-        shake256_inc_absorb(&st, key, key_len);
-    const uint8_t info_header = 0x02;
-    shake256_inc_absorb(&st, &info_header, 1);
-    buffer[0] = (uint8_t)(info_len >> 24);
-    buffer[1] = (uint8_t)(info_len >> 16);
-    buffer[2] = (uint8_t)(info_len >> 8);
-    buffer[3] = (uint8_t)(info_len);
-    shake256_inc_absorb(&st, buffer, 4);
-    if (info && info_len)
-        shake256_inc_absorb(&st, info, info_len);
-    shake256_inc_finalize(&st);
-    shake256_inc_squeeze(out, outlen, &st);
-    shake256_inc_ctx_release(&st);
-#if defined(__NetBSD__)
-    explicit_memset(buffer, 0, sizeof(buffer));
-#else
-    explicit_bzero(buffer, sizeof(buffer));
-#endif
-    return 0;
-}
