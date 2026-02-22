@@ -14,6 +14,5 @@ extern const oriint_t R2;
 extern const uint64_t MSK62;
 extern const oriint_t THETA_SQRT2;
 extern const oriint_t NORM_IDEAL;
-extern const quaternion_t OFFSET_SIGN;
-extern const quaternion_t OFFSET_ADDR;
-extern const quaternion_t OFFSET_DH;
+extern const quaternion_t OFFSET;
+

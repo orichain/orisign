@@ -125,7 +125,7 @@ static inline void theta_commutative(thetanullpoint_t *T, const quaternion_t *q)
 static inline void derive_publickey(thetanullpoint_t *T, const quaternion_ideal_t *sk_I) {
   get_baseline_theta(T);
   quaternion_t skoffset;
-  quat_mul(&skoffset, &sk_I->b[0], &OFFSET_SIGN);
+  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
   theta_commutative(T, &skoffset);
   canonicalize_theta(T);
   explicit_bzero(&skoffset, sizeof(quaternion_t));
@@ -168,7 +168,7 @@ static inline void keygen(quaternion_ideal_t *RES) {
 void derive_shared_secret(uint8_t *key_out, const char *msg, const thetanullpoint_t *remote_pk, const quaternion_ideal_t *sk_I) {
   thetanullpoint_t T;
   quaternion_t skoffset, qm;
-  quat_mul(&skoffset, &sk_I->b[0], &OFFSET_SIGN);
+  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
   theta_set(&T, remote_pk);
   msg_to_quaternion(&qm, msg);
   theta_commutative(&T, &skoffset);
@@ -183,7 +183,7 @@ void derive_shared_secret(uint8_t *key_out, const char *msg, const thetanullpoin
 static inline void sign(signature_t *sig_out, const char *msg, thetanullpoint_t *pk_theta, quaternion_ideal_t *sk_I) {
   thetanullpoint_t T;
   quaternion_t skoffset, qm;
-  quat_mul(&skoffset, &sk_I->b[0], &OFFSET_SIGN);
+  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
   get_baseline_theta(&T);
   msg_to_quaternion(&qm, msg);
   theta_commutative(&T, &skoffset);
