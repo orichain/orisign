@@ -176,6 +176,8 @@ static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, co
   thetanullpoint_t T;
   quaternion_t skoffset, qm;
   uint8_t hash[HASHES_BYTES];
+  sig_out->version[0] = VERSION_MAJ;
+  sig_out->version[1] = VERSION_MIN;
   quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
   msg_to_quaternion(&qm, sig_out->hash, msg, len, &skoffset);
   get_baseline_theta(&T);
@@ -216,6 +218,8 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t
   if (!out) return false;
   if (out_len < SIG_BYTES) return false;
   size_t pos = 0;
+  memcpy(out + pos, sig->version, VERSION_BYTES);
+  pos += VERSION_BYTES;
   memcpy(out + pos, sig->hash, HASHES_BYTES);
   pos += HASHES_BYTES;
   fp2_pack(out + pos, &sig->src.b);
@@ -232,6 +236,8 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
   if (in_len < SIG_BYTES) return false;
   memset(sig, 0, sizeof(signature_t));
   size_t pos = 0;
+  memcpy(sig->version, in + pos, VERSION_BYTES);
+  pos += VERSION_BYTES;
   memcpy(sig->hash, in + pos, HASHES_BYTES);
   pos += HASHES_BYTES;
   fp2_unpack(&sig->src.b, in + pos); 

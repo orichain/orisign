@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "constants.h"
 
 /** * ORISIGN - Quaternion Action on Theta Signature Scheme
  * ---------------------------------------------------------
@@ -15,10 +16,10 @@
  */
 
 /* Buffer size definitions in bytes */
-#define ORISIGN_PK_BYTES   96   /* Public Key size */
-#define ORISIGN_SIG_BYTES  128  /* Signature size */
-#define ORISIGN_SK_BYTES   128  /* Secret Key size */
-#define ORISIGN_ADDR_BYTES 64   /* Max Address length (Base58) */
+#define ORISIGN_PK_BYTES   PK_BYTES  /* is 96 */ /* Public Key size */
+#define ORISIGN_SIG_BYTES  SIG_BYTES  /* is 130 */ /* Signature size */
+#define ORISIGN_SK_BYTES   (FP_BYTES * 4)  /* is 128 */ /* Secret Key size */
+#define ORISIGN_ADDR_BYTES ADDR_MAX_BYTES  /* is 64 */ /* Max Address length (Base58) */
 
 /**
  * @brief Generates a cryptographically secure keypair.
@@ -66,7 +67,7 @@ bool orisign_verify(const uint8_t *msg, size_t len,
  * * @param address_out [out] Buffer for the null-terminated address string.
  * @param pk          [in]  The Public Key (96 bytes).
  */
-void orisign_get_address(char address_out[ORISIGN_ADDR_BYTES + 1], 
+void orisign_get_address(char address_out[ORISIGN_ADDR_BYTES], 
                          const uint8_t pk[ORISIGN_PK_BYTES]);
 
 #endif /* ORISIGN_API_H */

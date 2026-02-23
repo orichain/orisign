@@ -71,7 +71,7 @@ int main() {
   printf("==============================================================\n");
   printf("           ORISIGN: CRYPTOGRAPHIC AUDIT REPORT           \n");
   printf("           Protocol: Quaternion Action on Theta               \n");
-  printf("           Target: 96B PK | 128B SIG | 224B Total             \n");
+  printf("           Target: 96B PK | 130B SIG | 226B Total             \n");
   printf("==============================================================\n");
 
   quaternion_ideal_t sk;
@@ -182,7 +182,12 @@ int main() {
   signature_t s1, s2;
   sign(&s1, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
   sign(&s2, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
-  bool is_deterministic = (memcmp(&s1, &s2, sizeof(signature_t)) == 0);
+
+  uint8_t s1s[SIG_BYTES], s2s[SIG_BYTES];
+  serialize_sig(s1s, SIG_BYTES, &s1);
+  serialize_sig(s2s, SIG_BYTES, &s2);
+
+  bool is_deterministic = (memcmp(s1s, s2s, SIG_BYTES) == 0);
   printf("    Sig 1 vs Sig 2      : %s\n", is_deterministic ? "IDENTICAL (Deterministic) ✅" : "VARYING (Probabilistic) ⚠️");
 
   // [10] PK TAMPERING

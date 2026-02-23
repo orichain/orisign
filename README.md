@@ -8,8 +8,8 @@ ORISIGN is a high-performance digital signature implementation based on **non-co
 ## 🚀 Key Features
 
 - **Non-Commutative Algebra**: Leverages Hamiltonian actions on Theta coordinates to resist linear cryptanalysis.
-- **Ultra-Compact Payload**: Total wire size of only **224 Bytes** (96B Public Key + 128B Signature).
-- **Extreme Throughput**: Capable of processing over **~40,000 verification operations per second** on standard hardware.
+- **Ultra-Compact Payload**: Total wire size of only **226 Bytes** (96B Public Key + 130B Signature).
+- **Extreme Throughput**: Capable of processing over **~35,000 verification operations per second** on standard hardware.
 - **Deterministic Signing**: Eliminates key-leakage risks associated with poor entropy sources during nonce generation.
 - **Post-Quantum Ready**: Designed to resist Shor's algorithm via complex isogeny-based/quaternion mathematical structures.
 
@@ -26,31 +26,32 @@ ORISIGN is a high-performance digital signature implementation based on **non-co
 ==============================================================
            ORISIGN: CRYPTOGRAPHIC AUDIT REPORT           
            Protocol: Quaternion Action on Theta               
-           Target: 96B PK | 128B SIG | 224B Total             
+           Target: 96B PK | 130B SIG | 226B Total             
 ==============================================================
 [1] ENVIRONMENT CHECK
     Security Bit-Level  : 256-bit
     Hash Algorithm      : SHAKE256 (32 bytes)
 --------------------------------------------------------------
 [2] KEYSPACE ANALYSIS
-    Keygen Latency      : 12.299 ms
-SK                   [128 bytes]: a7a0ae57d4f655fb6b95b3154770cce238e3b330cbeca342e379189d885afd5c
-                     77ca9cc8d7bbd67ce591e14de7c47a04d4d5ee7e86a7a79559c6513a003aae46
-                     4e132a69b86d2bb9ea9bc5ba0cf65370a1dfea82a38ec94c4bd775cb9dbfce99
-                     59d3267e9c85b4c0ceb25e0a3322cc32bb60b755defd4de2187c29dc848f769e
-PK                   [ 96 bytes]: f1000d72e3b5996e7b107fb70ef9760b4f9736cfe4099ab902814862f48e9681
-                     0bcec0f454d5f08cc0b86ac6ba44b1a10ce252f11e3b5fb802a7397aea3d4dba
-                     2e444958be4e68aa2c932d035a8f1c8568e99a0fcba47e7900159565de8f70f0
-ADDR                 [ 44 bytes]: 3rxaqqFjsbLLtbG5NWBzYPpiSwwgWY4szBz9YS88CPw
+    Keygen Latency      : 7.523 ms
+SK                   [128 bytes]: ac35b56d40e4a9f7b6af25ae9af9459c2b3f8cc180d7918cd5437ba7180987b2
+                     81b9b4eda9dd9d4708a972d30efaf7e18ea99bd1f0ae37b4bb82480ee76a5b20
+                     ebc555b638f71956b60c12a4d05d762d16f56caf3e75f005927910f03386ecd2
+                     06987b873c29fa44a7c95793f902568ff3b5d956434544726f850a846667817b
+PK                   [ 96 bytes]: 9cd668bbd6c6d0c6d1afe576bacc60965ae22c00588aa94202a3f8162a1a96fe
+                     083a6d9da6dbc5e790d162882a114aa88e81bb1cf654ed94011bb502238861d6
+                     6a4162d8477f8d4b99bbc746251ba27f8d9496f07c5d961c00b7fb9de0c8649d
+ADDR                 [ 48 bytes]: 2xyhRVWMQFLnVr9QCL7Bh6Y5rmLzLeMayhTnsMrbVWa7Nxy
 --------------------------------------------------------------
 [3] PUBLIC KEY COMPRESSION (WIRE-FORMAT)
     Integrity Status    : VERIFIED (1:1 Match) ✅
 --------------------------------------------------------------
 [4] SIGNATURE RECONSTRUCTION
-Encoded_Sig          [128 bytes]: 5923287a8cf103686dda0ddfe57d106dd6bfffbb14f01e238474192931969a19
-                     71693f650bf951a6b779758b5d46fa3118d23c9d76feda5b03825b9ea9bec4f5
-                     db809c762c674ebb92082f2f1c9cee27fd9681a49b0ed5810168b69eaf4e2662
-                     b26f758a53a94cbae00eb83542a262c71ff21f6d59e680bb002c8ae89589a56e
+Encoded_Sig          [130 bytes]: 00009cc4cc3075e0ba36d71f958f32f0d4a8ef80c3904e1f2ab8a26812ca1c45
+                     1d78d84dcf49d5e62a408f09c7dd9a46403400d549110eb6427c00f2cb6c3def
+                     84951017b5c935346b78a0339cfde29b804793e7a553119991000495baac1589
+                     d6805e43d297fd1d39cdcd928590dc1789d6cebb825264396340046ddd9621c9
+                     a65d
     Verification Check  : AUTHENTIC ✅
 --------------------------------------------------------------
 
@@ -85,14 +86,15 @@ Encoded_Sig          [128 bytes]: 5923287a8cf103686dda0ddfe57d106dd6bfffbb14f01e
    Action              : Attempting to forge signature using PK * qm...
    Signature Match     : DIFFERENT ✅ (SECURE)
    Forgery Verification: REJECTED 🛡️ (SECURE)
+
 [13] PERFORMANCE BENCHMARK (10000 ITERATIONS)
 
 ================ FINAL ARCHITECTURE METRICS ==================
   ➤ Reliability      : 10000/10000 (100.00% Success Rate)
-  ➤ Sign Speed       : 0.0341 ms / op
-  ➤ Verify Speed     : 0.0244 ms / op
-  ➤ Throughput       : 41007 operations/sec
-  ➤ Network Payload  : 224 bytes (Total Wire Size)
+  ➤ Sign Speed       : 0.0388 ms / op
+  ➤ Verify Speed     : 0.0279 ms / op
+  ➤ Throughput       : 35803 operations/sec
+  ➤ Network Payload  : 226 bytes (Total Wire Size)
 ==============================================================
 ```
 

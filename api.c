@@ -45,11 +45,11 @@ bool orisign_verify(const uint8_t *msg, size_t len,
     return result;
 }
 
-void orisign_get_address(char address_out[ORISIGN_ADDR_BYTES + 1], 
+void orisign_get_address(char address_out[ORISIGN_ADDR_BYTES], 
                          const uint8_t pk[ORISIGN_PK_BYTES])
 {
     thetanullpoint_t pk_T;
-    size_t out_len = ORISIGN_ADDR_BYTES + 1;
+    size_t out_len = ORISIGN_ADDR_BYTES;
     deserialize_pk(&pk_T, pk);
     derive_address(address_out, &out_len, &pk_T);
     explicit_bzero(&pk_T, sizeof(thetanullpoint_t));
