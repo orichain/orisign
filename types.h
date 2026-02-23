@@ -26,6 +26,7 @@ typedef struct {
 } thetacompressed_t;
 
 typedef struct {
+  uint8_t hash[HASHES_BYTES];
   thetacompressed_t src;
 } signature_t;
 

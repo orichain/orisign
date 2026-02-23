@@ -15,39 +15,6 @@
 #include "quaternion.h"
 #include "utilities.h"
 
-void msg_to_quaternion(quaternion_t *q_msg, const uint8_t *msg, size_t len) {
-  uint8_t hash[2 * HASHES_BYTES];
-  shake256incctx ctx;
-  shake256_inc_init(&ctx);
-  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
-  shake256_inc_absorb(&ctx, msg, len);
-  shake256_inc_finalize(&ctx);
-  shake256_inc_squeeze(hash, 2 * HASHES_BYTES, &ctx);
-  uint64_t w_be1, x_be1, y_be1, z_be1;
-  uint64_t w_be2, x_be2, y_be2, z_be2;
-  size_t offset = 0;
-  memcpy(&w_be1, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&x_be1, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&y_be1, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&z_be1, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&w_be2, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&x_be2, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&y_be2, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  memcpy(&z_be2, hash + offset, sizeof(uint64_t));
-  offset += sizeof(uint64_t);
-  oriint_set_u128(&q_msg->w, be64toh(w_be1) | 1, be64toh(w_be2) | 1);
-  oriint_set_u128(&q_msg->x, be64toh(x_be1) | 1, be64toh(x_be2) | 1);
-  oriint_set_u128(&q_msg->y, be64toh(y_be1) | 1, be64toh(y_be2) | 1);
-  oriint_set_u128(&q_msg->z, be64toh(z_be1) | 1, be64toh(z_be2) | 1);
-}
-
 static inline void theta_noncommutative(thetanullpoint_t *T, const quaternion_t *q) {
   oriint_t w,x,y,z;
   fp2_t a,b,c,d,aw,bx,cy,dz,bw,ax,dy,cz,cw,dx,ay,bz,dw,cx,by,az;
@@ -88,9 +55,11 @@ static inline void theta_noncommutative(thetanullpoint_t *T, const quaternion_t 
 }
 
 static inline void derive_publickey(thetanullpoint_t *T, const quaternion_ideal_t *sk_I) {
-  get_baseline_theta(T);
+  thetanullpoint_t base;
   quaternion_t skoffset;
+  get_baseline_theta(&base);
   quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
+  theta_set(T, &base);
   theta_noncommutative(T, &skoffset);
   canonicalize_theta(T);
   explicit_bzero(&skoffset, sizeof(quaternion_t));
@@ -130,63 +99,6 @@ static inline void keygen(quaternion_ideal_t *RES) {
   }
 }
 
-static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, thetanullpoint_t *pk_theta, quaternion_ideal_t *sk_I) {
-  thetanullpoint_t T;
-  quaternion_t skoffset, qm;
-  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
-  get_baseline_theta(&T);
-  msg_to_quaternion(&qm, msg, len);
-  theta_noncommutative(&T, &skoffset);
-  theta_noncommutative(&T, &qm);
-  canonicalize_theta(&T);
-  theta_compress(&sig_out->src, &T);
-  explicit_bzero(&skoffset, sizeof(quaternion_t));
-  explicit_bzero(&qm, sizeof(quaternion_t));
-  explicit_bzero(&T, sizeof(thetanullpoint_t));
-}
-
-static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig_in, const thetanullpoint_t *pk_theta) {
-  thetanullpoint_t T_check, T_sig;
-  quaternion_t qm;
-  theta_decompress(&T_sig, &sig_in->src);
-  theta_set(&T_check, pk_theta);
-  msg_to_quaternion(&qm, msg, len);
-  theta_noncommutative(&T_check, &qm);
-  canonicalize_theta(&T_check);
-  bool result = theta_is_equal(&T_check, &T_sig);
-  explicit_bzero(&qm, sizeof(quaternion_t));
-  explicit_bzero(&T_check, sizeof(thetanullpoint_t));
-  explicit_bzero(&T_sig, sizeof(thetanullpoint_t));
-  return result;
-}
-
-static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t *sig) {
-  if (!out) return false;
-  if (out_len < SIG_BYTES) return false;
-  size_t pos = 0;
-  fp2_pack(out + pos, &sig->src.b);
-  pos += FP2_SERIALIZED_BYTES;
-  fp2_pack(out + pos, &sig->src.c); 
-  pos += FP2_SERIALIZED_BYTES;
-  fp2_pack(out + pos, &sig->src.d); 
-  pos += FP2_SERIALIZED_BYTES;
-  return true;
-}
-
-static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t in_len) {
-  if (!sig || !in) return false;
-  if (in_len < SIG_BYTES) return false;
-  memset(sig, 0, sizeof(signature_t));
-  size_t pos = 0;
-  fp2_unpack(&sig->src.b, in + pos); 
-  pos += FP2_SERIALIZED_BYTES;
-  fp2_unpack(&sig->src.c, in + pos); 
-  pos += FP2_SERIALIZED_BYTES;
-  fp2_unpack(&sig->src.d, in + pos); 
-  pos += FP2_SERIALIZED_BYTES;
-  return true;
-}
-
 static inline bool serialize_pk(uint8_t out[PK_BYTES], const thetanullpoint_t *pk) {
   size_t pos = 0;
   fp2_pack(out + pos, &pk->b); pos += FP2_SERIALIZED_BYTES;
@@ -202,6 +114,117 @@ static inline bool deserialize_pk(thetanullpoint_t *pk, const uint8_t in[PK_BYTE
   fp2_unpack(&pk->b, in + pos); pos += FP2_SERIALIZED_BYTES;
   fp2_unpack(&pk->c, in + pos); pos += FP2_SERIALIZED_BYTES;
   fp2_unpack(&pk->d, in + pos); pos += FP2_SERIALIZED_BYTES;
+  return true;
+}
+
+static inline void hash_to_quaternion(quaternion_t *q_msg, const uint8_t hash[HASHES_BYTES]) {
+  uint64_t w_be1, x_be1, y_be1, z_be1;
+  size_t offset = 0;
+  memcpy(&w_be1, hash + offset, sizeof(uint64_t));
+  offset += sizeof(uint64_t);
+  memcpy(&x_be1, hash + offset, sizeof(uint64_t));
+  offset += sizeof(uint64_t);
+  memcpy(&y_be1, hash + offset, sizeof(uint64_t));
+  offset += sizeof(uint64_t);
+  memcpy(&z_be1, hash + offset, sizeof(uint64_t));
+  offset += sizeof(uint64_t);
+  oriint_set_u64(&q_msg->w, be64toh(w_be1) | 1);
+  oriint_set_u64(&q_msg->x, be64toh(x_be1) | 1);
+  oriint_set_u64(&q_msg->y, be64toh(y_be1) | 1);
+  oriint_set_u64(&q_msg->z, be64toh(z_be1) | 1);
+}
+
+static inline void msg_to_quaternion(quaternion_t *q_msg, uint8_t hash[HASHES_BYTES], const uint8_t *msg, size_t len, const quaternion_t *sk_seed) {
+  shake256incctx ctx;
+  shake256_inc_init(&ctx);
+  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, (const uint8_t*)sk_seed, sizeof(quaternion_t));
+  shake256_inc_absorb(&ctx, msg, len);
+  shake256_inc_finalize(&ctx);
+  shake256_inc_squeeze(hash, HASHES_BYTES, &ctx);
+  hash_to_quaternion(q_msg, hash);
+}
+
+static inline void linked_to_pk(uint8_t hash_out[HASHES_BYTES], const uint8_t hash_in[HASHES_BYTES], const uint8_t *msg, size_t len, const thetanullpoint_t *pk_theta) {
+  uint8_t pkbytes[PK_BYTES];
+  serialize_pk(pkbytes, pk_theta);
+  shake256incctx ctx;
+  shake256_inc_init(&ctx);
+  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, hash_in, HASHES_BYTES);
+  shake256_inc_absorb(&ctx, pkbytes, PK_BYTES);
+  shake256_inc_absorb(&ctx, msg, len);
+  shake256_inc_finalize(&ctx);
+  shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
+}
+
+static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, const thetanullpoint_t *pk_theta, const quaternion_ideal_t *sk_I) {
+  thetanullpoint_t T;
+  quaternion_t skoffset, qm;
+  uint8_t hash[HASHES_BYTES];
+  quat_mul(&skoffset, &sk_I->b[0], &OFFSET);
+  msg_to_quaternion(&qm, sig_out->hash, msg, len, &skoffset);
+  get_baseline_theta(&T);
+  theta_noncommutative(&T, &skoffset);
+  theta_noncommutative(&T, &qm);
+  linked_to_pk(hash, sig_out->hash, msg, len, pk_theta);
+  hash_to_quaternion(&qm, hash);
+  theta_noncommutative(&T, &qm);
+  canonicalize_theta(&T);
+  theta_compress(&sig_out->src, &T);
+  explicit_bzero(&skoffset, sizeof(quaternion_t));
+  explicit_bzero(&qm, sizeof(quaternion_t));
+  explicit_bzero(&T, sizeof(thetanullpoint_t));
+}
+
+static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig_in, const thetanullpoint_t *pk_theta) {
+  thetanullpoint_t T_check, T_sig;
+  quaternion_t qm;
+  uint8_t pkbytes[PK_BYTES];
+  uint8_t hash[HASHES_BYTES];
+  theta_decompress(&T_sig, &sig_in->src);
+  hash_to_quaternion(&qm, sig_in->hash); 
+  theta_set(&T_check, pk_theta);
+  theta_noncommutative(&T_check, &qm);
+  linked_to_pk(hash, sig_in->hash, msg, len, pk_theta);
+  hash_to_quaternion(&qm, hash);
+  theta_noncommutative(&T_check, &qm);
+  canonicalize_theta(&T_check);
+  bool result = theta_is_equal(&T_check, &T_sig);
+  explicit_bzero(&qm, sizeof(quaternion_t));
+  explicit_bzero(&T_check, sizeof(thetanullpoint_t));
+  explicit_bzero(&T_sig, sizeof(thetanullpoint_t));
+  return result;
+}
+
+static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t *sig) {
+  if (!out) return false;
+  if (out_len < SIG_BYTES) return false;
+  size_t pos = 0;
+  memcpy(out + pos, sig->hash, HASHES_BYTES);
+  pos += HASHES_BYTES;
+  fp2_pack(out + pos, &sig->src.b);
+  pos += FP2_SERIALIZED_BYTES;
+  fp2_pack(out + pos, &sig->src.c); 
+  pos += FP2_SERIALIZED_BYTES;
+  fp2_pack(out + pos, &sig->src.d); 
+  pos += FP2_SERIALIZED_BYTES;
+  return true;
+}
+
+static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t in_len) {
+  if (!sig || !in) return false;
+  if (in_len < SIG_BYTES) return false;
+  memset(sig, 0, sizeof(signature_t));
+  size_t pos = 0;
+  memcpy(sig->hash, in + pos, HASHES_BYTES);
+  pos += HASHES_BYTES;
+  fp2_unpack(&sig->src.b, in + pos); 
+  pos += FP2_SERIALIZED_BYTES;
+  fp2_unpack(&sig->src.c, in + pos); 
+  pos += FP2_SERIALIZED_BYTES;
+  fp2_unpack(&sig->src.d, in + pos); 
+  pos += FP2_SERIALIZED_BYTES;
   return true;
 }
 

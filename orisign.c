@@ -71,7 +71,7 @@ int main() {
   printf("==============================================================\n");
   printf("           ORISIGN: CRYPTOGRAPHIC AUDIT REPORT           \n");
   printf("           Protocol: Quaternion Action on Theta               \n");
-  printf("           Target: 96B PK | 96B SIG | 192B Total             \n");
+  printf("           Target: 96B PK | 128B SIG | 224B Total             \n");
   printf("==============================================================\n");
 
   quaternion_ideal_t sk;
@@ -195,8 +195,38 @@ int main() {
   // [11] LINEARITY
   linearity_check(&sig_pk);
 
-  // [12] BENCHMARK
-  printf("[12] PERFORMANCE BENCHMARK (%d ITERATIONS)\n", ITERATIONS);
+  // [12] PUBLIC KEY SIGNATURE FORGERY TEST
+  printf("\n[12] NAÏVE PK-ONLY FORGERY ATTEMPT\n");
+
+  signature_t valid_sig;
+  signature_t forged_sig;
+  thetanullpoint_t T_forge;
+  quaternion_t qm;
+  quaternion_ideal_t dummysk;
+
+  // 1. Buat Signature SAH menggunakan SK
+  sign(&valid_sig, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
+
+  // 2. Coba buat Signature PALSU hanya menggunakan PK dan Message
+  // Penyerang mencoba meniru logika verifikasi: T = PK * qm
+  keygen(&dummysk);
+  msg_to_quaternion(&qm, forged_sig.hash, (const uint8_t*)msg, strlen(msg), &dummysk.b[0]);
+  theta_set(&T_forge, &sig_pk);
+  theta_noncommutative(&T_forge, &qm); // Penyerang mencoba 'Aksi Publik'
+  theta_compress(&forged_sig.src, &T_forge);
+
+  // 3. Bandingkan secara biner
+  bool is_identical = (memcmp(&valid_sig, &forged_sig, sizeof(signature_t)) == 0);
+
+  // 4. Coba verifikasi Signature palsu tersebut
+  bool forge_verified = verify((const uint8_t*)msg, strlen(msg), &forged_sig, &sig_pk);
+
+  printf("   Action              : Attempting to forge signature using PK * qm...\n");
+  printf("   Signature Match     : %s\n", is_identical ? "MATCH ❌ (VULNERABLE)" : "DIFFERENT ✅ (SECURE)");
+  printf("   Forgery Verification: %s\n", forge_verified ? "ACCEPTED ⚠️ (BROKEN)" : "REJECTED 🛡️ (SECURE)");
+
+  // [13] BENCHMARK
+  printf("[13] PERFORMANCE BENCHMARK (%d ITERATIONS)\n", ITERATIONS);
   double total_sign_ms = 0, total_vrf_ms = 0;
   int success_count = 0;
   for (int i = 0; i < ITERATIONS; i++) {
