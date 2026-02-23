@@ -8,4 +8,5 @@ fc-cache.core
 *.o
 *.a
 test/test_orisign
+test/test_attack
 
