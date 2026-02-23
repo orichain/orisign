@@ -77,11 +77,11 @@ static inline void keygen(quaternion_ideal_t *RES) {
         oriint_is_prime(&candidate, 40)
        )
     {
-      explicit_bzero(&candidate, sizeof(oriint_t));
       break;
     }
   }
   oriint_set(&RES->norm, &candidate);
+  explicit_bzero(&candidate, sizeof(oriint_t));
   quaternion_t alpha;
   oriint_t klpt_remw,klpt_limitzpone,klpt_limitwpone;
   for (;;) {
