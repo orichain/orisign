@@ -5,4 +5,7 @@ orisign.core
 compile_commands.json
 clangd.core
 fc-cache.core
+*.o
+*.a
+test/test_orisign
 
