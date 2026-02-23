@@ -8,10 +8,10 @@ int main() {
     uint8_t sig[ORISIGN_SIG_BYTES];
     char address[ORISIGN_ADDR_BYTES + 1];
 
-    const char *msg = "ORISIGN V9.7: High-Speed Non-Commutative Signature";
+    const char *msg = "ORISIGN: High-Speed Non-Commutative Signature";
     size_t msg_len = strlen(msg);
 
-    printf("--- ORISIGN V9.7 INTEGRATION TEST ---\n");
+    printf("--- ORISIGN INTEGRATION TEST ---\n");
 
     // 1. Key Generation
     printf("[1] Generating Keypair...");

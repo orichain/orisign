@@ -7,7 +7,7 @@ int main() {
     uint8_t pk_B[ORISIGN_PK_BYTES], sk_B[ORISIGN_SK_BYTES];
     uint8_t sig[ORISIGN_SIG_BYTES];
     
-    const char *msg = "Experimental Security Test - ORISIGN V9.7";
+    const char *msg = "Experimental Security Test - ORISIGN";
     size_t len = strlen(msg);
 
     printf("--- ORISIGN DEEP ATTACK & MISMATCH TEST ---\n\n");
