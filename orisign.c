@@ -95,7 +95,7 @@ int main() {
   clock_gettime(CLOCK_MONOTONIC, &t_end);
   printf("    Keygen Latency      : %.3f ms\n", diff_msec(t_start, t_end));
   uint8_t sk_serialized[SK_BYTES];
-  serialize_sk(sk_serialized, SK_BYTES, &sk);
+  serialize_sk(sk_serialized, &sk);
   uint8_t addr_pk_serialized[PK_BYTES];
   print_hex_analysis("SK", sk_serialized, SK_BYTES);
   uint8_t sig_pk_serialized[PK_BYTES];
@@ -109,7 +109,7 @@ int main() {
   explicit_bzero(&sk, sizeof(quaternion_ideal_t));
   explicit_bzero(&sig_pk, sizeof(thetanullpoint_t));
 
-  deserialize_sk(&sk, sk_serialized, SK_BYTES);
+  deserialize_sk(&sk, sk_serialized);
   deserialize_pk(&sig_pk, sig_pk_serialized);
 
   print_separator();
@@ -127,10 +127,10 @@ int main() {
   printf("[4] SIGNATURE RECONSTRUCTION\n");
   sign(&sig, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
   uint8_t sig_serialized[SIG_BYTES];
-  serialize_sig(sig_serialized, SIG_BYTES, &sig);
+  serialize_sig(sig_serialized, &sig);
   print_hex_analysis("Encoded_Sig", sig_serialized, SIG_BYTES);
 
-  deserialize_sig(&sig_recovered, sig_serialized, SIG_BYTES);
+  deserialize_sig(&sig_recovered, sig_serialized);
   bool sig_integrity = verify((const uint8_t*)msg, strlen(msg), &sig_recovered, &sig_pk);
   printf("    Verification Check  : %s\n", sig_integrity ? "AUTHENTIC ✅" : "INVALID ❌");
   print_separator();
@@ -184,8 +184,8 @@ int main() {
   sign(&s2, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
 
   uint8_t s1s[SIG_BYTES], s2s[SIG_BYTES];
-  serialize_sig(s1s, SIG_BYTES, &s1);
-  serialize_sig(s2s, SIG_BYTES, &s2);
+  serialize_sig(s1s, &s1);
+  serialize_sig(s2s, &s2);
 
   bool is_deterministic = (memcmp(s1s, s2s, SIG_BYTES) == 0);
   printf("    Sig 1 vs Sig 2      : %s\n", is_deterministic ? "IDENTICAL (Deterministic) ✅" : "VARYING (Probabilistic) ⚠️");
@@ -239,11 +239,11 @@ int main() {
     sign(&sig, (const uint8_t*)msg, strlen(msg), &sig_pk, &sk);
     clock_gettime(CLOCK_MONOTONIC, &t_end);
     total_sign_ms += diff_msec(t_start, t_end);
-    serialize_sig(sig_serialized, SIG_BYTES, &sig);
+    serialize_sig(sig_serialized, &sig);
 
     //print_hex_analysis("Encoded_Sig", sig_serialized, SIG_BYTES);
 
-    deserialize_sig(&sig_recovered, sig_serialized, SIG_BYTES);
+    deserialize_sig(&sig_recovered, sig_serialized);
     clock_gettime(CLOCK_MONOTONIC, &t_start);
     if (verify((const uint8_t*)msg, strlen(msg), &sig_recovered, &sig_pk)) success_count++;
 

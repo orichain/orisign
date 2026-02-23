@@ -203,7 +203,7 @@ static inline void oriint_int_add_1(oriint_t *RES, const oriint_t *a) {
 }
 
 static inline void oriint_int_add_2(oriint_t *RES, const oriint_t *a, uint64_t b) {
-	uint64_t c = 0;
+  uint64_t c = 0;
   c = oriint_addcarry_u64(c, a->bitsu64[0], b, &RES->bitsu64[0]);
   for (int8_t i = 1; i < NBLOCK; i++) {
     c = oriint_addcarry_u64(c, a->bitsu64[i], 0, &RES->bitsu64[i]);
@@ -240,18 +240,18 @@ static inline void oriint_int_sub_3(oriint_t *RES, const oriint_t *a, const orii
 }
 
 static uint64_t oriint_int_mod_u64(const oriint_t *n, uint64_t divisor) {
-    uint64_t remainder = 0;
-    for (int8_t i = NBLOCK - 1; i >= 0; i--) {
-        uint64_t hi = remainder;
-        uint64_t lo = n->bitsu64[i];
-        uint64_t quot;
-        __asm__ (
-            "divq %[div];"
-            : "=a"(quot), "=d"(remainder)
-            : "a"(lo), "d"(hi), [div]"rm"(divisor)
+  uint64_t remainder = 0;
+  for (int8_t i = NBLOCK - 1; i >= 0; i--) {
+    uint64_t hi = remainder;
+    uint64_t lo = n->bitsu64[i];
+    uint64_t quot;
+    __asm__ (
+        "divq %[div];"
+        : "=a"(quot), "=d"(remainder)
+        : "a"(lo), "d"(hi), [div]"rm"(divisor)
         );
-    }
-    return remainder;
+  }
+  return remainder;
 }
 
 static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
@@ -748,52 +748,52 @@ static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t 
 }
 
 static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
-    if (oriint_is_even(n)) return false;
-    if (oriint_is_one(n) || oriint_is_zero(n)) return false;
-    static const uint16_t small_primes[] = {
-        3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 
-        61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127
-    };
-    for (int i = 0; i < 30; i++) {
-        if (oriint_int_mod_u64(n, small_primes[i]) == 0) {
-            oriint_t sp_tmp;
-            oriint_set_u64(&sp_tmp, small_primes[i]);
-            return oriint_is_equal(n, &sp_tmp);
-        }
+  if (oriint_is_even(n)) return false;
+  if (oriint_is_one(n) || oriint_is_zero(n)) return false;
+  static const uint16_t small_primes[] = {
+    3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 
+    61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127
+  };
+  for (int i = 0; i < 30; i++) {
+    if (oriint_int_mod_u64(n, small_primes[i]) == 0) {
+      oriint_t sp_tmp;
+      oriint_set_u64(&sp_tmp, small_primes[i]);
+      return oriint_is_equal(n, &sp_tmp);
     }
-    oriint_t n_minus_1, d, x, r2, one;
-    uint64_t mm64;
-    uint8_t msize;
-    oriint_set_one(&one);
-    oriint_int_sub_3(&n_minus_1, n, &one);
-    oriint_set(&d, &n_minus_1);
-    uint32_t s = 0;
-    while (oriint_is_even(&d)) {
-        oriint_int_shiftr(1, &d);
-        s++;
+  }
+  oriint_t n_minus_1, d, x, r2, one;
+  uint64_t mm64;
+  uint8_t msize;
+  oriint_set_one(&one);
+  oriint_int_sub_3(&n_minus_1, n, &one);
+  oriint_set(&d, &n_minus_1);
+  uint32_t s = 0;
+  while (oriint_is_even(&d)) {
+    oriint_int_shiftr(1, &d);
+    s++;
+  }
+  oriint_modvar_setup(&mm64, &msize, &r2, n);
+  static const uint64_t bases[] = {
+    2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL
+  };
+  for (int i = 0; i < 9; i++) {
+    oriint_t base;
+    oriint_clear(&base);
+    base.bitsu64[0] = bases[i];
+    if (oriint_is_ge(&base, n)) continue;
+    oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
+    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
+    bool composite = true;
+    for (uint32_t r = 1; r < s; r++) {
+      oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
+      if (oriint_is_equal(&x, &n_minus_1)) {
+        composite = false;
+        break;
+      }
     }
-    oriint_modvar_setup(&mm64, &msize, &r2, n);
-    static const uint64_t bases[] = {
-        2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL
-    };
-    for (int i = 0; i < 9; i++) {
-        oriint_t base;
-        oriint_clear(&base);
-        base.bitsu64[0] = bases[i];
-        if (oriint_is_ge(&base, n)) continue;
-        oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
-        if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
-        bool composite = true;
-        for (uint32_t r = 1; r < s; r++) {
-            oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
-            if (oriint_is_equal(&x, &n_minus_1)) {
-                composite = false;
-                break;
-            }
-        }
-        if (composite) return false;
-    }
-    return true;
+    if (composite) return false;
+  }
+  return true;
 }
 
 static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, oriint_t *x, oriint_t *y) {

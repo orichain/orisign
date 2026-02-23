@@ -214,9 +214,8 @@ static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig
   return result;
 }
 
-static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t *sig) {
+static inline bool serialize_sig(uint8_t out[SIG_BYTES], const signature_t *sig) {
   if (!out) return false;
-  if (out_len < SIG_BYTES) return false;
   size_t pos = 0;
   memcpy(out + pos, sig->version, VERSION_BYTES);
   pos += VERSION_BYTES;
@@ -231,9 +230,8 @@ static inline bool serialize_sig(uint8_t *out, size_t out_len, const signature_t
   return true;
 }
 
-static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t in_len) {
+static inline bool deserialize_sig(signature_t *sig, const uint8_t in[SIG_BYTES]) {
   if (!sig || !in) return false;
-  if (in_len < SIG_BYTES) return false;
   memset(sig, 0, sizeof(signature_t));
   size_t pos = 0;
   memcpy(sig->version, in + pos, VERSION_BYTES);
@@ -249,8 +247,7 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
   return true;
 }
 
-static inline bool serialize_sk(uint8_t *out, size_t out_len, const quaternion_ideal_t *sk_I) {
-  if (!out || out_len < SK_BYTES) return false;
+static inline bool serialize_sk(uint8_t out[SK_BYTES], const quaternion_ideal_t *sk_I) {
   size_t pos = 0;
   uint64_t v_be;
   for (size_t i = 0; i < NBLOCK-1; i++) {
@@ -282,9 +279,8 @@ static inline bool serialize_sk(uint8_t *out, size_t out_len, const quaternion_i
   return true;
 }
 
-static inline bool deserialize_sk(quaternion_ideal_t *sk_I, const uint8_t *in, size_t in_len) {
+static inline bool deserialize_sk(quaternion_ideal_t *sk_I, const uint8_t in[SK_BYTES]) {
   if (!sk_I || !in) return false;
-  if (in_len < SK_BYTES) return false;
   memset(sk_I, 0, sizeof(quaternion_ideal_t));
   size_t pos = 0;
   uint64_t v_be;

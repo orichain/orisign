@@ -29,7 +29,7 @@
  * @param sk [out] Buffer to store the Secret Key (128 bytes).
  */
 void orisign_keygen(uint8_t pk[ORISIGN_PK_BYTES], 
-                    uint8_t sk[ORISIGN_SK_BYTES]);
+    uint8_t sk[ORISIGN_SK_BYTES]);
 
 /**
  * @brief Signs a message using the secret key.
@@ -42,9 +42,9 @@ void orisign_keygen(uint8_t pk[ORISIGN_PK_BYTES],
  * @param sk  [in]  The signer's Secret Key (128 bytes).
  */
 void orisign_sign(uint8_t sig[ORISIGN_SIG_BYTES], 
-                  const uint8_t *msg, size_t len, 
-                  const uint8_t pk[ORISIGN_PK_BYTES], 
-                  const uint8_t sk[ORISIGN_SK_BYTES]);
+    const uint8_t *msg, size_t len, 
+    const uint8_t pk[ORISIGN_PK_BYTES], 
+    const uint8_t sk[ORISIGN_SK_BYTES]);
 
 /**
  * @brief Verifies a signature against a public key and message.
@@ -57,8 +57,8 @@ void orisign_sign(uint8_t sig[ORISIGN_SIG_BYTES],
  * @return true if the signature is authentic, false otherwise.
  */
 bool orisign_verify(const uint8_t *msg, size_t len, 
-                    const uint8_t sig[ORISIGN_SIG_BYTES], 
-                    const uint8_t pk[ORISIGN_PK_BYTES]);
+    const uint8_t sig[ORISIGN_SIG_BYTES], 
+    const uint8_t pk[ORISIGN_PK_BYTES]);
 
 /**
  * @brief Derives a human-readable address from a public key.
@@ -68,6 +68,6 @@ bool orisign_verify(const uint8_t *msg, size_t len,
  * @param pk          [in]  The Public Key (96 bytes).
  */
 void orisign_get_address(char address_out[ORISIGN_ADDR_BYTES], 
-                         const uint8_t pk[ORISIGN_PK_BYTES]);
+    const uint8_t pk[ORISIGN_PK_BYTES]);
 
 #endif /* ORISIGN_API_H */
