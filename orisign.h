@@ -81,7 +81,6 @@ static inline void keygen(quaternion_ideal_t *RES) {
     }
   }
   oriint_set(&RES->norm, &candidate);
-  explicit_bzero(&candidate, sizeof(oriint_t));
   quaternion_t alpha;
   oriint_t klpt_remw,klpt_limitzpone,klpt_limitwpone;
   for (;;) {
@@ -101,6 +100,7 @@ static inline void keygen(quaternion_ideal_t *RES) {
       explicit_bzero(&klpt_remw, sizeof(oriint_t));
       explicit_bzero(&klpt_limitzpone, sizeof(oriint_t));
       explicit_bzero(&klpt_limitwpone, sizeof(oriint_t));
+      explicit_bzero(&candidate, sizeof(oriint_t));
       break;
     }
   }
