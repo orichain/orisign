@@ -226,7 +226,7 @@ int main() {
   printf("   Forgery Verification: %s\n", forge_verified ? "ACCEPTED ⚠️ (BROKEN)" : "REJECTED 🛡️ (SECURE)");
 
   // [13] BENCHMARK
-  printf("[13] PERFORMANCE BENCHMARK (%d ITERATIONS)\n", ITERATIONS);
+  printf("\n[13] PERFORMANCE BENCHMARK (%d ITERATIONS)\n", ITERATIONS);
   double total_sign_ms = 0, total_vrf_ms = 0;
   int success_count = 0;
   for (int i = 0; i < ITERATIONS; i++) {
