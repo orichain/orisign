@@ -132,6 +132,10 @@ static inline void hash_to_quaternion(quaternion_t *q_msg, const uint8_t hash[HA
   oriint_set_u64(&q_msg->x, be64toh(x_be1) | 1);
   oriint_set_u64(&q_msg->y, be64toh(y_be1) | 1);
   oriint_set_u64(&q_msg->z, be64toh(z_be1) | 1);
+  explicit_bzero(&w_be1, sizeof(uint64_t));
+  explicit_bzero(&x_be1, sizeof(uint64_t));
+  explicit_bzero(&y_be1, sizeof(uint64_t));
+  explicit_bzero(&z_be1, sizeof(uint64_t));
 }
 
 static inline void msg_to_quaternion(quaternion_t *q_msg, uint8_t hash[HASHES_BYTES], const uint8_t *msg, size_t len, const quaternion_t *sk_seed) {
@@ -143,6 +147,7 @@ static inline void msg_to_quaternion(quaternion_t *q_msg, uint8_t hash[HASHES_BY
   shake256_inc_finalize(&ctx);
   shake256_inc_squeeze(hash, HASHES_BYTES, &ctx);
   hash_to_quaternion(q_msg, hash);
+  explicit_bzero(&ctx, sizeof(shake256incctx));
 }
 
 static inline void linked_to_pk(uint8_t hash_out[HASHES_BYTES], const uint8_t hash_in[HASHES_BYTES], const uint8_t *msg, size_t len, const thetanullpoint_t *pk_theta) {
@@ -156,6 +161,8 @@ static inline void linked_to_pk(uint8_t hash_out[HASHES_BYTES], const uint8_t ha
   shake256_inc_absorb(&ctx, msg, len);
   shake256_inc_finalize(&ctx);
   shake256_inc_squeeze(hash_out, HASHES_BYTES, &ctx);
+  explicit_bzero(&pkbytes, PK_BYTES);
+  explicit_bzero(&ctx, sizeof(shake256incctx));
 }
 
 static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, const thetanullpoint_t *pk_theta, const quaternion_ideal_t *sk_I) {
@@ -175,12 +182,12 @@ static inline void sign(signature_t *sig_out, const uint8_t *msg, size_t len, co
   explicit_bzero(&skoffset, sizeof(quaternion_t));
   explicit_bzero(&qm, sizeof(quaternion_t));
   explicit_bzero(&T, sizeof(thetanullpoint_t));
+  explicit_bzero(&hash, HASHES_BYTES);
 }
 
 static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig_in, const thetanullpoint_t *pk_theta) {
   thetanullpoint_t T_check, T_sig;
   quaternion_t qm;
-  uint8_t pkbytes[PK_BYTES];
   uint8_t hash[HASHES_BYTES];
   theta_decompress(&T_sig, &sig_in->src);
   hash_to_quaternion(&qm, sig_in->hash); 
@@ -194,6 +201,7 @@ static inline bool verify(const uint8_t *msg, size_t len, const signature_t *sig
   explicit_bzero(&qm, sizeof(quaternion_t));
   explicit_bzero(&T_check, sizeof(thetanullpoint_t));
   explicit_bzero(&T_sig, sizeof(thetanullpoint_t));
+  explicit_bzero(&hash, HASHES_BYTES);
   return result;
 }
 
