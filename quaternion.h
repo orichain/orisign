@@ -83,6 +83,13 @@ static inline void quat_mul(quaternion_t *RES, const quaternion_t *a, const quat
   fp_add(&v4, &v2, &v3);
   fp_mul(&v5, &a->x, &b->y);
   fp_add(&RES->z, &v4, &v5);
+
+  explicit_bzero(&v0, sizeof(oriint_t));
+  explicit_bzero(&v1, sizeof(oriint_t));
+  explicit_bzero(&v2, sizeof(oriint_t));
+  explicit_bzero(&v3, sizeof(oriint_t));
+  explicit_bzero(&v4, sizeof(oriint_t));
+  explicit_bzero(&v5, sizeof(oriint_t));
 }
 
 static inline void quat_mul_scalar(quaternion_t *RES, quaternion_t *a, const oriint_t *b) {

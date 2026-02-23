@@ -63,6 +63,7 @@ static inline void derive_publickey(thetanullpoint_t *T, const quaternion_ideal_
   theta_noncommutative(T, &skoffset);
   canonicalize_theta(T);
   explicit_bzero(&skoffset, sizeof(quaternion_t));
+  explicit_bzero(&base, sizeof(thetanullpoint_t));
 }
 
 static inline void keygen(quaternion_ideal_t *RES) {
@@ -76,6 +77,7 @@ static inline void keygen(quaternion_ideal_t *RES) {
         oriint_is_prime(&candidate, 40)
        )
     {
+      explicit_bzero(&candidate, sizeof(oriint_t));
       break;
     }
   }
@@ -94,6 +96,11 @@ static inline void keygen(quaternion_ideal_t *RES) {
       quat_mul(&RES->b[1], &alpha, &q0);
       quat_mul(&RES->b[2], &alpha, &q1);
       quat_mul(&RES->b[3], &alpha, &q2);
+      explicit_bzero(&alpha, sizeof(quaternion_t));
+      explicit_bzero(&candidate, sizeof(oriint_t));
+      explicit_bzero(&klpt_remw, sizeof(oriint_t));
+      explicit_bzero(&klpt_limitzpone, sizeof(oriint_t));
+      explicit_bzero(&klpt_limitwpone, sizeof(oriint_t));
       break;
     }
   }
@@ -239,31 +246,33 @@ static inline bool deserialize_sig(signature_t *sig, const uint8_t *in, size_t i
 static inline bool serialize_sk(uint8_t *out, size_t out_len, const quaternion_ideal_t *sk_I) {
   if (!out || out_len < SK_BYTES) return false;
   size_t pos = 0;
+  uint64_t v_be;
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be = htobe64(sk_I->norm.bitsu64[i]);
+    v_be = htobe64(sk_I->norm.bitsu64[i]);
     memcpy(out + pos, &v_be, sizeof(uint64_t));
     pos += sizeof(uint64_t);
   }
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be = htobe64(sk_I->b[0].w.bitsu64[i]);
+    v_be = htobe64(sk_I->b[0].w.bitsu64[i]);
     memcpy(out + pos, &v_be, sizeof(uint64_t));
     pos += sizeof(uint64_t);
   }
   for (size_t i = 0; i < NBLOCK-3; i++) {
-    uint64_t v_be = htobe64(sk_I->b[0].x.bitsu64[i]);
+    v_be = htobe64(sk_I->b[0].x.bitsu64[i]);
     memcpy(out + pos, &v_be, sizeof(uint64_t));
     pos += sizeof(uint64_t);
   }
   for (size_t i = 0; i < NBLOCK-3; i++) {
-    uint64_t v_be = htobe64(sk_I->b[0].y.bitsu64[i]);
+    v_be = htobe64(sk_I->b[0].y.bitsu64[i]);
     memcpy(out + pos, &v_be, sizeof(uint64_t));
     pos += sizeof(uint64_t);
   }
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be = htobe64(sk_I->b[0].z.bitsu64[i]);
+    v_be = htobe64(sk_I->b[0].z.bitsu64[i]);
     memcpy(out + pos, &v_be, sizeof(uint64_t));
     pos += sizeof(uint64_t);
   }
+  explicit_bzero(&v_be, sizeof(uint64_t));
   return true;
 }
 
@@ -272,22 +281,23 @@ static inline bool deserialize_sk(quaternion_ideal_t *sk_I, const uint8_t *in, s
   if (in_len < SK_BYTES) return false;
   memset(sk_I, 0, sizeof(quaternion_ideal_t));
   size_t pos = 0;
+  uint64_t v_be;
+  quaternion_t q0;
+  quaternion_t q1;
+  quaternion_t q2;
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
     memcpy(&v_be, in + pos, sizeof(uint64_t));
     sk_I->norm.bitsu64[i] = be64toh(v_be);
     pos += sizeof(uint64_t);
   }
   sk_I->norm.bitsu64[NBLOCK-1] = 0ULL;
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
     memcpy(&v_be, in + pos, sizeof(uint64_t));
     sk_I->b[0].w.bitsu64[i] = be64toh(v_be);
     pos += sizeof(uint64_t);
   }
   sk_I->b[0].w.bitsu64[NBLOCK-1] = 0ULL;
   for (size_t i = 0; i < NBLOCK-3; i++) {
-    uint64_t v_be;
     memcpy(&v_be, in + pos, sizeof(uint64_t));
     sk_I->b[0].x.bitsu64[i] = be64toh(v_be);
     pos += sizeof(uint64_t);
@@ -296,7 +306,6 @@ static inline bool deserialize_sk(quaternion_ideal_t *sk_I, const uint8_t *in, s
   sk_I->b[0].x.bitsu64[NBLOCK-2] = 0ULL;
   sk_I->b[0].x.bitsu64[NBLOCK-1] = 0ULL;
   for (size_t i = 0; i < NBLOCK-3; i++) {
-    uint64_t v_be;
     memcpy(&v_be, in + pos, sizeof(uint64_t));
     sk_I->b[0].y.bitsu64[i] = be64toh(v_be);
     pos += sizeof(uint64_t);
@@ -305,21 +314,21 @@ static inline bool deserialize_sk(quaternion_ideal_t *sk_I, const uint8_t *in, s
   sk_I->b[0].y.bitsu64[NBLOCK-2] = 0ULL;
   sk_I->b[0].y.bitsu64[NBLOCK-1] = 0ULL;
   for (size_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
     memcpy(&v_be, in + pos, sizeof(uint64_t));
     sk_I->b[0].z.bitsu64[i] = be64toh(v_be);
     pos += sizeof(uint64_t);
   }
   sk_I->b[0].z.bitsu64[NBLOCK-1] = 0ULL;
-  quaternion_t q0;
-  quaternion_t q1;
-  quaternion_t q2;
   quat_set_01(&q0);
   quat_set_02(&q1);
   quat_set_03(&q2);
   quat_mul(&sk_I->b[1], &sk_I->b[0], &q0);
   quat_mul(&sk_I->b[2], &sk_I->b[0], &q1);
   quat_mul(&sk_I->b[3], &sk_I->b[0], &q2);
+  explicit_bzero(&v_be, sizeof(uint64_t));
+  explicit_bzero(&q0, sizeof(quaternion_t));
+  explicit_bzero(&q1, sizeof(quaternion_t));
+  explicit_bzero(&q2, sizeof(quaternion_t));
   return true;
 }
 

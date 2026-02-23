@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <string.h>
 #include "fp.h"
 #include "types.h"
 
@@ -11,6 +12,7 @@ static inline void canonicalize_theta(thetanullpoint_t *T) {
   fp2_mul(&T->b, &T->b, &inva);
   fp2_mul(&T->c, &T->c, &inva);
   fp2_mul(&T->d, &T->d, &inva);
+  explicit_bzero(&inva, sizeof(fp2_t));
 }
 
 static inline void theta_compress(thetacompressed_t *RES, thetanullpoint_t *T) {
