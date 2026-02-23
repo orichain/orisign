@@ -18,7 +18,7 @@
 /* Buffer size definitions in bytes */
 #define ORISIGN_PK_BYTES   PK_BYTES  /* is 96 */ /* Public Key size */
 #define ORISIGN_SIG_BYTES  SIG_BYTES  /* is 130 */ /* Signature size */
-#define ORISIGN_SK_BYTES   (FP_BYTES * 4)  /* is 128 */ /* Secret Key size */
+#define ORISIGN_SK_BYTES   SK_BYTES  /* is 128 */ /* Secret Key size */
 #define ORISIGN_ADDR_BYTES ADDR_MAX_BYTES  /* is 64 */ /* Max Address length (Base58) */
 
 /**
