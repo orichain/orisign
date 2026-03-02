@@ -1,4 +1,6 @@
+
 #pragma once
+#include "fpint.h"
 #include "globals.h"
 #include "types.h"
 #include <stdbool.h>
@@ -8,161 +10,114 @@
 #include <string.h>
 #include <sys/endian.h>
 
-static inline uint64_t oriint_umul128(uint64_t a, uint64_t b, uint64_t *hi) {
-  uint64_t lo;
-  uint64_t h;
-
-  __asm__ (
-      "mulq %[b];"
-      : "=a"(lo), "=d"(h)
-      : "a"(a), [b]"rm"(b)
-      );
-
-  *hi = h;
-  return lo;
-}
-
-static inline uint64_t oriint_udiv128(uint64_t lo, uint64_t hi, uint64_t divisor, uint64_t *quot) {
-  uint64_t r;
-  uint64_t q;
-
-  __asm__ (
-      "divq %[div];"
-      : "=a"(q), "=d"(r)
-      : "a"(lo), "d"(hi), [div]"rm"(divisor)
-      );
-  *quot = q;
-  return r;
-}
-
-static inline uint64_t oriint_shiftright128(uint64_t a, uint64_t b, unsigned char n) {
-  uint64_t res;
-
-  __asm__ (
-      "shrdq %[n], %[b], %[a];"
-      : [a] "=r"(res)
-      : "[a]" (a), [b] "r" (b), [n] "c" (n)
-      );
-
-  return res;
-}
-
-static inline uint64_t oriint_shiftleft128(uint64_t a, uint64_t b, unsigned char n) {
-  uint64_t res;
-
-  __asm__ (
-      "shldq %[n], %[a], %[b];"
-      : [b] "=r"(res)
-      : "[b]" (b), [a] "r" (a), [n] "c" (n)
-      );
-
-  return res;
-}
-
-static uint64_t inline oriint_addcarry_u64(uint64_t c, uint64_t a, uint64_t b, uint64_t *d) {
-  return __builtin_ia32_addcarryx_u64(c, a, b, (long long unsigned int*)d);
-}
-
-static inline uint64_t oriint_subborrow_u64(uint64_t c, uint64_t a, uint64_t b, uint64_t *d) {
-  return __builtin_ia32_subborrow_u64(c, a, b, (long long unsigned int*)d);
-}
-
-static inline void oriint_set(oriint_t *a, const oriint_t *b) {
-  for (int8_t i = 0; i < NBLOCK; i++) {
+static inline void int_set(int_t *a, const int_t *b) {
+  for (int8_t i = 0; i < INTBLOCK; i++) {
     a->bitsu64[i] = b->bitsu64[i];
   }
 }
 
-static inline void oriint_set_one(oriint_t *a) {
+static inline void int_set_one(int_t *a) {
   a->bitsu64[0] = 1ULL;
-  for (int8_t i = 1; i < NBLOCK; i++) {
+  for (int8_t i = 1; i < INTBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
 
-static inline void oriint_set_two(oriint_t *a) {
+static inline void int_set_two(int_t *a) {
   a->bitsu64[0] = 2ULL;
-  for (int8_t i = 1; i < NBLOCK; i++) {
+  for (int8_t i = 1; i < INTBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
 
-static inline void oriint_set_u64(oriint_t *a, uint64_t b) {
+static inline void int_set_u64(int_t *a, uint64_t b) {
   a->bitsu64[0] = b;
-  for (int8_t i = 1; i < NBLOCK; i++) {
+  for (int8_t i = 1; i < INTBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
 
-static inline void oriint_set_u128(oriint_t *a, uint64_t b, uint64_t c) {
+static inline void int_set_u128(int_t *a, uint64_t b, uint64_t c) {
   a->bitsu64[0] = b;
   a->bitsu64[1] = c;
-  for (int8_t i = 2; i < NBLOCK; i++) {
+  for (int8_t i = 2; i < INTBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
 
-static inline void oriint_clear(oriint_t *a) {
-  for (int8_t i = 0; i < NBLOCK; i++) {
+static inline void int_clear(int_t *a) {
+  for (int8_t i = 0; i < INTBLOCK; i++) {
     a->bitsu64[i] = 0ULL;
   }
 }
 
-static inline bool oriint_is_zero(const oriint_t *a) {
+static inline bool int_is_zero(const int_t *a) {
   uint64_t acc = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < INTBLOCK; i++) {
     acc |= a->bitsu64[i];
   }
   return acc == 0;
 }
 
-static inline bool oriint_is_one(const oriint_t *a) {
+static inline bool int_is_zero256(const int_t *a) {
+  uint64_t acc = 0;
+  for (int8_t i = 0; i < (INTBLOCK-1); i++) {
+    acc |= a->bitsu64[i];
+  }
+  return acc == 0;
+}
+
+static inline bool int_is_one(const int_t *a) {
   uint64_t acc = 0;
   acc |= (a->bitsu64[0] ^ 1ULL);
-  for (int8_t i = 1; i < NBLOCK; i++) {
+  for (int8_t i = 1; i < INTBLOCK; i++) {
     acc |= a->bitsu64[i];
   }
   return acc == 0;
 }
 
-static inline bool oriint_is_even(const oriint_t *a) {
+static inline bool int_is_even(const int_t *a) {
   return ((a->bits64[0]&1)==0);
 }
 
-static inline bool oriint_is_odd(const oriint_t *a) {
+static inline bool int_is_odd(const int_t *a) {
   return ((a->bits64[0]&1)!=0);
 }
 
-static inline bool oriint_is_equal(const oriint_t *a, const oriint_t *b) {
+static inline bool int_is_negative(const int_t *a) {
+  return (a->bits64[INTBLOCK-1] < 0LL);
+}
+
+static inline bool int_is_equal(const int_t *a, const int_t *b) {
   uint64_t acc = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
+  for (int8_t i = 0; i < INTBLOCK; i++) {
     acc |= a->bitsu64[i] ^ b->bitsu64[i];
   }
   return acc == 0;
 }
 
-static inline bool oriint_is_mod4_3(const oriint_t *n) {
+static inline bool int_is_mod4_3(const int_t *n) {
   uint64_t two_bits = n->bitsu64[0] & 3ULL;
   return (bool)(1 ^ ((two_bits ^ 3ULL | -(two_bits ^ 3ULL)) >> 63));
 }
 
-static inline void oriint_select_mask(oriint_t *RES, const oriint_t *a, const oriint_t *b, uint64_t mask) {
-  for (int8_t i = 0; i < NBLOCK; i++) {
+static inline void int_select_mask(int_t *RES, const int_t *a, const int_t *b, uint64_t mask) {
+  for (int8_t i = 0; i < INTBLOCK; i++) {
     RES->bitsu64[i] = (a->bitsu64[i] & ~mask) | (b->bitsu64[i] & mask);
   }
 }
 
-static inline void oriint_int_shiftr(uint32_t n, oriint_t *d) {
-  for (int8_t i = 0; i < NBLOCK - 1; i++) {
-    d->bitsu64[i] = oriint_shiftright128(d->bitsu64[i], d->bitsu64[i+1], n);
+static inline void int_shiftr(uint32_t n, int_t *d) {
+  for (int8_t i = 0; i < INTBLOCK - 1; i++) {
+    d->bitsu64[i] = fpint_shiftright128(d->bitsu64[i], d->bitsu64[i+1], n);
   }
-  d->bitsu64[NBLOCK-1] = (uint64_t)(d->bits64[NBLOCK-1] >> n);
+  d->bitsu64[INTBLOCK-1] = (uint64_t)(d->bits64[INTBLOCK-1] >> n);
 }
 
-static inline void oriint_int_shiftl(uint32_t n, oriint_t *d) {
-  for (int8_t b = 1; b < NBLOCK; b++) {
+static inline void int_shiftl(uint32_t n, int_t *d) {
+  for (int8_t b = 1; b < INTBLOCK; b++) {
     uint64_t mask = -(uint64_t)(n / 64 >= (uint32_t)b);
-    for (int8_t i = NBLOCK - 1; i >= 1; i--) {
+    for (int8_t i = INTBLOCK - 1; i >= 1; i--) {
       uint64_t shifted_val = d->bitsu64[i - 1];
       d->bitsu64[i] = (shifted_val & mask) | (d->bitsu64[i] & ~mask);
     }
@@ -170,78 +125,127 @@ static inline void oriint_int_shiftl(uint32_t n, oriint_t *d) {
   }
   uint32_t bits = n % 64;
   uint64_t low_bits = d->bitsu64[0];
-  for (int8_t i = NBLOCK - 1; i >= 1; i--) {
-    uint64_t res = oriint_shiftleft128(d->bitsu64[i-1], d->bitsu64[i], bits & 63);
+  for (int8_t i = INTBLOCK - 1; i >= 1; i--) {
+    uint64_t res = fpint_shiftleft128(d->bitsu64[i-1], d->bitsu64[i], bits & 63);
     d->bitsu64[i] = res;
   }
   d->bitsu64[0] <<= (bits & 63);
 }
 
-static inline void oriint_imm_umul(const uint64_t *x, uint64_t y, uint64_t *dst) {
+static inline void int_set_bit(int_t *s, uint32_t i, uint32_t bit_value) {
+  if (bit_value == 0) return;
+  uint64_t mask = 1ULL << (i % 64);
+  s->bitsu64[i / 64] |= mask;
+}
+
+static inline void int_imm_umul(const uint64_t *x, uint64_t y, uint64_t *dst) {
   uint64_t c = 0, h, carry;
-  dst[0] = oriint_umul128(x[0], y, &h); carry = h;
-  for (int8_t i = 1; i < NBLOCK - 1; i++) {
-    c = oriint_addcarry_u64(c, oriint_umul128(x[i], y, &h), carry, dst + i); carry = h;
+  dst[0] = fpint_umul128(x[0], y, &h); carry = h;
+  for (int8_t i = 1; i < INTBLOCK - 1; i++) {
+    c = fpint_addcarry_u64(c, fpint_umul128(x[i], y, &h), carry, dst + i); carry = h;
   }
-  oriint_addcarry_u64(c, 0ULL, carry, dst + (NBLOCK - 1));
+  fpint_addcarry_u64(c, 0ULL, carry, dst + (INTBLOCK - 1));
 }
 
-static inline void oriint_imm_mul(const uint64_t *x, uint64_t y, uint64_t *dst) {
+static inline void int_imm_mul(const uint64_t *x, uint64_t y, uint64_t *dst) {
   uint64_t c = 0, h, carry;
-  dst[0] = oriint_umul128(x[0], y, &h); carry = h;
-  for (int8_t i = 1; i < NBLOCK - 1; i++) {
-    c = oriint_addcarry_u64(c, oriint_umul128(x[i], y, &h), carry, dst + i); carry = h;
+  dst[0] = fpint_umul128(x[0], y, &h); carry = h;
+  for (int8_t i = 1; i < INTBLOCK - 1; i++) {
+    c = fpint_addcarry_u64(c, fpint_umul128(x[i], y, &h), carry, dst + i); carry = h;
   }
-  oriint_addcarry_u64(c, oriint_umul128(x[NBLOCK-1], y, &h), carry, dst + (NBLOCK - 1));
+  fpint_addcarry_u64(c, fpint_umul128(x[INTBLOCK-1], y, &h), carry, dst + (INTBLOCK - 1));
 }
 
-static inline void oriint_int_add_1(oriint_t *RES, const oriint_t *a) {
+static inline uint64_t int_imm_udiv(const uint64_t *x, uint64_t divisor, uint64_t *dst) {
+  uint64_t r = 0;
+  uint64_t q;
+  for (int8_t i = INTBLOCK - 1; i >= 0; i--) {
+    r = fpint_udiv128(x[i], r, divisor, &q);
+    dst[i] = q;
+  }
+  return r;
+}
+
+static inline uint64_t int_imm_div(const uint64_t *x, uint64_t y, uint64_t *dst) {
+  uint64_t r = 0;
+  uint64_t q;
+  for (int8_t i = INTBLOCK - 1; i >= 0; i--) {
+    r = fpint_udiv128(x[i], r, y, &q);
+    dst[i] = q;
+  }
+  return r;
+}
+
+static inline void int_add_1(int_t *RES, const int_t *a) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
-static inline void oriint_int_add_2(oriint_t *RES, const oriint_t *a, uint64_t b) {
+static inline void int_add_2(int_t *RES, const int_t *a, uint64_t b) {
   uint64_t c = 0;
-  c = oriint_addcarry_u64(c, a->bitsu64[0], b, &RES->bitsu64[0]);
-  for (int8_t i = 1; i < NBLOCK; i++) {
-    c = oriint_addcarry_u64(c, a->bitsu64[i], 0, &RES->bitsu64[i]);
+  c = fpint_addcarry_u64(c, a->bitsu64[0], b, &RES->bitsu64[0]);
+  for (int8_t i = 1; i < INTBLOCK; i++) {
+    c = fpint_addcarry_u64(c, a->bitsu64[i], 0, &RES->bitsu64[i]);
   }
 }
 
-static inline void oriint_int_add_3(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
+static inline void int_add_3(int_t *RES, const int_t *a, const int_t *b) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_addcarry_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_addcarry_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
-static inline uint64_t oriint_int_add_c(oriint_t *RES, const oriint_t *a) {
+static inline uint64_t int_add_c(int_t *RES, const int_t *a) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
   }
   return c;
 }
 
-static inline void oriint_int_sub_2(oriint_t *RES, const oriint_t *a) {
-  uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_subborrow_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
+static inline void int_from_bytes(
+    int_t *r,
+    const uint8_t *in,
+    size_t len)
+{
+  int_t tmp;
+  int_clear(r);
+  for (size_t i = 0; i < len; i++) {
+    int_shiftl(8, r);
+    int_clear(&tmp);
+    int_set_u64(&tmp, (uint64_t)in[i]);
+    int_add_3(r, r, &tmp);
+  }
+  explicit_bzero(&tmp, sizeof(tmp));
+}
+
+static inline void int_from_fp(int_t *r, const fp_t *a) {
+  int_clear(r);
+  for (size_t i = 0; i < FPBLOCK; i++) {
+    r->bitsu64[i] = a->bitsu64[i];
   }
 }
 
-static inline void oriint_int_sub_3(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
+static inline void int_sub_2(int_t *RES, const int_t *a) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_subborrow_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_subborrow_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
-static uint64_t oriint_int_mod_u64(const oriint_t *n, uint64_t divisor) {
+static inline void int_sub_3(int_t *RES, const int_t *a, const int_t *b) {
+  uint64_t c = 0;
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_subborrow_u64(c, a->bitsu64[i], b->bitsu64[i], &RES->bitsu64[i]);
+  }
+}
+
+static uint64_t int_mod_u64(const int_t *n, uint64_t divisor) {
   uint64_t remainder = 0;
-  for (int8_t i = NBLOCK - 1; i >= 0; i--) {
+  for (int8_t i = INTBLOCK - 1; i >= 0; i--) {
     uint64_t hi = remainder;
     uint64_t lo = n->bitsu64[i];
     uint64_t quot;
@@ -254,164 +258,147 @@ static uint64_t oriint_int_mod_u64(const oriint_t *n, uint64_t divisor) {
   return remainder;
 }
 
-static inline bool oriint_is_ge(const oriint_t *a, const oriint_t *b) {
-  oriint_t diff;
-  oriint_int_sub_3(&diff, a, b);
-  return diff.bits64[NBLOCK - 1] >= 0;
+static inline bool int_is_ge(const int_t *a, const int_t *b) {
+  int_t diff;
+  int_sub_3(&diff, a, b);
+  return diff.bits64[INTBLOCK - 1] >= 0;
 }
 
-static inline uint64_t oriint_ge_mask(const oriint_t *a, const oriint_t *b) {
+
+
+static inline uint64_t int_ge_mask(const int_t *a, const int_t *b) {
   uint64_t borrow = 0;
   uint64_t dummy;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    borrow = oriint_subborrow_u64(borrow, a->bitsu64[i], b->bitsu64[i], &dummy);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    borrow = fpint_subborrow_u64(borrow, a->bitsu64[i], b->bitsu64[i], &dummy);
   }
   return (borrow - 1ULL);
 }
 
-static inline void oriint_select_ge(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
-  oriint_t diff;
-  oriint_int_sub_3(&diff, a, b);
-  uint64_t mask = oriint_ge_mask(a, b);
-  oriint_select_mask(RES, a, &diff, mask);
+static inline void int_select_ge(int_t *RES, const int_t *a, const int_t *b) {
+  int_t diff;
+  int_sub_3(&diff, a, b);
+  uint64_t mask = int_ge_mask(a, b);
+  int_select_mask(RES, a, &diff, mask);
 }
 
-static inline void oriint_int_neg_1(oriint_t *RES) {
+static inline void int_neg_1(int_t *RES) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_subborrow_u64(c, 0ULL, RES->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_subborrow_u64(c, 0ULL, RES->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
-static inline void oriint_int_neg_2(oriint_t *RES, oriint_t *a) {
+static inline void int_neg_2(int_t *RES, const int_t *a) {
   uint64_t c = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    c = oriint_subborrow_u64(c, 0ULL, a->bitsu64[i], &RES->bitsu64[i]);
+  for (int8_t i = 0; i < INTBLOCK; i++) {
+    c = fpint_subborrow_u64(c, 0ULL, a->bitsu64[i], &RES->bitsu64[i]);
   }
 }
 
-static inline void oriint_int_mult(oriint_t *RES, const oriint_t *a, uint64_t b) {
-  oriint_imm_mul(a->bitsu64, b, RES->bitsu64);
+static inline void int_mult(int_t *RES, const int_t *a, uint64_t b) {
+  int_imm_mul(a->bitsu64, b, RES->bitsu64);
 }
 
-static inline void oriint_int_imult(oriint_t *RES, oriint_t *a, int64_t b) {
-  oriint_set(RES, a);
+static inline void int_abs(int_t *dst, const int_t *a) {
+  if (int_is_negative(a)) {
+    int_neg_2(dst, a);
+  } else {
+    int_set(dst, a);
+  }
+}
+
+static inline void int_imult(int_t *RES, int_t *a, int64_t b) {
+  int_set(RES, a);
   if (b < 0LL) {
-    oriint_int_neg_1(RES);
+    int_neg_1(RES);
     b = -b;
   }
-  oriint_imm_mul(RES->bitsu64, b, RES->bitsu64);
+  int_imm_mul(RES->bitsu64, b, RES->bitsu64);
 }
 
-static inline void oriint_int_addandshift(oriint_t *RES, const oriint_t *a, uint64_t cH) {
+static inline void int_addandshift(int_t *RES, const int_t *a, uint64_t cH) {
   uint64_t c = 0;
-  c = oriint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
-  for (int8_t i = 1; i < NBLOCK; i++) {
-    c = oriint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i-1]);
+  c = fpint_addcarry_u64(c, RES->bitsu64[0], a->bitsu64[0], &RES->bitsu64[0]);
+  for (int8_t i = 1; i < INTBLOCK; i++) {
+    c = fpint_addcarry_u64(c, RES->bitsu64[i], a->bitsu64[i], &RES->bitsu64[i-1]);
   }
-  RES->bitsu64[NBLOCK-1] = c + cH;  
+  RES->bitsu64[INTBLOCK-1] = c + cH;  
 }
 
-static inline void oriint_montgomery_mul(oriint_t *RES, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *a, const oriint_t *b) {
-  oriint_t pr;
-  oriint_t p;
+static inline void int_montgomery_mul(int_t *RES, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *a, const int_t *b) {
+  int_t pr;
+  int_t p;
   uint64_t ML;
   uint64_t c;
 
-  oriint_imm_umul(a->bitsu64, b->bitsu64[0], pr.bitsu64);
+  int_imm_umul(a->bitsu64, b->bitsu64[0], pr.bitsu64);
   ML = pr.bitsu64[0] * (*mm64);
-  oriint_imm_umul(n->bitsu64, ML, p.bitsu64);
-  c = oriint_int_add_c(&pr, &p);
-  for (int8_t i = 0; i < NBLOCK - 1; i++) {
+  int_imm_umul(n->bitsu64, ML, p.bitsu64);
+  c = int_add_c(&pr, &p);
+  for (int8_t i = 0; i < INTBLOCK - 1; i++) {
     RES->bitsu64[i] = pr.bitsu64[i+1];
   }
-  RES->bitsu64[NBLOCK-1] = c;
+  RES->bitsu64[INTBLOCK-1] = c;
   for (int8_t i = 1; i < (*msize); i++) {
-    oriint_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
+    int_imm_umul(a->bitsu64, b->bitsu64[i], pr.bitsu64);
     ML = (pr.bitsu64[0] + RES->bitsu64[0]) * (*mm64);
-    oriint_imm_umul(n->bitsu64, ML, p.bitsu64);
-    c = oriint_int_add_c(&pr, &p);
-    oriint_int_addandshift(RES, &pr, c);
+    int_imm_umul(n->bitsu64, ML, p.bitsu64);
+    c = int_add_c(&pr, &p);
+    int_addandshift(RES, &pr, c);
   }
-  oriint_select_ge(RES, RES, n);
+  int_select_ge(RES, RES, n);
 }
 
-static inline void oriint_mod_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b) {
-  oriint_t p;
-  oriint_montgomery_mul(&p,&P,&MM64,&Msize,a,b);
-  oriint_montgomery_mul(RES,&P,&MM64,&Msize,&R2,&p);
+static inline void int_modvar_mul(int_t *RES, const int_t *a, const int_t *b, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2) {
+  int_t p;
+  int_montgomery_mul(&p,n,mm64,msize,a,b);
+  int_montgomery_mul(RES,n,mm64,msize,r2,&p);
 }
 
-static inline void oriint_mod_sqr(oriint_t *RES, oriint_t *a) {
-  oriint_mod_mul(RES, a, a);
+static inline void int_modvar_sub_2(int_t *RES, const int_t *a, int_t *b, const int_t *n) {
+  int_sub_3(RES, a, b);
+  if (RES->bits64[INTBLOCK - 1] < 0)
+    int_add_1(RES, n);
 }
 
-static inline void oriint_modvar_mul(oriint_t *RES, const oriint_t *a, const oriint_t *b, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
-  oriint_t p;
-  oriint_montgomery_mul(&p,n,mm64,msize,a,b);
-  oriint_montgomery_mul(RES,n,mm64,msize,r2,&p);
+static inline void int_modvar_add(int_t *RES, int_t *a, int_t *b, int_t *n) {
+  int_add_3(RES, a, b);
+  int_select_ge(RES, RES, n);
 }
 
-static inline void oriint_mod_sub_2(oriint_t *RES, const oriint_t *a, oriint_t *b) {
-  oriint_int_sub_3(RES, a, b);
-  if (RES->bits64[NBLOCK - 1] < 0)
-    oriint_int_add_1(RES, &P);
-}
-
-static inline void oriint_modvar_sub_2(oriint_t *RES, oriint_t *a, oriint_t *b, oriint_t *n) {
-  oriint_int_sub_3(RES, a, b);
-  if (RES->bits64[NBLOCK - 1] < 0)
-    oriint_int_add_1(RES, n);
-}
-
-static inline void oriint_mod_sub_1(oriint_t *RES, oriint_t *a) {
-  oriint_int_sub_2(RES, a);
-  if (RES->bits64[NBLOCK - 1] < 0)
-    oriint_int_add_1(RES, &P);
-}
-
-static inline void oriint_mod_add(oriint_t *RES, oriint_t *a, const oriint_t *b) {
-  oriint_int_add_3(RES, a, b);
-  oriint_select_ge(RES, RES, &P);
-}
-
-static inline void oriint_modvar_add(oriint_t *RES, oriint_t *a, oriint_t *b, oriint_t *n) {
-  oriint_int_add_3(RES, a, b);
-  oriint_select_ge(RES, RES, n);
-}
-
-static inline void oriint_modvar_inv(oriint_t *RES, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize) {
+static inline bool int_modvar_inv(int_t *RES, const int_t *n, const uint64_t *mm64, const uint8_t *msize) {
 
 #define SWAP_ADD(x,y) x+=y;y-=x;
 #define SWAP_SUB(x,y) x-=y;y+=x;
 #define IS_EVEN(x) ((x&1)==0)
-#define IS_NEGATIVE(x) (x.bits64[NBLOCK-1] < 0LL)
-#define IS_POSITIVE(x) (x.bits64[NBLOCK-1] >= 0LL)
+#define IS_NEGATIVE(x) (x.bits64[INTBLOCK-1] < 0LL)
+#define IS_POSITIVE(x) (x.bits64[INTBLOCK-1] >= 0LL)
 
-  oriint_t u;
-  oriint_t v;
-  oriint_t r;
-  oriint_t s;
-  oriint_t r0_P;
-  oriint_t s0_P;
-  oriint_t uu_u;
-  oriint_t uv_v;
-  oriint_t vu_u;
-  oriint_t vv_v;
-  oriint_t uu_r;
-  oriint_t uv_s;
-  oriint_t vu_r;
-  oriint_t vv_s;
+  int_t u;
+  int_t v;
+  int_t r;
+  int_t s;
+  int_t r0_P;
+  int_t s0_P;
+  int_t uu_u;
+  int_t uv_v;
+  int_t vu_u;
+  int_t vv_v;
+  int_t uu_r;
+  int_t uv_s;
+  int_t vu_r;
+  int_t vv_s;
   int64_t bitCount;
   int64_t uu, uv, vu, vv;
   int64_t v0, u0;
   int64_t nb0;
 
-  oriint_set(&u,n);
-  oriint_set(&v,RES);
-  oriint_clear(&r);
-  oriint_set_one(&s);
-  while (!oriint_is_zero(&u)) {
+  int_set(&u,n);
+  int_set(&v,RES);
+  int_clear(&r);
+  int_set_one(&s);
+  while (!int_is_zero(&u)) {
     uu = 1; uv = 0;
     vu = 0; vv = 1;
     u0 = u.bits64[0];
@@ -437,46 +424,185 @@ static inline void oriint_modvar_inv(oriint_t *RES, const oriint_t *n, const uin
         SWAP_SUB(u0, v0);
       }
     }
-    oriint_int_imult(&uu_u,&u,uu);
-    oriint_int_imult(&uv_v,&v,uv);
-    oriint_int_imult(&vu_u,&u,vu);
-    oriint_int_imult(&vv_v,&v,vv);
-    oriint_int_imult(&uu_r,&r,uu);
-    oriint_int_imult(&uv_s,&s,uv);
-    oriint_int_imult(&vu_r,&r,vu);
-    oriint_int_imult(&vv_s,&s,vv);
+    int_imult(&uu_u,&u,uu);
+    int_imult(&uv_v,&v,uv);
+    int_imult(&vu_u,&u,vu);
+    int_imult(&vv_v,&v,vv);
+    int_imult(&uu_r,&r,uu);
+    int_imult(&uv_s,&s,uv);
+    int_imult(&vu_r,&r,vu);
+    int_imult(&vv_s,&s,vv);
     uint64_t r0 = ((uu_r.bitsu64[0] + uv_s.bitsu64[0]) * (*mm64)) & MSK62;
     uint64_t s0 = ((vu_r.bitsu64[0] + vv_s.bitsu64[0]) * (*mm64)) & MSK62;
-    oriint_int_mult(&r0_P,n,r0);
-    oriint_int_mult(&s0_P,n,s0);
-    oriint_int_add_3(&u,&uu_u,&uv_v);
-    oriint_int_add_3(&v,&vu_u,&vv_v);
-    oriint_int_add_3(&r,&uu_r,&uv_s);
-    oriint_int_add_1(&r,&r0_P);
-    oriint_int_add_3(&s,&vu_r,&vv_s);
-    oriint_int_add_1(&s,&s0_P);
-    oriint_int_shiftr(62, &u);
-    oriint_int_shiftr(62, &v);
-    oriint_int_shiftr(62, &r);
-    oriint_int_shiftr(62, &s);
+    int_mult(&r0_P,n,r0);
+    int_mult(&s0_P,n,s0);
+    int_add_3(&u,&uu_u,&uv_v);
+    int_add_3(&v,&vu_u,&vv_v);
+    int_add_3(&r,&uu_r,&uv_s);
+    int_add_1(&r,&r0_P);
+    int_add_3(&s,&vu_r,&vv_s);
+    int_add_1(&s,&s0_P);
+    int_shiftr(62, &u);
+    int_shiftr(62, &v);
+    int_shiftr(62, &r);
+    int_shiftr(62, &s);
   }
   if (IS_NEGATIVE(v)) {
-    oriint_int_neg_1(&v);
-    oriint_int_neg_1(&s);
-    oriint_int_add_1(&s,n);
+    int_neg_1(&v);
+    int_neg_1(&s);
+    int_add_1(&s,n);
   }
-  if (!oriint_is_one(&v)) {
-    oriint_clear(RES);
-    return;
+  if (!int_is_one(&v)) {
+    int_clear(RES);
+    return false;
   }
   if (IS_NEGATIVE(s))
-    oriint_int_add_1(&s,n);
-  oriint_select_ge(&s, &s, n);
-  oriint_set(RES, &s);
+    int_add_1(&s,n);
+  int_select_ge(&s, &s, n);
+  int_set(RES, &s);
+  return true;
 }
 
-static void oriint_modvar_montgomery_setup(const oriint_t *n, uint64_t *mm64, uint8_t *msize) {
-  int8_t i=(2*NBLOCK)-1;
+static inline void int_mul(int_t *RES, const int_t *A, const int_t *B) {
+    int_t a_abs, b_abs;
+    uint64_t r0 = 0, r1 = 0, r2 = 0;
+    uint64_t hi, lo;
+    
+    // 1. Tangani Sign (sama seperti kode Anda sebelumnya)
+    bool signA = (A->bitsu64[INTBLOCK-1] >> 63);
+    bool signB = (B->bitsu64[INTBLOCK-1] >> 63);
+    uint64_t c = 1;
+    for (int i = 0; i < INTBLOCK; i++) {
+        uint64_t v = signA ? ~A->bitsu64[i] : A->bitsu64[i];
+        a_abs.bitsu64[i] = signA ? (v + c) : v;
+        if (signA) c = (a_abs.bitsu64[i] < v);
+    }
+    c = 1;
+    for (int i = 0; i < INTBLOCK; i++) {
+        uint64_t v = signB ? ~B->bitsu64[i] : B->bitsu64[i];
+        b_abs.bitsu64[i] = signB ? (v + c) : v;
+        if (signB) c = (b_abs.bitsu64[i] < v);
+    }
+
+    // 2. Core Comba Multiplication
+    int_t result_low;
+    for (int8_t k = 0; k < INTBLOCK; k++) {
+        for (int8_t i = 0; i <= k; i++) {
+            int8_t j = k - i;
+            lo = fpint_umul128(a_abs.bitsu64[i], b_abs.bitsu64[j], &hi);
+            
+            // Akumulasi ke 3 register (r2:r1:r0)
+            r0 += lo;
+            if (r0 < lo) { r1++; if (r1 == 0) r2++; }
+            r1 += hi;
+            if (r1 < hi) { r2++; }
+        }
+        result_low.bitsu64[k] = r0;
+        r0 = r1;
+        r1 = r2;
+        r2 = 0;
+    }
+    // Catatan: Jika ingin hasil 2*INTBLOCK, lanjutkan loop k sampai 2*INTBLOCK-1
+
+    // 3. Terapkan Sign Akhir
+    if (signA ^ signB) {
+        uint64_t cn = 1;
+        for (int i = 0; i < INTBLOCK; i++) {
+            uint64_t v = ~result_low.bitsu64[i];
+            RES->bitsu64[i] = v + cn;
+            cn = (RES->bitsu64[i] < v);
+        }
+    } else {
+        int_set(RES, &result_low);
+    }
+}
+
+static inline void int_sqr(int_t *RES, const int_t *a) {
+  uint64_t r0 = 0, r1 = 0, r2 = 0;
+  uint64_t hi, lo;
+  int_t result_low;
+  int_clear(&result_low);
+  for (int8_t k = 0; k < (2 * INTBLOCK - 1); k++) {
+    for (int8_t i = 0; i < INTBLOCK; i++) {
+      int8_t j = k - i;
+      if (j >= 0 && j < INTBLOCK) {
+        lo = fpint_umul128(a->bitsu64[i], a->bitsu64[j], &hi);
+        r0 += lo;
+        if (r0 < lo) {
+          r1++;
+          if (r1 == 0) r2++;
+        }
+        r1 += hi;
+        if (r1 < hi) {
+          r2++;
+        }
+      }
+    }
+    if (k < INTBLOCK) {
+      result_low.bitsu64[k] = r0;
+    }
+    r0 = r1;
+    r1 = r2;
+    r2 = 0;
+  }
+  int_set(RES, &result_low);
+}
+
+static inline void int_div(int_t *Q, int_t *R, const int_t *A, const int_t *B) {
+  if (Q) int_clear(Q);
+  if (R) int_clear(R);
+  bool zero = true;
+  for (int i = 0; i < INTBLOCK; i++) {
+    if (B->bitsu64[i] != 0) zero = false;
+  }
+  if (zero) return;
+  int_t a;
+  int_set(&a, A);
+  int_t b;
+  int_set(&b, B);
+  bool signA = (a.bitsu64[INTBLOCK-1] >> 63);
+  bool signB = (b.bitsu64[INTBLOCK-1] >> 63);
+  if (signA) int_neg_1(&a);
+  if (signB) int_neg_1(&b);
+  int_t rem;
+  int_clear(&rem);
+  int total_bits = INTBLOCK * 64;
+  for (int bit = total_bits - 1; bit >= 0; bit--) {
+    int_shiftl(1, &rem);
+    int limb = bit / 64;
+    int shift = bit % 64;
+    uint64_t bitval = (a.bitsu64[limb] >> shift) & 1ULL;
+    rem.bitsu64[0] |= bitval;
+    if (int_is_ge(&rem, &b)) {
+      int_sub_3(&rem, &rem, &b);
+      if (Q) Q->bitsu64[limb] |= (1ULL << shift);
+    }
+  }
+  if (Q && (signA ^ signB)) {
+    int_neg_1(Q);
+  }
+  if (R) {
+    int_set(R, &rem);
+    if (signA) int_neg_1(R);
+    if (int_is_negative(R)) {
+      int_t absB;
+      int_set(&absB, &b);
+      int_add_3(R, R, &absB);
+      if (Q) {
+        int_t one;
+        int_set_one(&one);
+        if (!signB) {
+          int_sub_3(Q, Q, &one);
+        } else {
+          int_add_3(Q, Q, &one);
+        }
+      }
+    }
+  }
+}
+
+static inline void int_modvar_montgomery_setup(const int_t *n, uint64_t *mm64, uint8_t *msize) {
+  int8_t i=(2*INTBLOCK)-1;
   while(i>0 && n->bitsu32[i]==0) i--;
   *msize = (i+1)/2;
   int64_t x, t;
@@ -489,304 +615,294 @@ static void oriint_modvar_montgomery_setup(const oriint_t *n, uint64_t *mm64, ui
   *mm64 = (uint64_t)(-x);
 }
 
-static void oriint_modvar_setup_r2(const oriint_t *n, uint64_t *mm64, uint8_t *msize, oriint_t *r2) {
-  oriint_t one, r;
-  oriint_set_one(&one);
-  oriint_montgomery_mul(&r, n, mm64, msize, &one, &one);
-  oriint_montgomery_mul(r2, n, mm64, msize, &r, &one);
-  oriint_modvar_inv(r2, n, mm64, msize);
+static inline void int_modvar_setup_r2(const int_t *n, uint64_t *mm64, uint8_t *msize, int_t *r2) {
+  int_t one, r;
+  int_set_one(&one);
+  int_montgomery_mul(&r, n, mm64, msize, &one, &one);
+  int_montgomery_mul(r2, n, mm64, msize, &r, &one);
+  int_modvar_inv(r2, n, mm64, msize);
 }
 
-static void oriint_modvar_setup(uint64_t *mm64, uint8_t *msize, oriint_t *r2, const oriint_t *n) {
-  if (oriint_is_even(n)) return;
-  oriint_modvar_montgomery_setup(n, mm64, msize);
-  oriint_modvar_setup_r2(n, mm64, msize, r2);
+static inline void int_modvar_setup(uint64_t *mm64, uint8_t *msize, int_t *r2, const int_t *n) {
+  if (int_is_even(n)) return;
+  int_modvar_montgomery_setup(n, mm64, msize);
+  int_modvar_setup_r2(n, mm64, msize, r2);
 }
 
-static void oriint_compute_sqrt_exp(oriint_t *e) {
-  oriint_set(e, &P);
-  oriint_t one;
-  oriint_set_one(&one);
-  oriint_int_add_1(e, &one);
-  oriint_int_shiftr(2, e);
+static inline void int_compute_sqrt_exp(int_t *e) {
+  int_set(e, &PINT);
+  int_t one;
+  int_set_one(&one);
+  int_add_1(e, &one);
+  int_shiftr(2, e);
 }
 
-static void oriint_int_sqr(oriint_t *RES, const oriint_t *a) {
-  uint64_t r0 = 0, r1 = 0, r2 = 0;
-  uint64_t hi, lo;
-  oriint_t result_low;
-  oriint_clear(&result_low);
-  for (int8_t k = 0; k < (2 * NBLOCK - 1); k++) {
-    for (int8_t i = 0; i < NBLOCK; i++) {
-      int8_t j = k - i;
-      if (j >= 0 && j < NBLOCK) {
-        lo = oriint_umul128(a->bitsu64[i], a->bitsu64[j], &hi);
-        r0 += lo;
-        if (r0 < lo) {
-          r1++;
-          if (r1 == 0) r2++;
-        }
-        r1 += hi;
-        if (r1 < hi) {
-          r2++;
-        }
-      }
-    }
-    if (k < NBLOCK) {
-      result_low.bitsu64[k] = r0;
-    }
-    r0 = r1;
-    r1 = r2;
-    r2 = 0;
-  }
-  oriint_set(RES, &result_low);
-}
-
-static void oriint_int_isqrt(oriint_t *RES, const oriint_t *n) {
-  if (oriint_is_zero(n)) {
-    oriint_clear(RES);
+static inline void int_isqrt(int_t *RES, const int_t *n) {
+  if (int_is_zero(n)) {
+    int_clear(RES);
     return;
   }
-  oriint_t op, res, one, tmp, next_res;
-  oriint_set(&op, n);
-  oriint_clear(&res);
-  oriint_clear(&one);
-  one.bitsu64[4] = (1ULL << 62);
+  int_t op, res, one, tmp, next_res;
+  int_set(&op, n);
+  int_clear(&res);
+  int_clear(&one);
+  one.bitsu64[INTBLOCK-1] = (1ULL << 62);
   while (true) {
-    oriint_int_sub_3(&tmp, &one, &op);
-    if (tmp.bits64[NBLOCK - 1] >= 0) break;
-    oriint_int_shiftr(2, &one);
-    if (oriint_is_zero(&one)) break;
+    int_sub_3(&tmp, &one, &op);
+    if (tmp.bits64[INTBLOCK - 1] >= 0) break;
+    int_shiftr(2, &one);
+    if (int_is_zero(&one)) break;
   }
 
-  while (!oriint_is_zero(&one)) {
-    oriint_int_add_3(&next_res, &res, &one);
-    oriint_int_sub_3(&tmp, &op, &next_res);
-    if (tmp.bits64[NBLOCK - 1] >= 0) {
-      oriint_set(&op, &tmp);
-      oriint_int_shiftr(1, &res);
-      oriint_int_add_1(&res, &one);
+  while (!int_is_zero(&one)) {
+    int_add_3(&next_res, &res, &one);
+    int_sub_3(&tmp, &op, &next_res);
+    if (tmp.bits64[INTBLOCK - 1] >= 0) {
+      int_set(&op, &tmp);
+      int_shiftr(1, &res);
+      int_add_1(&res, &one);
     } else {
-      oriint_int_shiftr(1, &res);
+      int_shiftr(1, &res);
     }
-    oriint_int_shiftr(2, &one);
+    int_shiftr(2, &one);
   }
-  oriint_set(RES, &res);
+  int_set(RES, &res);
 }
 
-static inline bool oriint_int_issquare(const oriint_t *n, oriint_t *root) {
-  if (oriint_is_zero(n)) {
-    if (root) oriint_clear(root);
+static inline bool int_issquare(const int_t *n, int_t *root) {
+  if (int_is_zero(n)) {
+    if (root) int_clear(root);
     return true;
   }
   uint64_t m = n->bitsu64[0] & 63ULL;
   uint64_t mask = 0x0202020202030213ULL;
   if (!((mask >> m) & 1ULL)) return false;
-  oriint_t r, sq;
-  oriint_int_isqrt(&r, n);
-  oriint_int_sqr(&sq, &r);
-  bool eq = oriint_is_equal(&sq, n);
-  if (eq && root) oriint_set(root, &r);
+  int_t r, sq;
+  int_isqrt(&r, n);
+  int_sqr(&sq, &r);
+  bool eq = int_is_equal(&sq, n);
+  if (eq && root) int_set(root, &r);
   return eq;
 }
 
-static void oriint_int_mod(oriint_t *R, const oriint_t *A, const oriint_t *B) {
-  oriint_t remainder;
-  oriint_clear(&remainder);
-  if (oriint_is_zero(B)) {
-    oriint_clear(R);
+static inline void int_mod(int_t *R, const int_t *A, const int_t *B) {
+  int_t remainder;
+  int_clear(&remainder);
+  if (int_is_zero(B)) {
+    int_clear(R);
     return;
   }
-  for (int16_t i = (NBLOCK * 64) - 1; i >= 0; i--) {
-    oriint_int_shiftl(1, &remainder);
+  for (int16_t i = (INTBLOCK * 64) - 1; i >= 0; i--) {
+    int_shiftl(1, &remainder);
     uint64_t bit = (A->bitsu64[i >> 6] >> (i & 63)) & 1ULL;
     remainder.bitsu64[0] |= bit;
-    oriint_select_ge(&remainder, &remainder, B);
+    int_select_ge(&remainder, &remainder, B);
   }
-
-  oriint_set(R, &remainder);
+  int_set(R, &remainder);
 }
 
-static void oriint_mod_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp) {
-  oriint_t result;
-  oriint_t base;
-  oriint_t tmp;
-  oriint_set(&base, a);
-  oriint_set_one(&result);
-  for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_mod_sqr(&tmp, &result);
+static inline void int_gcd(int_t *RES, const int_t *a, const int_t *b) {
+  int_t tmpa, abstmpa, tmpb;
+  int_set(&tmpa, a);
+  int_set(&tmpb, b);
+  while (!int_is_zero(&tmpb)) {
+    int_t t;
+    int_set(&t, &tmpb);
+    int_mod(&tmpb, &tmpa, &tmpb);
+    int_set(&tmpa, &t);
+  }
+  int_abs(RES, &tmpa);
+}
+
+static inline void int_gcdext(
+    int_t *g,
+    int_t *u,
+    int_t *v,
+    const int_t *a,
+    const int_t *b)
+{
+    int_t old_r, r;
+    int_t old_s, s;
+    int_t old_t, t;
+
+    int_set(&old_r, a);
+    int_set(&r, b);
+
+    int_set_one(&old_s);
+    int_clear(&s);
+
+    int_clear(&old_t);
+    int_set_one(&t);
+
+    while (!int_is_zero(&r)) {
+
+        int_t q, rem;
+        int_div(&q, &rem, &old_r, &r);
+
+        // (old_r, r) = (r, old_r - q*r)
+        int_set(&old_r, &r);
+        int_set(&r, &rem);
+
+        // (old_s, s) = (s, old_s - q*s)
+        int_t tmp_s, qs;
+        int_mul(&qs, &q, &s);
+        int_sub_3(&tmp_s, &old_s, &qs);
+
+        int_set(&old_s, &s);
+        int_set(&s, &tmp_s);
+
+        // (old_t, t) = (t, old_t - q*t)
+        int_t tmp_t, qt;
+        int_mul(&qt, &q, &t);
+        int_sub_3(&tmp_t, &old_t, &qt);
+
+        int_set(&old_t, &t);
+        int_set(&t, &tmp_t);
+    }
+
+    // gcd positif
+    if (int_is_negative(&old_r)) {
+        int_neg_1(&old_r);
+        int_neg_1(&old_s);
+        int_neg_1(&old_t);
+    }
+
+    int_set(g, &old_r);
+    int_set(u, &old_s);
+    int_set(v, &old_t);
+}
+
+static inline void int_modvar_sqr(int_t *RES, const int_t *a, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2) {
+  int_modvar_mul(RES, a, a, n, mm64, msize, r2);
+}
+
+static inline void int_modvar_exp(int_t *RES, const int_t *a, const int_t *exp, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2) {
+  int_t result;
+  int_t base;
+  int_set_one(&result);
+  int_mod(&base, a, n);
+  for (int16_t i = INTBLOCK * 64 - 1; i >= 0; i--) {
+    int_modvar_sqr(&result, &result, n, mm64, msize, r2);
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
-    oriint_t mulres;
-    oriint_mod_mul(&mulres, &tmp, &base);
-    oriint_select_mask(&result, &tmp, &mulres, mask);
+    int_t mul_res;
+    int_modvar_mul(&mul_res, &result, &base, n, mm64, msize, r2);
+    int_select_mask(&result, &result, &mul_res, mask);
   }
-  oriint_set(RES, &result);
+  int_set(RES, &result);
 }
 
-static void oriint_modvar_sqr(oriint_t *RES, const oriint_t *a, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
-  oriint_modvar_mul(RES, a, a, n, mm64, msize, r2);
-}
+static inline void int_modvar_sqrt(int_t *RES, const int_t *a, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2, bool *is_valid) {
+  int_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b;
+  int_set_one(&one);
+  int_sub_3(&n_minus_1, n, &one);
 
-static void oriint_modvar_exp(oriint_t *RES, const oriint_t *a, const oriint_t *exp, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2) {
-  oriint_t result;
-  oriint_t base;
-  oriint_set_one(&result);
-  oriint_int_mod(&base, a, n);
-  for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_modvar_sqr(&result, &result, n, mm64, msize, r2);
-    uint64_t word = i >> 6;
-    uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
-    uint64_t mask = -(int64_t)bit;
-    oriint_t mul_res;
-    oriint_modvar_mul(&mul_res, &result, &base, n, mm64, msize, r2);
-    oriint_select_mask(&result, &result, &mul_res, mask);
-  }
-  oriint_set(RES, &result);
-}
-
-static void oriint_mod_sqrt(oriint_t *RES, const oriint_t *a, bool *is_valid) {
-  oriint_t exp, res, base;
-  oriint_set_one(&res);
-  oriint_set(&base, a);
-
-  oriint_compute_sqrt_exp(&exp);
-  for (int16_t i = NBLOCK * 64 - 1; i >= 0; i--) {
-    oriint_mod_sqr(&res, &res); 
-    uint64_t word = i >> 6;
-    uint64_t bit  = (exp.bitsu64[word] >> (i & 63)) & 1ULL;
-    uint64_t mask = -(int64_t)bit;
-    oriint_t mulres;
-    oriint_mod_mul(&mulres, &res, &base);
-    oriint_select_mask(&res, &res, &mulres, mask);
-  }
-  oriint_t check;
-  oriint_mod_sqr(&check, &res);
-  uint64_t neq_accumulator = 0;
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    neq_accumulator |= (check.bitsu64[i] ^ a->bitsu64[i]);
-  }
-  uint64_t final_neq = (neq_accumulator | -neq_accumulator) >> 63;
-  uint64_t full_valid_mask = -(int64_t)(final_neq ^ 1ULL);
-  for (int8_t i = 0; i < NBLOCK; i++) {
-    RES->bitsu64[i] = res.bitsu64[i] & full_valid_mask;
-  }
-  if (is_valid) {
-    *is_valid = (full_valid_mask != 0);
-  }
-}
-
-static void oriint_modvar_sqrt(oriint_t *RES, const oriint_t *a, const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, bool *is_valid) {
-  oriint_t one, n_minus_1, tmp, check_z, q, z, z_exp, M, c, t, R, b;
-  oriint_set_one(&one);
-  oriint_int_sub_3(&n_minus_1, n, &one);
-
-  if (oriint_is_zero(a)) {
-    oriint_clear(RES);
+  if (int_is_zero(a)) {
+    int_clear(RES);
     if (is_valid) *is_valid = true;
     return;
   }
-  oriint_set(&q, &n_minus_1);
+  int_set(&q, &n_minus_1);
   uint64_t s = 0;
-  while (oriint_is_even(&q) && s < 256) {
-    oriint_int_shiftr(1, &q);
+  while (int_is_even(&q) && s < 256) {
+    int_shiftr(1, &q);
     s++;
   }
   if (s == 1) {
-    oriint_t exp;
-    oriint_set(&exp, n);
-    oriint_int_add_1(&exp, &one);
-    oriint_int_shiftr(2, &exp);
-    oriint_modvar_exp(RES, a, &exp, n, mm64, msize, r2);
-    oriint_modvar_sqr(&check_z, RES, n, mm64, msize, r2);
-    if (is_valid) *is_valid = oriint_is_equal(&check_z, a);
+    int_t exp;
+    int_set(&exp, n);
+    int_add_1(&exp, &one);
+    int_shiftr(2, &exp);
+    int_modvar_exp(RES, a, &exp, n, mm64, msize, r2);
+    int_modvar_sqr(&check_z, RES, n, mm64, msize, r2);
+    if (is_valid) *is_valid = int_is_equal(&check_z, a);
     return;
   }
-  oriint_set(&z_exp, &n_minus_1);
-  oriint_int_shiftr(1, &z_exp); 
+  int_set(&z_exp, &n_minus_1);
+  int_shiftr(1, &z_exp); 
   uint64_t g = 2;
   while (g < 50) {
-    oriint_clear(&z); z.bitsu64[0] = g;
-    oriint_modvar_exp(&check_z, &z, &z_exp, n, mm64, msize, r2);
-    if (oriint_is_equal(&check_z, &n_minus_1)) break;
+    int_clear(&z); z.bitsu64[0] = g;
+    int_modvar_exp(&check_z, &z, &z_exp, n, mm64, msize, r2);
+    if (int_is_equal(&check_z, &n_minus_1)) break;
     g++;
   }
   M.bitsu64[0] = s;
-  oriint_modvar_exp(&c, &z, &q, n, mm64, msize, r2);
-  oriint_t r_exp;
-  oriint_set(&r_exp, &q); oriint_int_add_1(&r_exp, &one); oriint_int_shiftr(1, &r_exp);
-  oriint_modvar_exp(&R, a, &r_exp, n, mm64, msize, r2);
-  oriint_modvar_exp(&t, a, &q, n, mm64, msize, r2);
+  int_modvar_exp(&c, &z, &q, n, mm64, msize, r2);
+  int_t r_exp;
+  int_set(&r_exp, &q); int_add_1(&r_exp, &one); int_shiftr(1, &r_exp);
+  int_modvar_exp(&R, a, &r_exp, n, mm64, msize, r2);
+  int_modvar_exp(&t, a, &q, n, mm64, msize, r2);
   for (;;) {
-    if (oriint_is_equal(&t, &one)) {
+    if (int_is_equal(&t, &one)) {
       if (is_valid) *is_valid = true;
-      oriint_set(RES, &R);
+      int_set(RES, &R);
       return;
     }
     uint64_t i = 0;
-    oriint_t tt; oriint_set(&tt, &t);
+    int_t tt; int_set(&tt, &t);
     for (i = 1; i < M.bitsu64[0]; i++) {
-      oriint_modvar_sqr(&tt, &tt, n, mm64, msize, r2);
-      if (oriint_is_equal(&tt, &one)) break;
+      int_modvar_sqr(&tt, &tt, n, mm64, msize, r2);
+      if (int_is_equal(&tt, &one)) break;
     }
     if (i == M.bitsu64[0]) {
       if (is_valid) *is_valid = false;
-      oriint_clear(RES);
+      int_clear(RES);
       return;
     }
     uint64_t power = M.bitsu64[0] - i - 1;
-    oriint_set(&b, &c);
+    int_set(&b, &c);
     for (uint64_t j = 0; j < power; j++) {
-      oriint_modvar_sqr(&b, &b, n, mm64, msize, r2);
+      int_modvar_sqr(&b, &b, n, mm64, msize, r2);
     }
     M.bitsu64[0] = i;
-    oriint_modvar_sqr(&c, &b, n, mm64, msize, r2);
-    oriint_modvar_mul(&t, &t, &c, n, mm64, msize, r2);
-    oriint_modvar_mul(&R, &R, &b, n, mm64, msize, r2);
+    int_modvar_sqr(&c, &b, n, mm64, msize, r2);
+    int_modvar_mul(&t, &t, &c, n, mm64, msize, r2);
+    int_modvar_mul(&R, &R, &b, n, mm64, msize, r2);
   }
 }
 
-static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
-  if (oriint_is_even(n)) return false;
-  if (oriint_is_one(n) || oriint_is_zero(n)) return false;
+static inline bool int_is_prime(const int_t *n, int8_t iterations) {
+  if (int_is_even(n)) return false;
+  if (int_is_one(n) || int_is_zero(n)) return false;
   static const uint16_t small_primes[] = {
     3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 
     61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127
   };
   for (int i = 0; i < 30; i++) {
-    if (oriint_int_mod_u64(n, small_primes[i]) == 0) {
-      oriint_t sp_tmp;
-      oriint_set_u64(&sp_tmp, small_primes[i]);
-      return oriint_is_equal(n, &sp_tmp);
+    if (int_mod_u64(n, small_primes[i]) == 0) {
+      int_t sp_tmp;
+      int_set_u64(&sp_tmp, small_primes[i]);
+      return int_is_equal(n, &sp_tmp);
     }
   }
-  oriint_t n_minus_1, d, x, r2, one;
+  int_t n_minus_1, d, x, r2, one;
   uint64_t mm64;
   uint8_t msize;
-  oriint_set_one(&one);
-  oriint_int_sub_3(&n_minus_1, n, &one);
-  oriint_set(&d, &n_minus_1);
+  int_set_one(&one);
+  int_sub_3(&n_minus_1, n, &one);
+  int_set(&d, &n_minus_1);
   uint32_t s = 0;
-  while (oriint_is_even(&d)) {
-    oriint_int_shiftr(1, &d);
+  while (int_is_even(&d)) {
+    int_shiftr(1, &d);
     s++;
   }
-  oriint_modvar_setup(&mm64, &msize, &r2, n);
+  int_modvar_setup(&mm64, &msize, &r2, n);
   static const uint64_t bases[] = {
     2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL
   };
   for (int i = 0; i < 9; i++) {
-    oriint_t base;
-    oriint_clear(&base);
+    int_t base;
+    int_clear(&base);
     base.bitsu64[0] = bases[i];
-    if (oriint_is_ge(&base, n)) continue;
-    oriint_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
-    if (oriint_is_one(&x) || oriint_is_equal(&x, &n_minus_1)) continue;
+    if (int_is_ge(&base, n)) continue;
+    int_modvar_exp(&x, &base, &d, n, &mm64, &msize, &r2);
+    if (int_is_one(&x) || int_is_equal(&x, &n_minus_1)) continue;
     bool composite = true;
     for (uint32_t r = 1; r < s; r++) {
-      oriint_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
-      if (oriint_is_equal(&x, &n_minus_1)) {
+      int_modvar_sqr(&x, &x, n, &mm64, &msize, &r2);
+      if (int_is_equal(&x, &n_minus_1)) {
         composite = false;
         break;
       }
@@ -796,378 +912,296 @@ static bool oriint_is_prime(const oriint_t *n, int8_t iterations) {
   return true;
 }
 
-static bool oriint_solve_cornacchia(const oriint_t *n, const uint64_t *mm64, const uint8_t *msize, const oriint_t *r2, oriint_t *x, oriint_t *y) {
-  if (n->bitsu64[0] < 2 || oriint_is_even(n)) return false;
+static inline bool int_solve_cornacchia(const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2, int_t *x, int_t *y) {
+  if (n->bitsu64[0] < 2 || int_is_even(n)) return false;
   if ((n->bitsu64[0] & 3ULL) != 1) return false;
-  if (!oriint_is_prime(n, 12)) return false;
-  oriint_t z, one, n_minus_1, target_root;
+  if (!int_is_prime(n, 12)) return false;
+  int_t z, one, n_minus_1, target_root;
   bool is_valid;
-  oriint_set_one(&one);
-  oriint_int_sub_3(&n_minus_1, n, &one);
-  oriint_modvar_sqrt(&z, &n_minus_1, n, mm64, msize, r2, &is_valid);
+  int_set_one(&one);
+  int_sub_3(&n_minus_1, n, &one);
+  int_modvar_sqrt(&z, &n_minus_1, n, mm64, msize, r2, &is_valid);
   if (!is_valid) return false;
-  oriint_t n_minus_z;
-  oriint_int_sub_3(&n_minus_z, n, &z);
-  if (oriint_is_ge(&z, &n_minus_z)) {
-    oriint_set(&z, &n_minus_z);
+  int_t n_minus_z;
+  int_sub_3(&n_minus_z, n, &z);
+  if (int_is_ge(&z, &n_minus_z)) {
+    int_set(&z, &n_minus_z);
   }
-  oriint_t r_prev, r_curr, r_next;
-  oriint_set(&r_prev, n);
-  oriint_set(&r_curr, &z);
-  oriint_int_isqrt(&target_root, n);
-  while (oriint_is_ge(&r_curr, &target_root)) {
-    if (oriint_is_zero(&r_curr)) break;
-    oriint_int_mod(&r_next, &r_prev, &r_curr);
-    oriint_set(&r_prev, &r_curr);
-    oriint_set(&r_curr, &r_next);
-    if (oriint_is_equal(&r_prev, &r_curr)) break;
+  int_t r_prev, r_curr, r_next;
+  int_set(&r_prev, n);
+  int_set(&r_curr, &z);
+  int_isqrt(&target_root, n);
+  while (int_is_ge(&r_curr, &target_root)) {
+    if (int_is_zero(&r_curr)) break;
+    int_mod(&r_next, &r_prev, &r_curr);
+    int_set(&r_prev, &r_curr);
+    int_set(&r_curr, &r_next);
+    if (int_is_equal(&r_prev, &r_curr)) break;
   }
-  oriint_t r_sq, diff;
-  oriint_int_sqr(&r_sq, &r_curr);
-  oriint_int_sub_3(&diff, n, &r_sq);
-  if (diff.bits64[NBLOCK - 1] < 0) return false;
-  if (oriint_int_issquare(&diff, y)) {
-    oriint_set(x, &r_curr);
-    if (oriint_is_ge(y, x)) {
-      oriint_t swap;
-      oriint_set(&swap, x);
-      oriint_set(x, y);
-      oriint_set(y, &swap);
+  int_t r_sq, diff;
+  int_sqr(&r_sq, &r_curr);
+  int_sub_3(&diff, n, &r_sq);
+  if (diff.bits64[INTBLOCK - 1] < 0) return false;
+  if (int_issquare(&diff, y)) {
+    int_set(x, &r_curr);
+    if (int_is_ge(y, x)) {
+      int_t swap;
+      int_set(&swap, x);
+      int_set(x, y);
+      int_set(y, &swap);
     }
     return true;
   }
   return false;
 }
 
-static inline void oriint_random(oriint_t *RES) {
-  oriint_clear(RES);
+static inline void int_random(int_t *RES) {
+  int_clear(RES);
+  uint8_t buffer[INTBLOCK * 8];
+  arc4random_buf(buffer, sizeof(buffer));
+  for (int i = 0; i < INTBLOCK; i++) {
+    uint64_t v_be;
+    memcpy(&v_be, buffer + i*8, 8);
+    RES->bitsu64[i] = be64toh(v_be);
+  }
+  int_mod(RES, RES, &PINT);
+}
+
+static inline void int_random_coeff(int_t *RES) {
+    int_clear(RES);
+    uint8_t buffer[8];
+    arc4random_buf(buffer, sizeof(buffer));
+    
+    uint64_t v_be;
+    memcpy(&v_be, buffer, 8);
+    
+    // Tetap menggunakan be64toh sesuai permintaanmu
+    uint64_t val = be64toh(v_be);
+    
+    // 1. Ambil nilai 16-bit agar tidak terlalu besar (% 0xFFFF)
+    // 2. Ubah menjadi signed agar bisa negatif (val - 0x7FFF)
+    // Ini membantu menemukan mu yang lebih pendek di dalam lattice
+    int64_t signed_val = (int64_t)(val % 0xFFFF) - 0x7FFF;
+
+    if (signed_val < 0) {
+        int_set_u64(RES, (uint64_t)(-signed_val));
+        int_neg_2(RES, RES); // Pastikan library-mu punya fungsi negasi
+    } else {
+        int_set_u64(RES, (uint64_t)signed_val);
+    }
+}
+
+static inline void int_random_test(int_t *RES) {
+  int_clear(RES);
   uint8_t buffer[32];
   size_t offset = 0;
   arc4random_buf(buffer, sizeof(buffer));
-  for (int8_t i = 0; i < NBLOCK-1; i++) {
+  for (int8_t i = 0; i < INTBLOCK-1; i++) {
     uint64_t v_be;
     memcpy(&v_be, buffer + offset, sizeof(uint64_t));
     RES->bitsu64[i] = be64toh(v_be);
     offset += sizeof(uint64_t);
   }
-  RES->bitsu64[NBLOCK-1] = 0ULL;
-  oriint_select_ge(RES, RES, &P);
+  RES->bitsu64[INTBLOCK-2] &= 0x00ffffffffffffff;
+  RES->bitsu64[INTBLOCK-1] = 0ULL;
+  int_select_ge(RES, RES, &PINT);
 }
 
-static inline void oriint_random_test(oriint_t *RES) {
-  oriint_clear(RES);
-  uint8_t buffer[32];
-  size_t offset = 0;
-  arc4random_buf(buffer, sizeof(buffer));
-  for (int8_t i = 0; i < NBLOCK-1; i++) {
-    uint64_t v_be;
-    memcpy(&v_be, buffer + offset, sizeof(uint64_t));
-    RES->bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
-  }
-  RES->bitsu64[NBLOCK-2] &= 0x00ffffffffffffff;
-  RES->bitsu64[NBLOCK-1] = 0ULL;
-  oriint_select_ge(RES, RES, &P);
+static inline bool int_is_klpt_valid_old(const int_t *target_L, const quaternion_t *res) {
+  int_t w2, x2, y2, z2, sum1, sum2, final_sum;
+  int_t target_check, p_val;
+  int_sqr(&w2, &res->w);
+  int_sqr(&x2, &res->x);
+  int_sqr(&y2, &res->y);
+  int_sqr(&z2, &res->z);
+  int_add_3(&sum1, &w2, &x2);
+  int_add_3(&sum2, &y2, &z2);
+  int_add_3(&final_sum, &sum1, &sum2);
+  if (int_is_equal(&final_sum, target_L)) return true;
+  int_add_3(&target_check, target_L, &PINT);
+  if (int_is_equal(&final_sum, &target_check)) return true;
+  int_set(&target_check, target_L);
+  int_shiftl(1, &target_check);
+  if (int_is_equal(&final_sum, &target_check)) return true;
+  int_set(&target_check, target_L);
+  int_shiftl(2, &target_check);
+  if (int_is_equal(&final_sum, &target_check)) return true;
+  int_set(&p_val, &PINT);
+  int_shiftl(1, &p_val); // p_val = 2P
+  int_add_3(&target_check, target_L, &p_val);
+  if (int_is_equal(&final_sum, &target_check)) return true;
+  return false;
 }
 
-static inline bool oriint_solve_klpt_internal(oriint_t *target_norm, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
-  if (oriint_is_zero(target_norm)) return false;
-  oriint_t limit, one, limitpone, r2z;
-  uint64_t mm64z;
-  uint8_t msizez;
-  oriint_set_one(&one);
-  oriint_int_isqrt(&limit, target_norm);
-  oriint_int_add_3(&limitpone, &limit, &one);
-  oriint_modvar_setup(&mm64z, &msizez, &r2z, &limitpone);
+static inline bool int_is_klpt_valid(const int_t *target_L, const quaternion_t *res) {
+    // Gunakan volatile atau pastikan stack dibersihkan jika mengandung secret
+    int_t w2, x2, y2, z2, final_sum;
+    int_t t_check, p_val;
+    bool is_valid = false;
+
+    // 1. HITUNG NORMA (Minimalisir penggunaan variabel temporary)
+    int_sqr(&w2, &res->w);
+    int_sqr(&x2, &res->x);
+    int_sqr(&y2, &res->y);
+    int_sqr(&z2, &res->z);
+    
+    // final_sum = w^2 + x^2 + y^2 + z^2
+    int_add_3(&final_sum, &w2, &x2);
+    int_add_1(&final_sum, &y2);
+    int_add_1(&final_sum, &z2);
+
+    // 2. PENGECEKAN TRACE (Diskriminan Negatif: 4*N > Tr^2)
+    // Dalam SQISign2, trace yang terlalu besar merusak distribusi penyamaran
+    int_t tr_sq, four_norm;
+    int_set(&tr_sq, &w2);
+    int_shiftl(2, &tr_sq);     // (2w)^2
+    
+    int_set(&four_norm, &final_sum);
+    int_shiftl(2, &four_norm); 
+
+    if (int_is_ge(&tr_sq, &four_norm)) {
+        goto cleanup;
+    }
+
+    // 3. VERIFIKASI TARGET (Urutan berdasarkan probabilitas statistik tertinggi)
+    
+    // Jalur A: N == L (Paling umum)
+    if (int_is_equal(&final_sum, target_L)) {
+        is_valid = true;
+        goto cleanup;
+    }
+
+    // Jalur B: N == L + P (Sering muncul di kalkulasi ideal)
+    int_add_3(&t_check, target_L, &PINT);
+    if (int_is_equal(&final_sum, &t_check)) {
+        is_valid = true;
+        goto cleanup;
+    }
+
+    // Jalur C: Kelipatan 2 & 4 (Kasus representasi khusus/basis quaternion)
+    int_set(&t_check, target_L);
+    int_shiftl(1, &t_check); // 2L
+    if (int_is_equal(&final_sum, &t_check)) {
+        is_valid = true;
+        goto cleanup;
+    }
+
+    int_shiftl(1, &t_check); // 4L (dari 2L sebelumnya, lebih efisien)
+    if (int_is_equal(&final_sum, &t_check)) {
+        is_valid = true;
+        goto cleanup;
+    }
+
+    // Jalur D: N == L + 2P
+    int_set(&p_val, &PINT);
+    int_shiftl(1, &p_val); 
+    int_add_3(&t_check, target_L, &p_val);
+    if (int_is_equal(&final_sum, &t_check)) {
+        is_valid = true;
+        goto cleanup;
+    }
+
+cleanup:
+    // Keamanan Produksi: Bersihkan data sensitif dari stack
+    explicit_bzero(&w2, sizeof(int_t));
+    explicit_bzero(&x2, sizeof(int_t));
+    explicit_bzero(&y2, sizeof(int_t));
+    explicit_bzero(&z2, sizeof(int_t));
+    explicit_bzero(&final_sum, sizeof(int_t));
+    explicit_bzero(&t_check, sizeof(int_t));
+    
+    return is_valid;
+}
+
+static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_t *res, int_t *resremw) {
+  if (int_is_zero(target_norm)) return false;
+  quaternion_t tmpr;
+  int_t limit_n, one;
+  int_set_one(&one);
+  int_isqrt(&limit_n, target_norm);
   for (int attempts = 0; attempts < 25; attempts++) {
-    oriint_t z,z2, remz;
-    oriint_random(&z);
-    oriint_modvar_sqr(&z2, &z, &limitpone, &mm64z, &msizez, &r2z);
-    oriint_modvar_sub_2(&remz, target_norm, &z2, &limitpone);
-    oriint_t limitw, limitwpone, r2w, r2rw, w, w2, remw;
-    uint64_t mm64w, mm64rw;
-    uint8_t msizew, msizerw;
-    oriint_int_isqrt(&limitw, &remz);
-    oriint_int_add_3(&limitwpone, &limitw, &one);
-    oriint_modvar_setup(&mm64w, &msizew, &r2w, &limitwpone);
-    oriint_random(&w);
-    oriint_modvar_sqr(&w2, &w, &limitwpone, &mm64w, &msizew, &r2w);
-    oriint_modvar_sub_2(&remw, &remz, &w2, &limitwpone);
-    oriint_modvar_setup(&mm64rw, &msizerw, &r2rw, &remw);
-    oriint_t x, y;
-    if (oriint_solve_cornacchia(&remw, &mm64rw, &msizerw, &r2rw, &x, &y)) {
-      oriint_set(&res->w, &w);
-      oriint_set(&res->x, &x);
-      oriint_set(&res->y, &y);
-      oriint_set(&res->z, &z);
-      oriint_set(reslimitzpone, &limitpone);
-      oriint_set(reslimitwpone, &limitwpone);
-      oriint_set(resremw, &remw);
-      return true;
+    int_t z, z2, remz;
+    int_random(&z);
+    int_mod(&z, &z, &limit_n); 
+    int_sqr(&z2, &z); 
+    int_sub_3(&remz, target_norm, &z2);
+    int_t limit_w, w, w2, remw;
+    int_isqrt(&limit_w, &remz);
+    int_random(&w);
+    int_mod(&w, &w, &limit_w);
+    int_sqr(&w2, &w);
+    int_sub_3(&remw, &remz, &w2);
+
+    if (int_is_even(&remw) || (remw.bitsu64[0] & 3ULL) != 1) {
+      continue;
+    }
+    uint64_t r64 = remw.bitsu64[0];
+    if (r64 % 3 == 0 || r64 % 5 == 0 || r64 % 7 == 0 || 
+        r64 % 11 == 0 || r64 % 13 == 0 || r64 % 17 == 0 || 
+        r64 % 19 == 0 || r64 % 23 == 0) {
+        continue;
+    }
+    int_t bound;
+    int_isqrt(&bound, target_norm);
+    int_shiftl(1, &bound);
+    if (int_is_ge(&limit_w, &bound)) continue;
+
+    uint64_t mm64rw;
+    uint8_t msizerw;
+    int_t r2rw;
+    int_modvar_setup(&mm64rw, &msizerw, &r2rw, &remw);
+    int_t x, y;
+    if (int_solve_cornacchia(&remw, &mm64rw, &msizerw, &r2rw, &x, &y)) {
+      int_set(&tmpr.w, &w);
+      int_set(&tmpr.x, &x);
+      int_set(&tmpr.y, &y);
+      int_set(&tmpr.z, &z);
+      if (int_is_klpt_valid(target_norm, &tmpr)) {
+        int_set(&res->w, &w);
+        int_set(&res->x, &x);
+        int_set(&res->y, &y);
+        int_set(&res->z, &z);
+        int_set(resremw, &remw);
+        explicit_bzero(&tmpr, sizeof(quaternion_t));
+        return true;
+      }
     }
   }
+  explicit_bzero(&tmpr, sizeof(quaternion_t));
   return false;
 }
 
-static inline bool oriint_solve_klpt(oriint_t *L, quaternion_t *res, oriint_t *reslimitzpone, oriint_t *reslimitwpone, oriint_t *resremw) {
-  if (oriint_solve_klpt_internal(L, res, reslimitzpone, reslimitwpone, resremw)) return true;
-  oriint_t target;
-  oriint_int_add_3(&target, L, &P);
-  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
-  oriint_set(&target, L);
-  oriint_int_shiftl(1, &target);
-  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
-  oriint_set(&target, L);
-  oriint_int_shiftl(2, &target);
-  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
-  oriint_t p;
-  oriint_set(&p, &P);
-  oriint_int_shiftl(1, &p);
-  oriint_clear(&target);
-  oriint_int_add_3(&target, L, &p);
-  if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
-  for (int8_t i=0;i<10;i++) {
-    oriint_t salt;
-    oriint_random(&salt);
-    oriint_clear(&target);
-    oriint_int_add_3(&target, L, &salt);
-    if (oriint_solve_klpt_internal(&target, res, reslimitzpone, reslimitwpone, resremw)) return true;
+static inline bool int_solve_klpt(const int_t *L, quaternion_t *res, int_t *resremw) {
+    if (int_solve_klpt_internal(L, res, resremw)) return true;
+    
+    int_t target;
+    
+    // Jalur: L + P
+    int_add_3(&target, L, &PINT);
+    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+
+    // Jalur: 2L
+    int_set(&target, L);
+    int_shiftl(1, &target);
+    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+
+    // Jalur: 4L
+    int_shiftl(1, &target);
+    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+
+    // Jalur: L + 2P
+    int_t p2;
+    int_set(&p2, &PINT);
+    int_shiftl(1, &p2);
+    int_add_3(&target, L, &p2);
+    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+
+    return false;
+}
+
+static inline void int_print(const char *label, const int_t *a) {
+  printf("%s\n", label);
+  for (int i = INTBLOCK - 1; i >= 0; i--) {
+    printf("  [%02d] %016llx\n", i, (unsigned long long)a->bitsu64[i]);
   }
-  return false;
-}
-
-static inline void oriint_print(const char* label, const oriint_t* val) {
-  printf("%s", label);
-  for (int8_t i = NBLOCK - 1; i >= 0; i--) {
-    printf("%016llx ", val->bitsu64[i]);
-  }
-  printf("\n");
-}
-
-static inline int8_t oriint_getsize() {
-  int8_t i=(2*NBLOCK)-1;
-  while(i>0 && P.bitsu32[i]==0) i--;
-  return i+1;
-}
-
-static void oriint_setup_mm64_msize() {
-  uint64_t _mm64;
-  int8_t _msize;
-  int8_t nSize = oriint_getsize();
-  int64_t x, t;
-  x = t = P.bits64[0];
-  x = x * (2 - t * x);
-  x = x * (2 - t * x);
-  x = x * (2 - t * x);
-  x = x * (2 - t * x);
-  x = x * (2 - t * x);
-  _mm64 = (uint64_t)(-x);
-  _msize = nSize/2;
-  printf("DEBUG - MM64  : %016llx\n", _mm64);
-  printf("DEBUG - MSize : %d\n", _msize);
-}
-
-static inline void oriint_setup_r2() {
-  oriint_t one, r, _r2;
-  oriint_set_one(&one);
-  oriint_montgomery_mul(&r, &P, &MM64, &Msize, &one, &one);
-  oriint_montgomery_mul(&_r2, &P, &MM64, &Msize, &r, &one);
-  oriint_modvar_inv(&_r2, &P, &MM64, &Msize);
-  printf("DEBUG - R2    : ");
-  for (int8_t i = 0; i < NBLOCK; i++)
-    printf("%016llx ", _r2.bitsu64[i]);
-  printf("\n");
-}
-
-static inline void oriint_setup_thetasqrt2() {
-  oriint_t base, exp, one, four, ts2;
-  oriint_set_two(&base);
-  oriint_set_one(&one);
-  oriint_int_add_3(&exp, &P, &one); 
-  oriint_int_shiftr(2, &exp); 
-  oriint_mod_exp(&ts2, &base, &exp);
-  printf("DEBUG - TS2   : ");
-  for (int8_t i = 0; i < NBLOCK; i++)
-    printf("%016llx ", ts2.bitsu64[i]);
-  printf("\n");
-}
-
-static inline void oriint_tests() {
-  oriint_setup_mm64_msize();
-  oriint_setup_r2();
-  oriint_setup_thetasqrt2();
-
-  oriint_t a, b, res, check, one, exp, q, r, dividend, divisor;
-  oriint_t n_mod, r2, x_c, y_c, n_prime;
-  uint64_t mm64;
-  uint8_t msize;
-  bool ok;
-  oriint_set_one(&one);
-
-  printf("\n==============================================================");
-  printf("\n                ORISIGN V9.7 - TEST SUITE LOG");
-  printf("\n==============================================================\n");
-
-  // --- TEST 1-3: MODULAR BASIC (Montgomery Domain) ---
-  printf("\n----- Test 1-3: Modular Basic (Montgomery) -----\n");
-  oriint_clear(&a); a.bitsu64[0] = 2;
-  oriint_clear(&b); b.bitsu64[0] = 3;
-
-  oriint_mod_mul(&res, &a, &b);
-  oriint_print("modmul 2*3 mod P     : ", &res);
-
-  oriint_mod_add(&res, &one, &one);
-  oriint_print("modadd 1+1 mod P     : ", &res);
-
-  oriint_mod_sub_1(&res, &one); 
-  oriint_print("modsub 2-1 mod P     : ", &res);
-
-  // --- TEST 4-5: BARRETT ENGINE (Variable Modulus) ---
-  printf("\n----- Test 4-5: Modvar Engine (Montgomery With Variable Modulus) -----\n");
-  oriint_clear(&n_mod); n_mod.bitsu64[0] = 11;
-  oriint_modvar_setup(&mm64, &msize, &r2, &n_mod);
-
-  oriint_clear(&a); a.bitsu64[0] = 3;
-  oriint_clear(&b); b.bitsu64[0] = 4;
-
-  oriint_modvar_mul(&res, &a, &b, &n_mod, &mm64, &msize, &r2);
-  printf("%-21s: %llu (Expected: 1)\n", "3 * 4 mod 11", res.bitsu64[0]);
-  printf("%-21s: %d\n", "Modvar OK?", oriint_is_equal(&res, &one));
-
-  // --- TEST 6-8: MODINV & MODSQRT (Consistent Domain) ---
-  printf("\n----- Test 6-8: Modinv & Modsqrt -----\n");
-  oriint_set(&a, &one);
-  oriint_modvar_inv(&res, &P, &MM64, &Msize);
-  oriint_print("modinv 1 mod P       : ", &res);
-
-  // Test Sqrt dengan input yang dikuadratkan dulu agar masuk Montgomery Domain
-  oriint_clear(&a); a.bitsu64[0] = 5;
-  oriint_mod_sqr(&b, &a); // b = 5*5 mod P
-  oriint_print("x                    : ", &a);
-  oriint_print("a (x^2 mod P)        : ", &b);
-
-  oriint_mod_sqrt(&res, &b, &ok);
-  printf("%-21s: %d\n", "modsqrt return", ok);
-  oriint_print("sqrt(a)              : ", &res);
-
-  oriint_mod_sqr(&check, &res);
-  oriint_print("Verify (r^2 mod P)   : ", &check);
-  printf("%-21s: %d\n", "r^2 == a ?", oriint_is_equal(&check, &b));
-
-  // --- TEST 9-11: ISQRT & ISSQUARE (Integer Domain) ---
-  printf("\n----- Test 9-11: isqrt & issquare -----\n");
-  oriint_clear(&a); a.bitsu64[0] = 144;
-  oriint_int_isqrt(&res, &a);
-  printf("%-21s: %llu\n", "isqrt(144)", res.bitsu64[0]);
-
-  bool is_sq = oriint_int_issquare(&a, &r);
-  printf("%-21s: is_square=%d, root=%llu\n", "issquare(144)", is_sq, r.bitsu64[0]);
-
-  // --- TEST 12: MODEXP (Fermat's Little Theorem) ---
-  printf("\n----- Test 12: ModExp (Montgomery Optimized) -----\n");
-  oriint_clear(&a); a.bitsu64[0] = 2;
-  oriint_set(&exp, (oriint_t*)&P);
-  oriint_int_sub_2(&exp, &one); // exp = P - 1
-  oriint_mod_exp(&res, &a, &exp);
-  oriint_print("2^(P-1) mod P        : ", &res);
-  printf("%-21s: %d\n", "Is result 1 ?", oriint_is_equal(&res, &one));
-
-  // --- TEST 13: CORNACCHIA DIAGNOSTIC ---
-  printf("\n----- Test 13: Cornacchia Diagnostic -----\n");
-  oriint_t n13;
-  oriint_clear(&n13); n13.bitsu64[0] = 13;
-
-  oriint_t r213;
-  uint64_t mm6413;
-  uint8_t msize13;
-  oriint_modvar_setup(&mm6413, &msize13, &r213, &n13);
-
-  bool ok_corn = oriint_solve_cornacchia(&n13, &mm6413, &msize13, &r213, &x_c, &y_c);
-  printf("Cornacchia ok?       : %d\n", ok_corn);
-  if(ok_corn) {
-    printf("Result               : x=%llu, y=%llu (Expected: 3, 2)\n", x_c.bitsu64[0], y_c.bitsu64[0]);
-  }
-
-  // --- TEST 14: PRIMALITY TEST (Miller-Rabin) ---
-  printf("\n----- Test 14: Primality Test (Miller-Rabin) -----\n");
-
-  // Kasus 1: 17 (Prima)
-  oriint_clear(&n_prime); n_prime.bitsu64[0] = 17;
-  printf("Is 17 prime?         : %d (Expected: 1)\n", oriint_is_prime(&n_prime, 5));
-
-  // Kasus 2: 2^31-1 (Mersenne Prime)
-  oriint_clear(&n_prime); n_prime.bitsu64[0] = 2147483647ULL;
-  printf("Is 2^31-1 prime?     : %d (Expected: 1)\n", oriint_is_prime(&n_prime, 5));
-
-  // Kasus 3: 15 (Komposit)
-  oriint_clear(&n_prime); n_prime.bitsu64[0] = 15;
-  printf("Is 15 prime?         : %d (Expected: 0)\n", oriint_is_prime(&n_prime, 5));
-
-  // --- TEST 15: MODSUB BOUNDARY ---
-  printf("\n----- Test 15: modsub boundary -----\n");
-  oriint_clear(&a);
-  oriint_mod_sub_2(&res, &a, &one); // 0 - 1 mod P
-  oriint_set(&check, (oriint_t*)&P);
-  oriint_int_sub_2(&check, &one);
-  printf("%-21s: %d\n", "0 - 1 == P - 1 ?", oriint_is_equal(&res, &check));
-
-  // ==========================================================
-  // Test 16: KLPT Decomposition (Alpha Candidate Search)
-  // ==========================================================
-  printf("----- Test 16: KLPT Decomposition (Alpha Candidate Search) -----\n");
-
-  quaternion_t resklpt;
-  oriint_t target, x2, y2, sum_xy, klpt_remw, klpt_limitzpone, klpt_limitwpone;
-  oriint_t n_w2, n_x2, n_y2, n_z2, sum_wz, total_norm;
-  oriint_t total_mod, target_mod;
-
-  oriint_set_u64(&target, 0xABCDEF1234567891ULL);
-  printf("Target Norm     : "); oriint_print("", &target); printf("\n");
-
-  if (oriint_solve_klpt(&target, &resklpt, &klpt_limitzpone, &klpt_limitwpone, &klpt_remw)) {
-    printf("KLPT Status     : [ SUCCESS ]\n");
-    printf("Alpha Candidate found within attempt limits.\n");
-
-    // Print koefisien dasar hasil dekomposisi
-    printf("  w (mod_limit) : "); oriint_print("", &resklpt.w);
-    printf("  z (mod_limit) : "); oriint_print("", &resklpt.z);
-    printf("  limitz1       : "); oriint_print("", &klpt_limitzpone);
-    printf("  limitw1       : "); oriint_print("", &klpt_limitwpone);
-    printf("  remw          : "); oriint_print("", &klpt_remw);
-    printf("  x (Cornacchia): "); oriint_print("", &resklpt.x);
-    printf("  y (Cornacchia): "); oriint_print("", &resklpt.y);
-
-    // --- Verifikasi 1: Cornacchia Integrity (Integer) ---
-    oriint_int_sqr(&x2, &resklpt.x);
-    oriint_int_sqr(&y2, &resklpt.y);
-    oriint_int_add_3(&sum_xy, &x2, &y2);
-
-    // Cek x^2 + y^2 == remw
-    bool valid_xy = oriint_is_ge(&sum_xy, &klpt_remw) && oriint_is_ge(&klpt_remw, &sum_xy);
-    printf("Verify (x^2+y^2 == remw)   : %d\n", valid_xy);
-
-    // --- Verifikasi 2: Modular Norm Integrity (N(alpha) mod remw) ---
-    // 1. Hitung total norma secara integer murni (tanpa modulo dulu)
-    oriint_int_sqr(&n_w2, &resklpt.w);
-    oriint_int_sqr(&n_x2, &resklpt.x);
-    oriint_int_sqr(&n_y2, &resklpt.y);
-    oriint_int_sqr(&n_z2, &resklpt.z);
-
-    oriint_int_add_3(&sum_wz, &n_w2, &n_z2);
-    oriint_int_add_3(&sum_xy, &n_x2, &n_y2);
-    oriint_int_add_3(&total_norm, &sum_wz, &sum_xy);
-
-    // 2. Bandingkan (N(alpha) mod remw) == (Target mod remw)
-    bool valid_mod = oriint_is_ge(&total_mod, &target_mod) && oriint_is_ge(&target_mod, &total_mod);
-
-    printf("Verify N(alpha) == Target  : %d\n", valid_mod);
-    printf("Result          : Candidate Alpha is ready for Theta Mapping.\n");
-
-  } else {
-    printf("KLPT Status     : [ FAILED ]\n");
-    printf("Error: Could not decompose target. Check random/isqrt logic.\n");
-  }
-
-  printf("\n----- ALL TESTS COMPLETED -----\n");
-  printf("-------------------------------\n");
 }

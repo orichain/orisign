@@ -3,7 +3,7 @@ CFLAGS = -O3 -march=native -fwrapv -fno-strict-aliasing -fPIC
 LDFLAGS = -lm
 LIBNAME = liborisign.a
 
-SRCS = globals.c api.c fips202.c 
+SRCS = globals.c fips202.c 
 OBJS = $(SRCS:.c=.o)
 
 all: $(LIBNAME)
