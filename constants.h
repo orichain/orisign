@@ -3,11 +3,13 @@
 
 // ===== UKURAN BLOK =====
 #define FPBLOCK 5           // 5 × 64-bit = 320-bit untuk field element
-#define INTBLOCK 16         // 16 × 64-bit = 1024-bit untuk integer multi-precision
+#define INTBLOCK 17         // 16 × 64-bit = 1024-bit untuk integer multi-precision
 
 // ===== PARAMETER PROTOKOL =====
 #define SQ_POWER 256        // 2^256 untuk parameter isogeni
-#define DOMAIN_SEP "ORISIGN" // Domain separation string untuk hash
+#define DOMAIN_SEP1 "ORISIGN-CHALENGE-HASH" // Domain separation string untuk hash
+#define DOMAIN_SEP2 "ORISIGN-DETERMINISTIC-KLPT-RANDOM1" // Domain separation string untuk hash
+#define DOMAIN_SEP3 "ORISIGN-DETERMINISTIC-KLPT-RANDOM2" // Domain separation string untuk hash
 #define HASHES_BYTES 32     // Output hash 256-bit
 #define TORSION 248         // Derajat torsi 2^122
 #define PUSH_STACK_SIZE 64  // Ukuran stack untuk isogeni walk recursive

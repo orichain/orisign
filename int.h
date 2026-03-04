@@ -37,6 +37,10 @@ static inline void int_set_u64(int_t *a, uint64_t b) {
   }
 }
 
+static inline uint64_t int_get_u64(int_t *a) {
+  return a->bitsu64[0];
+}
+
 static inline void int_set_u128(int_t *a, uint64_t b, uint64_t c) {
   a->bitsu64[0] = b;
   a->bitsu64[1] = c;
@@ -86,6 +90,10 @@ static inline bool int_is_odd(const int_t *a) {
 
 static inline bool int_is_negative(const int_t *a) {
   return (a->bits64[INTBLOCK-1] < 0LL);
+}
+
+static inline bool int_is_positive(const int_t *a) {
+  return (a->bits64[INTBLOCK-1] >= 0LL);
 }
 
 static inline bool int_is_equal(const int_t *a, const int_t *b) {
@@ -356,13 +364,13 @@ static inline void int_modvar_mul(int_t *RES, const int_t *a, const int_t *b, co
   int_montgomery_mul(RES,n,mm64,msize,r2,&p);
 }
 
-static inline void int_modvar_sub_2(int_t *RES, const int_t *a, int_t *b, const int_t *n) {
+static inline void int_modvar_sub_2(int_t *RES, const int_t *a, const int_t *b, const int_t *n) {
   int_sub_3(RES, a, b);
   if (RES->bits64[INTBLOCK - 1] < 0)
     int_add_1(RES, n);
 }
 
-static inline void int_modvar_add(int_t *RES, int_t *a, int_t *b, int_t *n) {
+static inline void int_modvar_add(int_t *RES, int_t *a, int_t *b, const int_t *n) {
   int_add_3(RES, a, b);
   int_select_ge(RES, RES, n);
 }
@@ -464,57 +472,57 @@ static inline bool int_modvar_inv(int_t *RES, const int_t *n, const uint64_t *mm
 }
 
 static inline void int_mul(int_t *RES, const int_t *A, const int_t *B) {
-    int_t a_abs, b_abs;
-    uint64_t r0 = 0, r1 = 0, r2 = 0;
-    uint64_t hi, lo;
-    
-    // 1. Tangani Sign (sama seperti kode Anda sebelumnya)
-    bool signA = (A->bitsu64[INTBLOCK-1] >> 63);
-    bool signB = (B->bitsu64[INTBLOCK-1] >> 63);
-    uint64_t c = 1;
-    for (int i = 0; i < INTBLOCK; i++) {
-        uint64_t v = signA ? ~A->bitsu64[i] : A->bitsu64[i];
-        a_abs.bitsu64[i] = signA ? (v + c) : v;
-        if (signA) c = (a_abs.bitsu64[i] < v);
-    }
-    c = 1;
-    for (int i = 0; i < INTBLOCK; i++) {
-        uint64_t v = signB ? ~B->bitsu64[i] : B->bitsu64[i];
-        b_abs.bitsu64[i] = signB ? (v + c) : v;
-        if (signB) c = (b_abs.bitsu64[i] < v);
-    }
+  int_t a_abs, b_abs;
+  uint64_t r0 = 0, r1 = 0, r2 = 0;
+  uint64_t hi, lo;
 
-    // 2. Core Comba Multiplication
-    int_t result_low;
-    for (int8_t k = 0; k < INTBLOCK; k++) {
-        for (int8_t i = 0; i <= k; i++) {
-            int8_t j = k - i;
-            lo = fpint_umul128(a_abs.bitsu64[i], b_abs.bitsu64[j], &hi);
-            
-            // Akumulasi ke 3 register (r2:r1:r0)
-            r0 += lo;
-            if (r0 < lo) { r1++; if (r1 == 0) r2++; }
-            r1 += hi;
-            if (r1 < hi) { r2++; }
-        }
-        result_low.bitsu64[k] = r0;
-        r0 = r1;
-        r1 = r2;
-        r2 = 0;
-    }
-    // Catatan: Jika ingin hasil 2*INTBLOCK, lanjutkan loop k sampai 2*INTBLOCK-1
+  // 1. Tangani Sign (sama seperti kode Anda sebelumnya)
+  bool signA = (A->bitsu64[INTBLOCK-1] >> 63);
+  bool signB = (B->bitsu64[INTBLOCK-1] >> 63);
+  uint64_t c = 1;
+  for (int i = 0; i < INTBLOCK; i++) {
+    uint64_t v = signA ? ~A->bitsu64[i] : A->bitsu64[i];
+    a_abs.bitsu64[i] = signA ? (v + c) : v;
+    if (signA) c = (a_abs.bitsu64[i] < v);
+  }
+  c = 1;
+  for (int i = 0; i < INTBLOCK; i++) {
+    uint64_t v = signB ? ~B->bitsu64[i] : B->bitsu64[i];
+    b_abs.bitsu64[i] = signB ? (v + c) : v;
+    if (signB) c = (b_abs.bitsu64[i] < v);
+  }
 
-    // 3. Terapkan Sign Akhir
-    if (signA ^ signB) {
-        uint64_t cn = 1;
-        for (int i = 0; i < INTBLOCK; i++) {
-            uint64_t v = ~result_low.bitsu64[i];
-            RES->bitsu64[i] = v + cn;
-            cn = (RES->bitsu64[i] < v);
-        }
-    } else {
-        int_set(RES, &result_low);
+  // 2. Core Comba Multiplication
+  int_t result_low;
+  for (int8_t k = 0; k < INTBLOCK; k++) {
+    for (int8_t i = 0; i <= k; i++) {
+      int8_t j = k - i;
+      lo = fpint_umul128(a_abs.bitsu64[i], b_abs.bitsu64[j], &hi);
+
+      // Akumulasi ke 3 register (r2:r1:r0)
+      r0 += lo;
+      if (r0 < lo) { r1++; if (r1 == 0) r2++; }
+      r1 += hi;
+      if (r1 < hi) { r2++; }
     }
+    result_low.bitsu64[k] = r0;
+    r0 = r1;
+    r1 = r2;
+    r2 = 0;
+  }
+  // Catatan: Jika ingin hasil 2*INTBLOCK, lanjutkan loop k sampai 2*INTBLOCK-1
+
+  // 3. Terapkan Sign Akhir
+  if (signA ^ signB) {
+    uint64_t cn = 1;
+    for (int i = 0; i < INTBLOCK; i++) {
+      uint64_t v = ~result_low.bitsu64[i];
+      RES->bitsu64[i] = v + cn;
+      cn = (RES->bitsu64[i] < v);
+    }
+  } else {
+    int_set(RES, &result_low);
+  }
 }
 
 static inline void int_sqr(int_t *RES, const int_t *a) {
@@ -675,7 +683,7 @@ static inline bool int_issquare(const int_t *n, int_t *root) {
     return true;
   }
   uint64_t m = n->bitsu64[0] & 63ULL;
-  uint64_t mask = 0x0202020202030213ULL;
+  uint64_t mask = 0x0202021202030213ULL;
   if (!((mask >> m) & 1ULL)) return false;
   int_t r, sq;
   int_isqrt(&r, n);
@@ -712,64 +720,6 @@ static inline void int_gcd(int_t *RES, const int_t *a, const int_t *b) {
     int_set(&tmpa, &t);
   }
   int_abs(RES, &tmpa);
-}
-
-static inline void int_gcdext(
-    int_t *g,
-    int_t *u,
-    int_t *v,
-    const int_t *a,
-    const int_t *b)
-{
-    int_t old_r, r;
-    int_t old_s, s;
-    int_t old_t, t;
-
-    int_set(&old_r, a);
-    int_set(&r, b);
-
-    int_set_one(&old_s);
-    int_clear(&s);
-
-    int_clear(&old_t);
-    int_set_one(&t);
-
-    while (!int_is_zero(&r)) {
-
-        int_t q, rem;
-        int_div(&q, &rem, &old_r, &r);
-
-        // (old_r, r) = (r, old_r - q*r)
-        int_set(&old_r, &r);
-        int_set(&r, &rem);
-
-        // (old_s, s) = (s, old_s - q*s)
-        int_t tmp_s, qs;
-        int_mul(&qs, &q, &s);
-        int_sub_3(&tmp_s, &old_s, &qs);
-
-        int_set(&old_s, &s);
-        int_set(&s, &tmp_s);
-
-        // (old_t, t) = (t, old_t - q*t)
-        int_t tmp_t, qt;
-        int_mul(&qt, &q, &t);
-        int_sub_3(&tmp_t, &old_t, &qt);
-
-        int_set(&old_t, &t);
-        int_set(&t, &tmp_t);
-    }
-
-    // gcd positif
-    if (int_is_negative(&old_r)) {
-        int_neg_1(&old_r);
-        int_neg_1(&old_s);
-        int_neg_1(&old_t);
-    }
-
-    int_set(g, &old_r);
-    int_set(u, &old_s);
-    int_set(v, &old_t);
 }
 
 static inline void int_modvar_sqr(int_t *RES, const int_t *a, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2) {
@@ -861,6 +811,12 @@ static inline void int_modvar_sqrt(int_t *RES, const int_t *a, const int_t *n, c
     int_modvar_mul(&t, &t, &c, n, mm64, msize, r2);
     int_modvar_mul(&R, &R, &b, n, mm64, msize, r2);
   }
+}
+
+static inline void int_modvar_neg(int_t *RES, const int_t *a, const int_t *n) {
+  int_t zero;
+  int_clear(&zero);
+  int_modvar_sub_2(RES, &zero, a, n);
 }
 
 static inline bool int_is_prime(const int_t *n, int8_t iterations) {
@@ -968,152 +924,102 @@ static inline void int_random(int_t *RES) {
 }
 
 static inline void int_random_coeff(int_t *RES) {
-    int_clear(RES);
-    uint8_t buffer[8];
-    arc4random_buf(buffer, sizeof(buffer));
-    
-    uint64_t v_be;
-    memcpy(&v_be, buffer, 8);
-    
-    // Tetap menggunakan be64toh sesuai permintaanmu
-    uint64_t val = be64toh(v_be);
-    
-    // 1. Ambil nilai 16-bit agar tidak terlalu besar (% 0xFFFF)
-    // 2. Ubah menjadi signed agar bisa negatif (val - 0x7FFF)
-    // Ini membantu menemukan mu yang lebih pendek di dalam lattice
-    int64_t signed_val = (int64_t)(val % 0xFFFF) - 0x7FFF;
-
-    if (signed_val < 0) {
-        int_set_u64(RES, (uint64_t)(-signed_val));
-        int_neg_2(RES, RES); // Pastikan library-mu punya fungsi negasi
-    } else {
-        int_set_u64(RES, (uint64_t)signed_val);
-    }
-}
-
-static inline void int_random_test(int_t *RES) {
   int_clear(RES);
-  uint8_t buffer[32];
-  size_t offset = 0;
+  uint8_t buffer[8];
   arc4random_buf(buffer, sizeof(buffer));
-  for (int8_t i = 0; i < INTBLOCK-1; i++) {
-    uint64_t v_be;
-    memcpy(&v_be, buffer + offset, sizeof(uint64_t));
-    RES->bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
+  uint64_t v_be;
+  memcpy(&v_be, buffer, 8);
+  uint64_t val = be64toh(v_be);
+  int64_t signed_val = (int64_t)(val % 0xFFFFFFFF) - 0x7FFFFFFF;
+  if (signed_val < 0) {
+    int_set_u64(RES, (uint64_t)(-signed_val));
+    int_neg_2(RES, RES);
+  } else {
+    int_set_u64(RES, (uint64_t)signed_val);
   }
-  RES->bitsu64[INTBLOCK-2] &= 0x00ffffffffffffff;
-  RES->bitsu64[INTBLOCK-1] = 0ULL;
-  int_select_ge(RES, RES, &PINT);
 }
 
-static inline bool int_is_klpt_valid_old(const int_t *target_L, const quaternion_t *res) {
-  int_t w2, x2, y2, z2, sum1, sum2, final_sum;
-  int_t target_check, p_val;
+static inline bool int_is_klpt_valid(const int_t *target_L, const quaternion_t *res) {
+  // Gunakan volatile atau pastikan stack dibersihkan jika mengandung secret
+  int_t w2, x2, y2, z2, final_sum;
+  int_t t_check, p_val;
+  bool is_valid = false;
+
+  // 1. HITUNG NORMA (Minimalisir penggunaan variabel temporary)
   int_sqr(&w2, &res->w);
   int_sqr(&x2, &res->x);
   int_sqr(&y2, &res->y);
   int_sqr(&z2, &res->z);
-  int_add_3(&sum1, &w2, &x2);
-  int_add_3(&sum2, &y2, &z2);
-  int_add_3(&final_sum, &sum1, &sum2);
-  if (int_is_equal(&final_sum, target_L)) return true;
-  int_add_3(&target_check, target_L, &PINT);
-  if (int_is_equal(&final_sum, &target_check)) return true;
-  int_set(&target_check, target_L);
-  int_shiftl(1, &target_check);
-  if (int_is_equal(&final_sum, &target_check)) return true;
-  int_set(&target_check, target_L);
-  int_shiftl(2, &target_check);
-  if (int_is_equal(&final_sum, &target_check)) return true;
+
+  // final_sum = w^2 + x^2 + y^2 + z^2
+  int_add_3(&final_sum, &w2, &x2);
+  int_add_1(&final_sum, &y2);
+  int_add_1(&final_sum, &z2);
+
+  // 2. PENGECEKAN TRACE (Diskriminan Negatif: 4*N > Tr^2)
+  // Dalam SQISign2, trace yang terlalu besar merusak distribusi penyamaran
+  int_t tr_sq, four_norm;
+  int_set(&tr_sq, &w2);
+  int_shiftl(2, &tr_sq);     // (2w)^2
+
+  int_set(&four_norm, &final_sum);
+  int_shiftl(2, &four_norm); 
+
+  if (int_is_ge(&tr_sq, &four_norm)) {
+    goto cleanup;
+  }
+
+  // 3. VERIFIKASI TARGET (Urutan berdasarkan probabilitas statistik tertinggi)
+
+  // Jalur A: N == L (Paling umum)
+  if (int_is_equal(&final_sum, target_L)) {
+    is_valid = true;
+    goto cleanup;
+  }
+
+  // Jalur B: N == L + P (Sering muncul di kalkulasi ideal)
+  int_add_3(&t_check, target_L, &PINT);
+  if (int_is_equal(&final_sum, &t_check)) {
+    is_valid = true;
+    goto cleanup;
+  }
+
+  // Jalur C: Kelipatan 2 & 4 (Kasus representasi khusus/basis quaternion)
+  int_set(&t_check, target_L);
+  int_shiftl(1, &t_check); // 2L
+  if (int_is_equal(&final_sum, &t_check)) {
+    is_valid = true;
+    goto cleanup;
+  }
+
+  int_shiftl(1, &t_check); // 4L (dari 2L sebelumnya, lebih efisien)
+  if (int_is_equal(&final_sum, &t_check)) {
+    is_valid = true;
+    goto cleanup;
+  }
+
+  // Jalur D: N == L + 2P
   int_set(&p_val, &PINT);
-  int_shiftl(1, &p_val); // p_val = 2P
-  int_add_3(&target_check, target_L, &p_val);
-  if (int_is_equal(&final_sum, &target_check)) return true;
-  return false;
-}
-
-static inline bool int_is_klpt_valid(const int_t *target_L, const quaternion_t *res) {
-    // Gunakan volatile atau pastikan stack dibersihkan jika mengandung secret
-    int_t w2, x2, y2, z2, final_sum;
-    int_t t_check, p_val;
-    bool is_valid = false;
-
-    // 1. HITUNG NORMA (Minimalisir penggunaan variabel temporary)
-    int_sqr(&w2, &res->w);
-    int_sqr(&x2, &res->x);
-    int_sqr(&y2, &res->y);
-    int_sqr(&z2, &res->z);
-    
-    // final_sum = w^2 + x^2 + y^2 + z^2
-    int_add_3(&final_sum, &w2, &x2);
-    int_add_1(&final_sum, &y2);
-    int_add_1(&final_sum, &z2);
-
-    // 2. PENGECEKAN TRACE (Diskriminan Negatif: 4*N > Tr^2)
-    // Dalam SQISign2, trace yang terlalu besar merusak distribusi penyamaran
-    int_t tr_sq, four_norm;
-    int_set(&tr_sq, &w2);
-    int_shiftl(2, &tr_sq);     // (2w)^2
-    
-    int_set(&four_norm, &final_sum);
-    int_shiftl(2, &four_norm); 
-
-    if (int_is_ge(&tr_sq, &four_norm)) {
-        goto cleanup;
-    }
-
-    // 3. VERIFIKASI TARGET (Urutan berdasarkan probabilitas statistik tertinggi)
-    
-    // Jalur A: N == L (Paling umum)
-    if (int_is_equal(&final_sum, target_L)) {
-        is_valid = true;
-        goto cleanup;
-    }
-
-    // Jalur B: N == L + P (Sering muncul di kalkulasi ideal)
-    int_add_3(&t_check, target_L, &PINT);
-    if (int_is_equal(&final_sum, &t_check)) {
-        is_valid = true;
-        goto cleanup;
-    }
-
-    // Jalur C: Kelipatan 2 & 4 (Kasus representasi khusus/basis quaternion)
-    int_set(&t_check, target_L);
-    int_shiftl(1, &t_check); // 2L
-    if (int_is_equal(&final_sum, &t_check)) {
-        is_valid = true;
-        goto cleanup;
-    }
-
-    int_shiftl(1, &t_check); // 4L (dari 2L sebelumnya, lebih efisien)
-    if (int_is_equal(&final_sum, &t_check)) {
-        is_valid = true;
-        goto cleanup;
-    }
-
-    // Jalur D: N == L + 2P
-    int_set(&p_val, &PINT);
-    int_shiftl(1, &p_val); 
-    int_add_3(&t_check, target_L, &p_val);
-    if (int_is_equal(&final_sum, &t_check)) {
-        is_valid = true;
-        goto cleanup;
-    }
+  int_shiftl(1, &p_val); 
+  int_add_3(&t_check, target_L, &p_val);
+  if (int_is_equal(&final_sum, &t_check)) {
+    is_valid = true;
+    goto cleanup;
+  }
 
 cleanup:
-    // Keamanan Produksi: Bersihkan data sensitif dari stack
-    explicit_bzero(&w2, sizeof(int_t));
-    explicit_bzero(&x2, sizeof(int_t));
-    explicit_bzero(&y2, sizeof(int_t));
-    explicit_bzero(&z2, sizeof(int_t));
-    explicit_bzero(&final_sum, sizeof(int_t));
-    explicit_bzero(&t_check, sizeof(int_t));
-    
-    return is_valid;
+  // Keamanan Produksi: Bersihkan data sensitif dari stack
+  explicit_bzero(&w2, sizeof(int_t));
+  explicit_bzero(&x2, sizeof(int_t));
+  explicit_bzero(&y2, sizeof(int_t));
+  explicit_bzero(&z2, sizeof(int_t));
+  explicit_bzero(&final_sum, sizeof(int_t));
+  explicit_bzero(&t_check, sizeof(int_t));
+
+  return is_valid;
 }
 
-static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_t *res, int_t *resremw) {
+static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_t *res, int_t *resremw, int_t *random1, int_t *random2) {
   if (int_is_zero(target_norm)) return false;
   quaternion_t tmpr;
   int_t limit_n, one;
@@ -1121,13 +1027,23 @@ static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_
   int_isqrt(&limit_n, target_norm);
   for (int attempts = 0; attempts < 25; attempts++) {
     int_t z, z2, remz;
-    int_random(&z);
+    if (random1 != NULL) {
+      int_set(&z, random1);
+      int_modvar_add(random1, random1, &one, &PINT);
+    } else {
+      int_random(&z);
+    }
     int_mod(&z, &z, &limit_n); 
     int_sqr(&z2, &z); 
     int_sub_3(&remz, target_norm, &z2);
     int_t limit_w, w, w2, remw;
     int_isqrt(&limit_w, &remz);
-    int_random(&w);
+    if (random1 != NULL) {
+      int_set(&w, random2);
+      int_modvar_add(random2, random2, &one, &PINT);
+    } else {
+      int_random(&w);
+    }
     int_mod(&w, &w, &limit_w);
     int_sqr(&w2, &w);
     int_sub_3(&remw, &remz, &w2);
@@ -1139,7 +1055,7 @@ static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_
     if (r64 % 3 == 0 || r64 % 5 == 0 || r64 % 7 == 0 || 
         r64 % 11 == 0 || r64 % 13 == 0 || r64 % 17 == 0 || 
         r64 % 19 == 0 || r64 % 23 == 0) {
-        continue;
+      continue;
     }
     int_t bound;
     int_isqrt(&bound, target_norm);
@@ -1171,37 +1087,35 @@ static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_
   return false;
 }
 
-static inline bool int_solve_klpt(const int_t *L, quaternion_t *res, int_t *resremw) {
-    if (int_solve_klpt_internal(L, res, resremw)) return true;
-    
-    int_t target;
-    
-    // Jalur: L + P
-    int_add_3(&target, L, &PINT);
-    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+static inline bool int_solve_klpt(const int_t *L, quaternion_t *res, int_t *resremw, int_t *random1, int_t *random2) {
+  if (int_solve_klpt_internal(L, res, resremw, random1, random2)) return true;
 
-    // Jalur: 2L
-    int_set(&target, L);
-    int_shiftl(1, &target);
-    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+  int_t target;
+  int_set(&target, L);
+  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
+  // Jalur: 2L
+  int_shiftl(1, &target);
+  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
+  // Jalur: 4L
+  int_shiftl(1, &target);
+  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
 
-    // Jalur: 4L
-    int_shiftl(1, &target);
-    if (int_solve_klpt_internal(&target, res, resremw)) return true;
+  // Jalur: L + 2P
+  //int_t p2;
+  //int_set(&p2, &PINT);
+  //int_shiftl(1, &p2);
+  //int_add_3(&target, L, &p2);
+  //if (int_solve_klpt_internal(&target, res, resremw)) return true;
 
-    // Jalur: L + 2P
-    int_t p2;
-    int_set(&p2, &PINT);
-    int_shiftl(1, &p2);
-    int_add_3(&target, L, &p2);
-    if (int_solve_klpt_internal(&target, res, resremw)) return true;
-
-    return false;
+  return false;
 }
 
 static inline void int_print(const char *label, const int_t *a) {
-  printf("%s\n", label);
-  for (int i = INTBLOCK - 1; i >= 0; i--) {
-    printf("  [%02d] %016llx\n", i, (unsigned long long)a->bitsu64[i]);
+  printf("%s { ", label);
+  for (int i = 0; i < INTBLOCK; i++) {
+    printf("0x%016llx%s", 
+        (unsigned long long)a->bitsu64[i], 
+        (i == INTBLOCK - 1) ? "" : ", ");
   }
+  printf(" };\n");
 }

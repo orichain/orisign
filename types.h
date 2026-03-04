@@ -39,7 +39,8 @@ typedef struct {
 
 typedef struct { 
   quaternion_t b[4]; 
-  int_t norm; 
+  int_t norm;
+  uint8_t match_index;
 } quaternion_ideal_t;
 
 typedef struct {
@@ -60,8 +61,7 @@ typedef struct {
 } thetacompressed_t;
 
 typedef struct { 
-  quaternion_t sigma;      // Response quaternion
-  fp2_t commitment;        // j-invariant dari E_aux (commitment)
-  uint32_t chl;            // Challenge integer (e_chl bit)
+  fp2_t jaux;
+  quaternion_ideal_t sigma;
 } signature_t;
 

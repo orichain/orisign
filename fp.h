@@ -607,22 +607,6 @@ static inline void fp_random(fp_t *RES) {
   fp_mod(RES, RES);
 }
 
-static inline void fp_random_test(fp_t *RES) {
-  fp_clear(RES);
-  uint8_t buffer[32];
-  size_t offset = 0;
-  arc4random_buf(buffer, sizeof(buffer));
-  for (int8_t i = 0; i < FPBLOCK-1; i++) {
-    uint64_t v_be;
-    memcpy(&v_be, buffer + offset, sizeof(uint64_t));
-    RES->bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
-  }
-  RES->bitsu64[FPBLOCK-2] &= 0x00ffffffffffffff;
-  RES->bitsu64[FPBLOCK-1] = 0ULL;
-  fp_select_ge(RES, RES, &PFP);
-}
-
 static inline void fp_print(const char *label, const fp_t *a) {
   printf("%s { ", label);
   for (int i = 0; i < FPBLOCK; i++) {

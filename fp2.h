@@ -29,36 +29,21 @@ static inline void fp2_sub(fp2_t *RES, const fp2_t *a, const fp2_t *b) {
 
 static inline void fp2_mul(fp2_t *RES, const fp2_t *a, const fp2_t *b) {
   fp_t ac, bd, ad, bc;
-  fp_t re_res, im_res; // Gunakan temporer untuk hasil akhir
-
+  fp_t re_res, im_res;
   fp_mod_mul(&ac, &a->re, &b->re);
   fp_mod_mul(&bd, &a->im, &b->im);
   fp_mod_sub_2(&re_res, &ac, &bd);
-
   fp_mod_mul(&ad, &a->re, &b->im);
   fp_mod_mul(&bc, &a->im, &b->re);
   fp_mod_add(&im_res, &ad, &bc);
-
-  // Copy hasil akhir ke RES di paling akhir
   fp_set(&RES->re, &re_res);
   fp_set(&RES->im, &im_res);
-
-  // Cleanup
   explicit_bzero(&ac, sizeof(fp_t));
   explicit_bzero(&bd, sizeof(fp_t));
   explicit_bzero(&ad, sizeof(fp_t));
   explicit_bzero(&bc, sizeof(fp_t));
   explicit_bzero(&re_res, sizeof(fp_t));
   explicit_bzero(&im_res, sizeof(fp_t));
-}
-
-static inline void fp2_mul_i(fp2_t *res, const fp2_t *a) {
-  // (a+bi)*i = -b + a*i
-  fp_t tmp;
-  fp_set(&tmp, &a->re);
-  fp_mod_neg(&res->re, &a->im);  // res->re = -a->im
-  fp_set(&res->im, &tmp);        // res->im = a->re
-  explicit_bzero(&tmp, sizeof(fp_t));
 }
 
 static inline void fp2_sqr(fp2_t *RES, const fp2_t *a) {
@@ -206,28 +191,16 @@ static inline void fp2_set_thetasqrt2(fp2_t *RES) {
   fp_clear(&RES->im);
 }
 
-void fp2_pow(fp2_t *RES, const fp2_t *a, const fp_t *exp) {
+static inline void fp2_pow(fp2_t *RES, const fp2_t *a, const fp_t *exp) {
   fp2_t result, base, tmp_sqr, tmp_mul;
-
-  fp2_set_one(&result);   // result = 1 + 0i
-  fp2_set(&base, a);      // base = a
-
-  // Scan bit dari MSB ke LSB agar konsisten dengan gaya oriint milikmu
+  fp2_set_one(&result);
+  fp2_set(&base, a);
   for (int16_t i = FPBLOCK * 64 - 1; i >= 0; i--) {
-    // 1. Square: result = result^2
     fp2_sqr(&tmp_sqr, &result);
-
-    // 2. Multiply: tmp_mul = result^2 * base
     fp2_mul(&tmp_mul, &tmp_sqr, &base);
-
-    // 3. Select: Jika bit skalar 1, pilih hasil kali. Jika 0, pilih hasil square.
     uint64_t word = i >> 6;
     uint64_t bit  = (exp->bitsu64[word] >> (i & 63)) & 1ULL;
     uint64_t mask = -(int64_t)bit;
-
-    // Pilih antara tmp_sqr dan tmp_mul berdasarkan mask
-    // Kamu bisa gunakan fungsi select mask di level fp2 jika ada, 
-    // atau lakukan manual untuk re dan im menggunakan fp_select_mask
     fp_select_mask(&result.re, &tmp_sqr.re, &tmp_mul.re, mask);
     fp_select_mask(&result.im, &tmp_sqr.im, &tmp_mul.im, mask);
   }
