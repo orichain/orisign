@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
 #include "curve.h"
-#include "globals.h"
 #include "types.h"
 
 void test_curve_operations(const publickey_t *PK) {
@@ -330,10 +329,10 @@ void generate_strategy(int n) {
 }
 
 int main() {
-  test_curve_operations(&PK_E0);
-  test_curve_hardcore(&PK_E0);
-  test_hunting_prerequisites(&PK_E0);
-  test_curve_absolute_gauntlet(&PK_E0);
-  //generate_strategy(248);
+  //test_curve_operations(&PK_E0);
+  //test_curve_hardcore(&PK_E0);
+  //test_hunting_prerequisites(&PK_E0);
+  //test_curve_absolute_gauntlet(&PK_E0);
+  generate_strategy(250);
   return 0;
 }

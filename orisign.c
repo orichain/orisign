@@ -1,38 +1,67 @@
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include "orisign.h"
-#include <stdbool.h>
-#include "types.h"
 
-void test() {
-  int_t a,b,c;
-  int_random(&a);
-  int_set_u64(&b,2);
-  int_mul(&c, &a, &b);
-  int_print("c: ", &c);
-  int_print("ax: ", &a);
-  int_shiftl(1, &a);
-  int_print("a: ", &a);
-}
+int main()
+{
+    //test_quat_ideal_mul();
+    //return 0;
+    printf("=== SQISIGN Benchmarking (10 Iterations) ===\n\n");
 
-int main() {
-  test();
-  printf("=== SQISIGN Test ===\n\n");
+    // 1. Setup Awal (Satu kali saja)
+    quaternion_ideal_t sk;
+    publickey_t pk;
+    signature_t sig;
+    const char *msg = "Testttt";
+    
+    printf("Generating Keypair...\n");
+    keygen(&sk);
+    generate_publickey(&pk, &sk);
+    printf("Keypair Ready.\n\n");
 
-  // 1. Generate key pair
-  printf("1. Generating key pair...\n");
-  quaternion_ideal_t sk;
-  if (!keygen(&sk)) {
-    printf("Keygen failed!\n");
-    return 1;
-  }
+    // 2. Mulai Profiling
+    clock_t start_time1 = clock();
+    int iterations = 3;
+    int success_count1 = 0;
 
-  publickey_t pk;
-  generate_publickey(&pk, &sk);
-  printf("Public key generated.\n");
+    for (int i = 0; i < iterations; i++) {
+        sign(&sig, msg, strlen(msg), &pk, &sk);
+        success_count1++;
+    }
 
-  const char *msg = "Testttt";
-  signature_t sig;
+    clock_t end_time1 = clock();
 
-  sign(&sig, msg, strlen(msg), &pk, &sk);
+    double total_time1 = (double)(end_time1 - start_time1) / CLOCKS_PER_SEC;
+    double sig_per_sec1 = (double)iterations / total_time1;
+    double avg_time1 = total_time1 / iterations;
 
-  return 0;
+    // 2. Mulai Profiling
+    clock_t start_time2 = clock();
+    int success_count2 = 0;
+
+    for (int i = 0; i < iterations; i++) {
+        verify(&sig, msg, strlen(msg), &pk);
+        success_count2++;
+    }
+
+    clock_t end_time2 = clock();
+
+    // 3. Kalkulasi Statistik Akhir
+    double total_time2 = (double)(end_time2 - start_time2) / CLOCKS_PER_SEC;
+    double sig_per_sec2 = (double)iterations / total_time2;
+    double avg_time2 = total_time2 / iterations;
+
+    printf("\n" "====================================================\n");
+    printf("BENCHMARK RESULTS\n");
+    printf("====================================================\n");
+    printf("Sgn Total Time      : %.4f seconds\n", total_time1);
+    printf("Sgn Average Time    : %.4f seconds/sign\n", avg_time1);
+    printf("Sgn Throughput      : **%.2f signs/second**\n", sig_per_sec1);
+    printf("Vrf Total Time      : %.4f seconds\n", total_time2);
+    printf("Vrf Average Time    : %.4f seconds/verify\n", avg_time2);
+    printf("Vrf Throughput      : **%.2f verify/second**\n", sig_per_sec2);
+    printf("====================================================\n");
+
+    return 0;
 }

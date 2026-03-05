@@ -111,69 +111,69 @@ static inline void point_double_with_y(jacpoint_t *RES, const jacpoint_t *pt, co
 }
 
 static inline void point_add(jacpoint_t *RES, const jacpoint_t *P, const jacpoint_t *Q, const publickey_t *PK) {
-    if (point_is_infinity(P)) { point_set(RES, Q); return; }
-    if (point_is_infinity(Q)) { point_set(RES, P); return; }
+  if (point_is_infinity(P)) { point_set(RES, Q); return; }
+  if (point_is_infinity(Q)) { point_set(RES, P); return; }
 
-    if (fp2_is_equal(&P->X, &Q->X) && fp2_is_equal(&P->Z, &Q->Z)) {
-        if (fp2_is_equal(&P->Y, &Q->Y)) {
-            point_double_with_y(RES, P, PK);
-            return;
-        } else {
-            point_clear(RES); // P + (-P) = Infinity
-            return;
-        }
+  if (fp2_is_equal(&P->X, &Q->X) && fp2_is_equal(&P->Z, &Q->Z)) {
+    if (fp2_is_equal(&P->Y, &Q->Y)) {
+      point_double_with_y(RES, P, PK);
+      return;
+    } else {
+      point_clear(RES); // P + (-P) = Infinity
+      return;
     }
+  }
 
-    fp2_t U1, U2, S1, S2, H, R, t0, t1, t2;
-    // U1 = X1*Z2, U2 = X2*Z1
-    fp2_mul(&U1, &P->X, &Q->Z);
-    fp2_mul(&U2, &Q->X, &P->Z);
-    // S1 = Y1*Z2, S2 = Y2*Z1
-    fp2_mul(&S1, &P->Y, &Q->Z);
-    fp2_mul(&S2, &Q->Y, &P->Z);
+  fp2_t U1, U2, S1, S2, H, R, t0, t1, t2;
+  // U1 = X1*Z2, U2 = X2*Z1
+  fp2_mul(&U1, &P->X, &Q->Z);
+  fp2_mul(&U2, &Q->X, &P->Z);
+  // S1 = Y1*Z2, S2 = Y2*Z1
+  fp2_mul(&S1, &P->Y, &Q->Z);
+  fp2_mul(&S2, &Q->Y, &P->Z);
 
-    // H = U2 - U1, R = S2 - S1
-    fp2_sub(&H, &U2, &U1);
-    fp2_sub(&R, &S2, &S1);
+  // H = U2 - U1, R = S2 - S1
+  fp2_sub(&H, &U2, &U1);
+  fp2_sub(&R, &S2, &S1);
 
-    if (fp2_is_zero(&H)) {
-        if (fp2_is_zero(&R)) { point_double_with_y(RES, P, PK); return; }
-        else { point_clear(RES); return; }
-    }
+  if (fp2_is_zero(&H)) {
+    if (fp2_is_zero(&R)) { point_double_with_y(RES, P, PK); return; }
+    else { point_clear(RES); return; }
+  }
 
-    fp2_t H2, H3, U1H2, invC;
-    fp2_sqr(&H2, &H);         // H^2
-    fp2_mul(&H3, &H2, &H);     // H^3
-    fp2_mul(&U1H2, &U1, &H2);  // U1*H^2
+  fp2_t H2, H3, U1H2, invC;
+  fp2_sqr(&H2, &H);         // H^2
+  fp2_mul(&H3, &H2, &H);     // H^3
+  fp2_mul(&U1H2, &U1, &H2);  // U1*H^2
 
-    // X3 = C * (R^2 * Z1 * Z2 - H^3 - 2*U1*H^2) - A * H^2 * Z1 * Z2
-    // Rumus ini disesuaikan dengan kurva Cy^2 = x^3 + Ax^2 + Cx
-    // Untuk simplifikasi, kita gunakan koordinat Afin hasil normalisasi jika Bos ragu:
-    
-    // --- VERSI AFIN YANG SUDAH DIPERBAIKI (LEBIH AMAN) ---
-    fp2_t x1, y1, x2, y2, lam, x3, y3;
-    fp2_inv(&t0, &P->Z); fp2_mul(&x1, &P->X, &t0); fp2_mul(&y1, &P->Y, &t0);
-    fp2_inv(&t1, &Q->Z); fp2_mul(&x2, &Q->X, &t1); fp2_mul(&y2, &Q->Y, &t1);
+  // X3 = C * (R^2 * Z1 * Z2 - H^3 - 2*U1*H^2) - A * H^2 * Z1 * Z2
+  // Rumus ini disesuaikan dengan kurva Cy^2 = x^3 + Ax^2 + Cx
+  // Untuk simplifikasi, kita gunakan koordinat Afin hasil normalisasi jika Bos ragu:
 
-    fp2_sub(&t0, &y2, &y1);
-    fp2_sub(&t1, &x2, &x1);
-    fp2_inv(&t1, &t1);
-    fp2_mul(&lam, &t0, &t1);
+  // --- VERSI AFIN YANG SUDAH DIPERBAIKI (LEBIH AMAN) ---
+  fp2_t x1, y1, x2, y2, lam, x3, y3;
+  fp2_inv(&t0, &P->Z); fp2_mul(&x1, &P->X, &t0); fp2_mul(&y1, &P->Y, &t0);
+  fp2_inv(&t1, &Q->Z); fp2_mul(&x2, &Q->X, &t1); fp2_mul(&y2, &Q->Y, &t1);
 
-    fp2_sqr(&x3, &lam);
-    fp2_inv(&invC, &PK->C);
-    fp2_mul(&t2, &PK->A, &invC);
-    fp2_sub(&x3, &x3, &t2);
-    fp2_sub(&x3, &x3, &x1);
-    fp2_sub(&x3, &x3, &x2);
+  fp2_sub(&t0, &y2, &y1);
+  fp2_sub(&t1, &x2, &x1);
+  fp2_inv(&t1, &t1);
+  fp2_mul(&lam, &t0, &t1);
 
-    fp2_sub(&t0, &x1, &x3);
-    fp2_mul(&y3, &lam, &t0);
-    fp2_sub(&y3, &y3, &y1);
+  fp2_sqr(&x3, &lam);
+  fp2_inv(&invC, &PK->C);
+  fp2_mul(&t2, &PK->A, &invC);
+  fp2_sub(&x3, &x3, &t2);
+  fp2_sub(&x3, &x3, &x1);
+  fp2_sub(&x3, &x3, &x2);
 
-    fp2_set(&RES->X, &x3);
-    fp2_set(&RES->Y, &y3);
-    fp2_set_one(&RES->Z);
+  fp2_sub(&t0, &x1, &x3);
+  fp2_mul(&y3, &lam, &t0);
+  fp2_sub(&y3, &y3, &y1);
+
+  fp2_set(&RES->X, &x3);
+  fp2_set(&RES->Y, &y3);
+  fp2_set_one(&RES->Z);
 }
 
 // Fungsi-fungsi berikut tetap sama, hanya menambahkan variabel temporer jika perlu
@@ -332,8 +332,9 @@ static inline bool point_get_y(fp2_t *Y, const fp2_t *X, const publickey_t *PK) 
   fp2_add(&rhs, &rhs, X);
 
   if (!fp2_is_legendre_square(&rhs)) return false;
-  fp2_legendre_sqrt(Y, &rhs);
-  return true;
+  bool valid;
+  fp2_legendre_sqrt(Y, &rhs, &valid);
+  return valid;
 }
 
 static inline void random_point(jacpoint_t *P, const publickey_t *PK) {

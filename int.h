@@ -272,7 +272,23 @@ static inline bool int_is_ge(const int_t *a, const int_t *b) {
   return diff.bits64[INTBLOCK - 1] >= 0;
 }
 
+static inline bool int_is_gt(const int_t *a, const int_t *b) {
+  int_t diff;
+  int_sub_3(&diff, a, b);
+  return diff.bits64[INTBLOCK - 1] > 0;
+}
 
+static inline bool int_is_le(const int_t *a, const int_t *b) {
+  int_t diff;
+  int_sub_3(&diff, a, b);
+  return diff.bits64[INTBLOCK - 1] <= 0;
+}
+
+static inline bool int_is_lt(const int_t *a, const int_t *b) {
+  int_t diff;
+  int_sub_3(&diff, a, b);
+  return diff.bits64[INTBLOCK - 1] < 0;
+}
 
 static inline uint64_t int_ge_mask(const int_t *a, const int_t *b) {
   uint64_t borrow = 0;
@@ -609,6 +625,25 @@ static inline void int_div(int_t *Q, int_t *R, const int_t *A, const int_t *B) {
   }
 }
 
+static inline void int_div_round(int_t *q, const int_t *num, const int_t *den) {
+  int_t r,one,two;
+  int_set_one(&one);
+  int_set_u64(&two,2);
+  int_div(q, &r, num, den);
+  if (int_is_zero(&r)) return;
+  int_t two_r, abs_den;
+  int_abs(&two_r, &r);
+  int_mul(&two_r, &two_r, &two);
+  int_abs(&abs_den, den);
+  if (int_is_ge(&two_r, &abs_den)) {
+    if (int_is_negative(num) == int_is_negative(den)) {
+      int_add_1(q, &one);
+    } else {
+      int_sub_2(q, &one);
+    }
+  }
+}
+
 static inline void int_modvar_montgomery_setup(const int_t *n, uint64_t *mm64, uint8_t *msize) {
   int8_t i=(2*INTBLOCK)-1;
   while(i>0 && n->bitsu32[i]==0) i--;
@@ -720,6 +755,153 @@ static inline void int_gcd(int_t *RES, const int_t *a, const int_t *b) {
     int_set(&tmpa, &t);
   }
   int_abs(RES, &tmpa);
+}
+
+static inline void int_xgcd(int_t *d, int_t *u, int_t *v, const int_t *a, const int_t *b) {
+  int_t s, old_s;
+  int_t t, old_t;
+  int_t r, old_r;
+  int_t q, tmp, prod;
+
+  // Inisialisasi: old_r = a, r = b
+  int_set(&old_r, a);
+  int_set(&r, b);
+
+  // old_s = 1, s = 0 (koefisien untuk a)
+  int_set_one(&old_s);
+  int_clear(&s);
+
+  // old_t = 0, t = 1 (koefisien untuk b)
+  int_clear(&old_t);
+  int_set_one(&t);
+
+  while (!int_is_zero(&r)) {
+    // q = old_r / r, sisa r_new dihitung nanti
+    int_div(&q, &tmp, &old_r, &r);
+
+    // Update r: r_new = old_r - q * r
+    int_set(&tmp, &r);
+    int_mul(&prod, &q, &r);
+    int_sub_3(&r, &old_r, &prod); // Pakai sub_3 milikmu
+    int_set(&old_r, &tmp);
+
+    // Update s: s_new = old_s - q * s
+    int_set(&tmp, &s);
+    int_mul(&prod, &q, &s);
+    int_sub_3(&s, &old_s, &prod);
+    int_set(&old_s, &tmp);
+
+    // Update t: t_new = old_t - q * t
+    int_set(&tmp, &t);
+    int_mul(&prod, &q, &t);
+    int_sub_3(&t, &old_t, &prod);
+    int_set(&old_t, &tmp);
+  }
+
+  // Hasil akhir
+  int_set(d, &old_r);
+  int_set(u, &old_s);
+  int_set(v, &old_t);
+}
+
+static inline void int_xgcd_with_u_not_0(int_t *d, int_t *u, int_t *v, const int_t *x, const int_t *y) {
+  // Kasus dasar: jika x dan y keduanya nol
+  if (int_is_zero(x) && int_is_zero(y)) {
+    int_set_one(d);
+    int_set_one(u);
+    int_clear(v);
+    return;
+  }
+
+  int_t q, r, x1, y1, tmp_prod, tmp_sum,int_const_zero;
+  int_clear(&int_const_zero);
+  int_clear(&q); int_clear(&r);
+  int_clear(&x1); int_clear(&y1);
+  int_clear(&tmp_prod); int_clear(&tmp_sum);
+
+  int_set(&x1, x);
+  int_set(&y1, y);
+
+  // 1. Standar XGCD
+  int_xgcd(d, u, v, &x1, &y1);
+
+  // 2. Pastikan u != 0 (v bisa nol jika perlu)
+  // Berdasarkan spesifikasi GMP, u == 0 menyiratkan y membagi x
+  if (int_is_zero(u)) {
+    if (!int_is_zero(&x1)) {
+      if (int_is_zero(&y1)) {
+        int_set_one(&y1);
+      }
+      int_div(&q, &r, &x1, &y1);
+      // assert(int_is_zero(&r)); // x1 harus habis dibagi y1 jika u=0
+      int_sub_3(v, v, &q);
+    }
+    int_set_one(u);
+  }
+
+  // 3. Normalisasi: Pastikan u*x > 0 dan sekecil mungkin
+  if (!int_is_zero(&x1)) {
+    // d harus positif (asumsi dari int_xgcd standar)
+    int_mul(&r, &x1, &y1);
+    int neg = int_is_negative(&r);
+
+    int_mul(&q, &x1, u);
+
+    // Loop untuk menggeser koefisien Bezout u dan v
+    // u = u + (y/d), v = v - (x/d)
+    while (int_is_ge(&int_const_zero, &q)) {
+      int_div(&q, &r, &y1, d);
+      if (neg) int_neg_2(&q, &q);
+      int_add_3(u, u, &q);
+
+      int_div(&q, &r, &x1, d);
+      if (neg) int_neg_2(&q, &q);
+      int_sub_3(v, v, &q);
+
+      int_mul(&q, &x1, u);
+    }
+  }
+
+  // Bersihkan memory
+  int_clear(&q); int_clear(&r);
+  int_clear(&x1); int_clear(&y1);
+  int_clear(&tmp_prod); int_clear(&tmp_sum);
+}
+
+static inline void int_centered_mod(int_t *remainder, const int_t *a, const int_t *mod) {
+  int_t tmp, half_mod, two;
+
+  int_clear(&tmp);
+  int_clear(&half_mod);
+  int_clear(&two);
+
+  // 1. Persiapkan angka 2
+  int_set_one(&two);
+  int_add_3(&two, &two, &two); // two = 2
+
+  // 2. half_mod = mod / 2
+  int_t r_unused;
+  int_clear(&r_unused);
+  int_div(&half_mod, &r_unused, mod, &two); 
+
+  // 3. tmp = a mod mod
+  int_mod(&tmp, a, mod);
+  if (int_is_negative(&tmp)) {
+    int_add_3(&tmp, &tmp, mod);
+  }
+
+  // 4. Centering logic: Jika tmp > (mod/2), geser ke negatif
+  if (int_is_gt(&tmp, &half_mod)) {
+    int_sub_3(remainder, &tmp, mod);
+  } else {
+    int_set(remainder, &tmp);
+  }
+
+  // Bersihkan semua
+  int_clear(&tmp);
+  int_clear(&half_mod);
+  int_clear(&two);
+  int_clear(&r_unused);
 }
 
 static inline void int_modvar_sqr(int_t *RES, const int_t *a, const int_t *n, const uint64_t *mm64, const uint8_t *msize, const int_t *r2) {
@@ -1089,24 +1271,6 @@ static inline bool int_solve_klpt_internal(const int_t *target_norm, quaternion_
 
 static inline bool int_solve_klpt(const int_t *L, quaternion_t *res, int_t *resremw, int_t *random1, int_t *random2) {
   if (int_solve_klpt_internal(L, res, resremw, random1, random2)) return true;
-
-  int_t target;
-  int_set(&target, L);
-  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
-  // Jalur: 2L
-  int_shiftl(1, &target);
-  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
-  // Jalur: 4L
-  int_shiftl(1, &target);
-  if (int_solve_klpt_internal(&target, res, resremw, random1, random2)) return true;
-
-  // Jalur: L + 2P
-  //int_t p2;
-  //int_set(&p2, &PINT);
-  //int_shiftl(1, &p2);
-  //int_add_3(&target, L, &p2);
-  //if (int_solve_klpt_internal(&target, res, resremw)) return true;
-
   return false;
 }
 

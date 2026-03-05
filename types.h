@@ -40,7 +40,6 @@ typedef struct {
 typedef struct { 
   quaternion_t b[4]; 
   int_t norm;
-  uint8_t match_index;
 } quaternion_ideal_t;
 
 typedef struct {
@@ -55,13 +54,8 @@ typedef struct {
 } jacpoint_t;
 
 typedef struct { 
-  fp2_t b;
-  fp2_t c;
-  fp2_t d; 
-} thetacompressed_t;
-
-typedef struct { 
-  fp2_t jaux;
+  uint8_t hash[HASHES_BYTES];
+  quaternion_ideal_t skaux;
   quaternion_ideal_t sigma;
 } signature_t;
 

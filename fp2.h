@@ -135,32 +135,6 @@ static inline void fp2_deserialize(fp2_t *RES, const uint8_t in[2 * FP_BYTES]) {
   RES->im.bitsu64[FPBLOCK-1] = 0ULL;
 }
 
-static inline void fp2_pack(uint8_t out[FP2_SERIALIZED_BYTES], const fp2_t *a) {
-  size_t offset = 0;
-  uint64_t v_be;
-  for (size_t i = 0; i < FPBLOCK-1; i++) {
-    v_be = htobe64(a->re.bitsu64[i]);
-    memcpy(out + offset, &v_be, sizeof(uint64_t));
-    offset += sizeof(uint64_t);
-  }
-  explicit_bzero(&v_be, sizeof(uint64_t));
-}
-
-static inline void fp2_unpack(fp2_t *RES, const uint8_t in[FP2_SERIALIZED_BYTES]) {
-  size_t offset = 0;
-  uint64_t v_be;
-  for (size_t i = 0; i < FPBLOCK-1; i++) {
-    memcpy(&v_be, in + offset, sizeof(uint64_t));
-    RES->re.bitsu64[i] = be64toh(v_be);
-    offset += sizeof(uint64_t);
-  }
-  RES->re.bitsu64[FPBLOCK-1] = 0ULL;
-  for (size_t i = 0; i < FPBLOCK; i++) {
-    RES->im.bitsu64[i] = 0ULL;
-  }
-  explicit_bzero(&v_be, sizeof(uint64_t));
-}
-
 static inline void fp2_mul_scalar(fp2_t *RES, const fp2_t *a, const fp_t *b) {
   fp_mod_mul(&RES->re, &a->re, b);
   fp_mod_mul(&RES->im, &a->im, b);
@@ -226,17 +200,16 @@ static inline bool fp2_is_legendre_square(const fp2_t *a) {
   return fp_is_legendre_square(&norm);
 }
 
-static inline void fp2_legendre_sqrt(fp2_t *out, const fp2_t *a) {
+static inline void fp2_legendre_sqrt(fp2_t *out, const fp2_t *a, bool *valid) {
   if (fp2_is_zero(a)) { fp2_clear(out); return; }
-  bool valid;
   if (fp_is_zero(&a->im)) {
     if (fp_is_legendre_square(&a->re)) {
-      fp_mod_sqrt(&out->re, &a->re, &valid);
+      fp_mod_sqrt(&out->re, &a->re, valid);
       fp_clear(&out->im);
     } else {
       fp_t neg_re;
       fp_mod_neg(&neg_re, &a->re);
-      fp_mod_sqrt(&out->im, &neg_re, &valid);
+      fp_mod_sqrt(&out->im, &neg_re, valid);
       fp_clear(&out->re);
     }
     return;
@@ -245,7 +218,7 @@ static inline void fp2_legendre_sqrt(fp2_t *out, const fp2_t *a) {
   fp_mod_sqr(&tmp1, &a->re);
   fp_mod_sqr(&tmp2, &a->im);
   fp_mod_add(&tmp1, &tmp1, &tmp2);
-  fp_mod_sqrt(&delta, &tmp1, &valid);
+  fp_mod_sqrt(&delta, &tmp1, valid);
   fp_t S, chi, val;
   fp_mod_add(&val, &a->re, &delta);
   fp_mod_add(&val, &val, &val);

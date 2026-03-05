@@ -36,6 +36,22 @@ void get_legendre_exp() {
   int_print("legendre_exp: ", &ress);
 }
 
+void get_FP2_CUBEROOT_EXP() {
+  int_t ip2, itmp, one, iexp;
+  int_set_one(&one);
+  /* ip2 = PINT^2 */
+  int_mul(&ip2, &PINT, &PINT);
+  /* itmp = 2*ip2 - 1 */
+  int_add_3(&itmp, &ip2, &ip2);
+  int_sub_2(&itmp, &one);
+  /* iexp = itmp / 3 */
+  int_t three, rem;
+  int_set_u64(&three, 3);
+  int_div(&iexp, &rem, &itmp, &three);
+  int_print("FP2_CUBEROOT_EXP: ", &iexp);
+  int_print("FP2_CUBEROOT_REM: ", &rem);
+}
+
 // Fungsi pembantu lokal di main.c
 static inline int get_bit_manual(const fp_t *a, int i) {
   return (a->bitsu64[i / 64] >> (i % 64)) & 1ULL;
@@ -136,6 +152,7 @@ int main() {
   int_print("f: ", &fxxx);
   get_exp_sqrt();
   get_legendre_exp();
+  get_FP2_CUBEROOT_EXP();
   return 0;
   /*
   // 1. Inisialisasi variabel

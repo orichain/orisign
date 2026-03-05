@@ -20,7 +20,7 @@ static inline bool keygen(quaternion_ideal_t *RES) {
       break;
     }
   }
-  quaternion_t alpha;
+  quaternion_t alpha, alpha_lifted;
   int_t klpt_remw;
   for (;;) {
     if (int_solve_klpt(&candidate, &alpha, &klpt_remw, NULL, NULL)) {
@@ -33,26 +33,10 @@ static inline bool keygen(quaternion_ideal_t *RES) {
     explicit_bzero(&klpt_remw, sizeof(int_t));
     return false;
   }
-  bool allvalid = true;
-  for (int i = 0; i < 4; i++) {
-    int_t n_b;
-    quat_norm(&n_b, &RES->b[i]);
-    if (!int_is_equal(&n_b, &RES->norm)) {
-      int_t q_d, r_d;
-      int_div(&q_d, &r_d, &n_b, &RES->norm);
-      if (!int_is_zero(&r_d)) {
-        allvalid = false;
-        break;
-      }
-    }
-  }
-  if (allvalid) {
-    explicit_bzero(&alpha, sizeof(quaternion_t));
-    explicit_bzero(&candidate, sizeof(int_t));
-    explicit_bzero(&klpt_remw, sizeof(int_t));
-    return true;
-  }
-  return false;
+  explicit_bzero(&alpha, sizeof(quaternion_t));
+  explicit_bzero(&candidate, sizeof(int_t));
+  explicit_bzero(&klpt_remw, sizeof(int_t));
+  return true;
 }
 
 static inline void solve_2adic_dlp(fp_t *res, const jacpoint_t *P, const jacpoint_t *Q, const publickey_t *PK, int n) {
@@ -70,31 +54,31 @@ static inline void solve_2adic_dlp(fp_t *res, const jacpoint_t *P, const jacpoin
     }
     if (!point_is_infinity(&check)) {
       fp_set_bit(res, (uint32_t)i, 1);
-      printf("[DEBUG] res = "); fp_print("", res);
       point_sub(&P_curr, &P_curr, &Q_table[i], PK);
     }
   }
 }
 
 static inline void ideal_to_kernel_2adic(jacpoint_t *K, const quaternion_ideal_t *I, const publickey_t *PK) {
-  jacpoint_t test_K;
-  fp_t co;
-  fp_set(&co, &F);
-  apply_quaternion_action(K, &I->b[0], &BASIS_P, PK);
-  point_mul_with_y(K, K, &co, PK);
-  point_mul_2exp(&test_K, K, (TORSION-1), PK);
-  if (point_is_infinity(&test_K)) {
-    apply_quaternion_action(K, &I->b[0], &BASIS_Q, PK);
-    point_mul_with_y(K, K, &co, PK);
-    point_mul_2exp(&test_K, K, (TORSION-1), PK);
-    if (point_is_infinity(&test_K)) {
-      jacpoint_t K2;
-      apply_quaternion_action(K, &I->b[0], &BASIS_P, PK);
-      apply_quaternion_action(&K2, &I->b[0], &BASIS_Q, PK);
-      point_add(K, K, &K2, PK);
-      point_mul_with_y(K, K, &co, PK);
-    }
-  }
+  jacpoint_t P, Q, alpha_P, alpha_Q;
+  P = BASIS_P; 
+  Q = BASIS_Q;
+  quaternion_t alpha = I->b[0]; 
+  if (int_is_even(&alpha.w)) alpha = I->b[1];
+  apply_quaternion_action(&alpha_P, &alpha, &P, PK);
+  apply_quaternion_action(&alpha_Q, &alpha, &Q, PK);
+  fp_t k_dlp;
+  solve_2adic_dlp(&k_dlp, &alpha_P, &alpha_Q, PK, TORSION);
+  point_mul_with_y(K, &Q, &k_dlp, PK);
+  point_add(K, &P, K, PK);
+}
+
+static inline void isogeny_walk_from_curve(publickey_t *RES, const publickey_t *base_curve, const quaternion_ideal_t *I) {
+  fp2_set(&RES->A, &base_curve->A);
+  fp2_set(&RES->C, &base_curve->C);
+  jacpoint_t K;
+  ideal_to_kernel_2adic(&K, I, RES); 
+  isogeny_walk_2adic(RES, &K, TORSION);
 }
 
 static inline void generate_publickey(publickey_t *PK, const quaternion_ideal_t *I) {
@@ -103,78 +87,94 @@ static inline void generate_publickey(publickey_t *PK, const quaternion_ideal_t 
   jacpoint_t K;
   ideal_to_kernel_2adic(&K, I, PK);
   isogeny_walk_2adic(PK, &K, TORSION); 
-  fp2_t j;
-  get_j_invariant(&j, PK);
-  fp2_print("FINAL_J_INVARIANT", &j);
 }
 
-static inline bool solve_klpt_main(quaternion_ideal_t *sigma, const quaternion_ideal_t *I_target, const int_t *LSTEP) {
-  int_t n_target, n_mu, n_I, n_I_sq, target_gammaXD, target_gamma2, n_diffXD, n_diff2, rem, checkXD, coeff_val;
-  int_t n_I_inv;
-  quaternion_t mu, gamma_L, temp_quat, gamma_scaled, sig_candidate;
-  int_t resremw, n_final;
-  int_set(&n_I, &I_target->norm);
-  int_mul(&n_target, &n_I, LSTEP);
-  quat_clear(&mu);
-  for (int i = 0; i < 4; i++) {
-    int_random_coeff(&coeff_val);
-    if (int_is_zero(&coeff_val)) continue;
-    quat_mul_scalar(&temp_quat, &I_target->b[i], &coeff_val);
-    quat_add(&mu, &mu, &temp_quat);
-  }
-  quat_norm(&n_mu, &mu);
-  //int_print(" n_mu    : ", &n_mu);
-  //int_print(" n_target: ", &n_target);
-  //int_print(" n_I     : ", &n_I);
-  //int_modvar_sub_2(&n_diff, &n_target, &n_mu, &PINT);
-  int_sub_3(&n_diff2, &n_target, &n_mu);
-  //int_print(" n_diff  : ", &n_diff2);
-  //int_set(&n_I_inv, &n_I);
-  //int_modvar_inv(&n_I_inv, &PINT, &MM64, &Msize);
-  //int_modvar_mul(&target_gamma, &n_diff, &n_I_inv, &PINT, &MM64, &Msize, &R2INT);
-  int_div(&target_gamma2, &rem, &n_diff2, &n_I);
-  //int_mul(&check, &target_gamma2, &n_I);
-  //int_print(" tgamma  : ", &target_gamma2);
-  //int_print(" check   : ", &check);
-  //int_print(" n_diff  : ", &n_diff2);
-  if (!int_solve_klpt(&target_gamma2, &gamma_L, &resremw, NULL, NULL)) {
-    return false; 
-  }
-  if (!quat_alpha_to_left_ideal(sigma, &gamma_L, &target_gamma2)) {
-    return false;
-  }
-  bool allvalid = true;
-  for (int i = 0; i < 4; i++) {
-    int_t n_b;
-    quat_norm(&n_b, &sigma->b[i]);
-    if (!int_is_equal(&n_b, &sigma->norm)) {
-      int_t q_d, r_d;
-      int_div(&q_d, &r_d, &n_b, &sigma->norm);
-      if (!int_is_zero(&r_d)) {
-        allvalid = false;
-        break;
+static inline void int_set_pow2(int_t *res, uint32_t exp) {
+  // 1. Bersihkan dulu semua isinya jadi nol
+  int_clear(res);
+
+  // 2. Tentukan posisi digit (limb) dan bit-nya
+  // Misal satu limb itu 64-bit
+  uint32_t limb_idx = exp / 64;
+  uint32_t bit_idx = exp % 64;
+
+  // 3. Set bit spesifik ke-exp menjadi 1
+  // Kalau int_t kamu punya array bernama 'val' atau 'limbs'
+  res->bitsu64[limb_idx] = (uint64_t)1 << bit_idx;
+}
+
+static inline bool solve_klpt_main(quaternion_ideal_t *sigma, const quaternion_ideal_t *I_target) {
+  int_t resremw, target_gamma2, intone;
+  quaternion_t gamma_L, gamma_lifted;
+  int_set_one(&intone);
+  int_random(&target_gamma2);
+  for (;;) {
+    int_modvar_add(&target_gamma2, &target_gamma2, &intone, &PINT);
+    if (int_is_mod4_3(&target_gamma2)) {
+      break;
+    }
+  } 
+  if (int_solve_klpt(&target_gamma2, &gamma_L, &resremw, NULL, NULL)) {
+    for (int b_idx = 0; b_idx < 4; b_idx++) { // Start dari 0 jangan 1
+      quat_mul(&gamma_lifted, &gamma_L, &I_target->b[b_idx]);
+      if (quat_is_member(&gamma_lifted, I_target)) {
+        if (quat_alpha_to_left_ideal(sigma, &gamma_lifted, &target_gamma2)) {
+          return true;
+        }
       }
     }
   }
-  if (allvalid) {
+  return false;
+}
+
+static inline bool verify(const signature_t *sig, const uint8_t *msg, size_t len, const publickey_t *pk) {
+  uint8_t hashjaux[2 * FP_BYTES];
+  uint8_t hashjpk[2 * FP_BYTES];
+  uint8_t hashsigma[17 * INT_BYTES];
+  shake256incctx ctx;
+  uint8_t challenge_hash[HASHES_BYTES];
+  fp2_t jaux, jpk;
+  publickey_t pkaux;
+  generate_publickey(&pkaux, &sig->skaux);
+  get_j_invariant(&jaux, &pkaux);
+  fp2_serialize(hashjaux, &jaux);
+  get_j_invariant(&jpk, pk);
+  fp2_serialize(hashjpk, &jpk);
+  quat_ideal_serialize(hashsigma, &sig->sigma);
+  shake256_inc_init(&ctx);
+  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, hashjaux, 2 * FP_BYTES);
+  shake256_inc_absorb(&ctx, hashjpk, 2 * FP_BYTES);
+  shake256_inc_absorb(&ctx, hashsigma, 17 * INT_BYTES);
+  shake256_inc_absorb(&ctx, msg, len);
+  shake256_inc_finalize(&ctx);
+  shake256_inc_squeeze(challenge_hash, HASHES_BYTES, &ctx);
+  if (memcmp(challenge_hash, sig->hash, HASHES_BYTES) != 0) {
+    return false;
+  }
+  quaternion_ideal_t v_ideal;
+  publickey_t pk_verify;
+  fp2_t j_verify, j_target;  
+  get_j_invariant(&j_target, pk);
+  quat_ideal_mul(&v_ideal, &sig->skaux, &sig->sigma); 
+  generate_publickey(&pk_verify, &v_ideal);
+  get_j_invariant(&j_verify, &pk_verify);
+  if (fp2_is_equal(&j_verify, &j_target)) {
+    printf("[SUCCESS] Walk dari commitment via sigma mendarat di Challenge Curve!\n");
     return true;
   }
   return false;
 }
 
 static inline bool sign(signature_t *sig, const uint8_t *msg, const size_t len, const publickey_t *pk, const quaternion_ideal_t *sk) {
-  quaternion_ideal_t skaux;
   if (sig == NULL) return false;
   memset(sig, 0, sizeof(signature_t));
   for (;;) {
-    memset(&skaux, 0, sizeof(quaternion_ideal_t));
+    memset(&sig->skaux, 0, sizeof(quaternion_ideal_t));
     int_t candidate;
-    int_clear(&candidate);
-    bool found_prime = false;
     for (;;) {
       int_random(&candidate);
-      if (int_is_mod4_3(&candidate) && int_is_prime(&candidate, 40)) {
-        found_prime = true;
+      if (int_is_mod4_3(&candidate)) {
         break;
       }
     }
@@ -185,74 +185,24 @@ static inline bool sign(signature_t *sig, const uint8_t *msg, const size_t len, 
         break;
       }
     }
-    if (quat_alpha_to_left_ideal(&skaux, &alpha, &candidate)) {
-      bool allvalid = true;
-      for (int i = 0; i < 4; i++) {
-        int_t n_b;
-        quat_norm(&n_b, &skaux.b[i]);
-        if (!int_is_equal(&n_b, &skaux.norm)) {
-          int_t q_d, r_d;
-          int_div(&q_d, &r_d, &n_b, &skaux.norm);
-          if (!int_is_zero(&r_d)) {
-            allvalid = false;
-            break;
-          }
-        }
-      }
-      if (allvalid) {
-        explicit_bzero(&alpha, sizeof(quaternion_t));
-        explicit_bzero(&candidate, sizeof(int_t));
-        explicit_bzero(&klpt_remw, sizeof(int_t));
-        break;
-      }
-    }
-  }
-  publickey_t pkaux;
-  uint8_t hashjaux[2 * FP_BYTES];
-  shake256incctx ctx;
-  uint8_t challenge_hash[HASHES_BYTES];
-  uint8_t challenge_klpt_ctr1[HASHES_BYTES];
-  uint8_t challenge_klpt_ctr2[HASHES_BYTES];
-  generate_publickey(&pkaux, &skaux);
-  get_j_invariant(&sig->jaux, &pkaux);
-  fp2_serialize(hashjaux, &sig->jaux);
-  shake256_inc_init(&ctx);
-  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP1, strlen(DOMAIN_SEP1));
-  shake256_inc_absorb(&ctx, hashjaux, 2 * FP_BYTES);
-  shake256_inc_absorb(&ctx, msg, len);
-  shake256_inc_finalize(&ctx);
-  shake256_inc_squeeze(challenge_hash, sizeof(challenge_hash), &ctx);
-  shake256_inc_init(&ctx);
-  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP2, strlen(DOMAIN_SEP2));
-  shake256_inc_absorb(&ctx, hashjaux, 2 * FP_BYTES);
-  shake256_inc_absorb(&ctx, msg, len);
-  shake256_inc_finalize(&ctx);
-  shake256_inc_squeeze(challenge_klpt_ctr1, sizeof(challenge_klpt_ctr1), &ctx);
-  shake256_inc_init(&ctx);
-  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP3, strlen(DOMAIN_SEP3));
-  shake256_inc_absorb(&ctx, hashjaux, 2 * FP_BYTES);
-  shake256_inc_absorb(&ctx, msg, len);
-  shake256_inc_finalize(&ctx);
-  shake256_inc_squeeze(challenge_klpt_ctr2, sizeof(challenge_klpt_ctr2), &ctx);
-  int_t chl;
-  int_t intone;
-  int_set_one(&intone);
-  int_from_bytes(&chl, challenge_hash, sizeof(challenge_hash));
-  for (;;) {
-    if (int_is_mod4_3(&chl) && int_is_prime(&chl, 40)) {
+    if (quat_alpha_to_left_ideal(&sig->skaux, &alpha, &candidate)) {
+      explicit_bzero(&alpha, sizeof(quaternion_t));
+      explicit_bzero(&candidate, sizeof(int_t));
+      explicit_bzero(&klpt_remw, sizeof(int_t));
       break;
     }
-    int_add_1(&chl, &intone);
+  }
+  int_t chl;
+  for (;;) {
+    int_random(&chl);
+    if (int_is_mod4_3(&chl)) {
+      break;
+    }
   }
   quaternion_t alpha;
   int_t klpt_remw;
-  int_t ctr1, ctr2;
-  int_from_bytes(&ctr1, challenge_klpt_ctr1, sizeof(challenge_klpt_ctr1));
-  int_from_bytes(&ctr2, challenge_klpt_ctr2, sizeof(challenge_klpt_ctr2));
-  int_mod(&ctr1, &ctr1, &PINT);
-  int_mod(&ctr2, &ctr2, &PINT);
   for (;;) {
-    if (int_solve_klpt(&chl, &alpha, &klpt_remw, &ctr1, &ctr2)) {
+    if (int_solve_klpt(&chl, &alpha, &klpt_remw, NULL, NULL)) {
       break;
     }
   }
@@ -260,32 +210,35 @@ static inline bool sign(signature_t *sig, const uint8_t *msg, const size_t len, 
   if (!quat_alpha_to_left_ideal(&skchl, &alpha, &chl)) {
     return false;
   }
-  bool allvalid = true;
-  for (int i = 0; i < 4; i++) {
-    int_t n_b;
-    quat_norm(&n_b, &skchl.b[i]);
-    if (!int_is_equal(&n_b, &skchl.norm)) {
-      int_t q_d, r_d;
-      int_div(&q_d, &r_d, &n_b, &skchl.norm);
-      if (!int_is_zero(&r_d)) {
-        allvalid = false;
-        break;
-      }
-    }
-  }
-  if (!allvalid) return false;
   quaternion_ideal_t skinv, itmp, itarget;
-  quat_ideal_conj(&skinv, sk);
-  quat_ideal_mul(&itmp, &skinv, &skchl);
-  quat_ideal_mul(&itarget, &itmp, &skaux);
+  int_print("TARGET.norm", &sk->norm);
+  quat_print("\nTARGET: ", &sk->b[0]);
   for (;;) {
-    if (solve_klpt_main(&sig->sigma, &itarget, &RESPONSE_L_STEP)) {
+    if (solve_klpt_main(&sig->sigma, sk)) {
       break;
     }
   }
+  //quat_print("SIGMA: ", &sig->sigma.b[0]);
+  uint8_t hashjaux[2 * FP_BYTES];
+  uint8_t hashjpk[2 * FP_BYTES];
+  uint8_t hashsigma[17 * INT_BYTES];
+  shake256incctx ctx;
+  fp2_t jaux, jpk;
+  publickey_t pkaux;
+  generate_publickey(&pkaux, &sig->skaux);
+  get_j_invariant(&jaux, &pkaux);
+  fp2_serialize(hashjaux, &jaux);
+  get_j_invariant(&jpk, pk);
+  fp2_serialize(hashjpk, &jpk);
+  quat_ideal_serialize(hashsigma, &sig->sigma);
+  shake256_inc_init(&ctx);
+  shake256_inc_absorb(&ctx, (const uint8_t*)DOMAIN_SEP, strlen(DOMAIN_SEP));
+  shake256_inc_absorb(&ctx, hashjaux, 2 * FP_BYTES);
+  shake256_inc_absorb(&ctx, hashjpk, 2 * FP_BYTES);
+  shake256_inc_absorb(&ctx, hashsigma, 17 * INT_BYTES);
+  shake256_inc_absorb(&ctx, msg, len);
+  shake256_inc_finalize(&ctx);
+  shake256_inc_squeeze(sig->hash, HASHES_BYTES, &ctx);
   return true;
 }
 
-static inline bool verify(const signature_t *sig, const uint8_t *msg, size_t len, const publickey_t *pk) {
-  return true;
-}

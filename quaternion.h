@@ -2,7 +2,6 @@
 #include "int.h"
 #include "types.h"
 #include <stdbool.h>
-#include <stdint.h>
 
 static inline void quat_set(quaternion_t *res, const quaternion_t *a) {
   int_set(&res->w, &a->w);
@@ -33,35 +32,29 @@ static inline bool quat_is_zero(const quaternion_t *a) {
 }
 
 static inline void quat_mul(quaternion_t *res, const quaternion_t *a, const quaternion_t *b) {
-  int_t A, B, C, D, E, F, G, H;
-  int_mul(&A, &a->w, &b->w);
-  int_mul(&B, &a->x, &b->x);
-  int_mul(&C, &a->y, &b->y);
-  int_mul(&D, &a->z, &b->z);
-  int_sub_3(&res->w, &A, &B);
-  int_sub_3(&res->w, &res->w, &C);
-  int_sub_3(&res->w, &res->w, &D);
-  int_mul(&A, &a->w, &b->x);
-  int_mul(&B, &a->x, &b->w);
-  int_mul(&C, &a->y, &b->z);
-  int_mul(&D, &a->z, &b->y);
-  int_add_3(&res->x, &A, &B);
-  int_add_3(&res->x, &res->x, &C);
-  int_sub_3(&res->x, &res->x, &D);
-  int_mul(&A, &a->w, &b->y);
-  int_mul(&B, &a->x, &b->z);
-  int_mul(&C, &a->y, &b->w);
-  int_mul(&D, &a->z, &b->x);
-  int_sub_3(&res->y, &A, &B);
-  int_add_3(&res->y, &res->y, &C);
-  int_add_3(&res->y, &res->y, &D);
-  int_mul(&A, &a->w, &b->z);
-  int_mul(&B, &a->x, &b->y);
-  int_mul(&C, &a->y, &b->x);
-  int_mul(&D, &a->z, &b->w);
-  int_add_3(&res->z, &A, &B);
-  int_sub_3(&res->z, &res->z, &C);
-  int_add_3(&res->z, &res->z, &D);
+  int_t t1, t2, t3, t4, sum_im;
+  int_mul(&t1, &a->w, &b->w);
+  int_mul(&t2, &a->x, &b->x);
+  int_mul(&t3, &a->y, &b->y);
+  int_mul(&t4, &a->z, &b->z);
+  int_add_3(&sum_im, &t2, &t3); int_add_3(&sum_im, &sum_im, &t4);
+  if (int_is_ge(&t1, &sum_im)) int_sub_3(&res->w, &t1, &sum_im);
+  else int_sub_3(&res->w, &sum_im, &t1);
+  int_mul(&t1, &a->w, &b->x); int_mul(&t2, &a->x, &b->w);
+  int_mul(&t3, &a->y, &b->z); int_mul(&t4, &a->z, &b->y);
+  int_add_3(&sum_im, &t1, &t2); int_add_3(&sum_im, &sum_im, &t3);
+  if (int_is_ge(&sum_im, &t4)) int_sub_3(&res->x, &sum_im, &t4);
+  else int_sub_3(&res->x, &t4, &sum_im);
+  int_mul(&t1, &a->w, &b->y); int_mul(&t2, &a->x, &b->z);
+  int_mul(&t3, &a->y, &b->w); int_mul(&t4, &a->z, &b->x);
+  int_add_3(&sum_im, &t1, &t3); int_add_3(&sum_im, &sum_im, &t4);
+  if (int_is_ge(&sum_im, &t2)) int_sub_3(&res->y, &sum_im, &t2);
+  else int_sub_3(&res->y, &t2, &sum_im);
+  int_mul(&t1, &a->w, &b->z); int_mul(&t2, &a->x, &b->y);
+  int_mul(&t3, &a->y, &b->x); int_mul(&t4, &a->z, &b->w);
+  int_add_3(&sum_im, &t1, &t2); int_add_3(&sum_im, &sum_im, &t4);
+  if (int_is_ge(&sum_im, &t3)) int_sub_3(&res->z, &sum_im, &t3);
+  else int_sub_3(&res->z, &t3, &sum_im);
 }
 
 static inline void quat_add(quaternion_t *res, const quaternion_t *a, const quaternion_t *b) {
@@ -69,6 +62,13 @@ static inline void quat_add(quaternion_t *res, const quaternion_t *a, const quat
   int_add_3(&res->x, &a->x, &b->x);
   int_add_3(&res->y, &a->y, &b->y);
   int_add_3(&res->z, &a->z, &b->z);
+}
+
+static inline void quat_sub(quaternion_t *res, const quaternion_t *a, const quaternion_t *b) {
+  int_sub_3(&res->w, &a->w, &b->w);
+  int_sub_3(&res->x, &a->x, &b->x);
+  int_sub_3(&res->y, &a->y, &b->y);
+  int_sub_3(&res->z, &a->z, &b->z);
 }
 
 static inline void quat_mul_scalar(quaternion_t *res, const quaternion_t *q, const int_t *scalar) {
@@ -101,45 +101,31 @@ static inline void quat_norm(int_t *res, const quaternion_t *q) {
   int_add_3(res, &s1, &s2);
 }
 
+static inline void quat_mod_norm(quaternion_t *q) {
+  int_mod(&q->w, &q->w, &NORM_IDEAL);
+  int_mod(&q->x, &q->x, &NORM_IDEAL);
+  int_mod(&q->y, &q->y, &NORM_IDEAL);
+  int_mod(&q->z, &q->z, &NORM_IDEAL);
+}
+
 static inline bool quat_alpha_to_left_ideal(quaternion_ideal_t *ideal, const quaternion_t *alpha, const int_t *expected_L) {
-  quaternion_t one, iunit, junit, kunit;
-  quat_clear(&one);
-  quat_clear(&iunit);
-  quat_clear(&junit);
-  quat_clear(&kunit);
-  int_set_one(&one.w);
-  int_set_one(&iunit.x);
-  int_set_one(&junit.y);
-  int_set_one(&kunit.z);
-  quat_mul(&ideal->b[0], alpha, &one);
-  quat_mul(&ideal->b[1], alpha, &iunit);
-  quat_mul(&ideal->b[2], alpha, &junit);
-  quat_mul(&ideal->b[3], alpha, &kunit);
-  quat_norm(&ideal->norm, alpha);
-  int_t candidates[3];
-  int_set(&candidates[0], expected_L);                    // 0: L
-  int_t twoL; int_set(&twoL, expected_L); int_shiftl(1, &twoL);
-  int_set(&candidates[1], &twoL);                         // 2: 2L
-  int_t fourL; int_set(&fourL, &twoL); int_shiftl(1, &fourL);
-  int_set(&candidates[2], &fourL);                        // 3: 4L
-  uint8_t match_idx = 0xff;
-  for (int k = 0; k < 3; k++) {
-    int_t diff;
-    int_sub_3(&diff, &ideal->norm, &candidates[k]);
-    if (int_is_zero(&diff)) {
-      match_idx = k;
-      break;
-    }
-  }
-  if (match_idx == 0xff) {
-    printf("[ERROR] Norma alpha tidak cocok dengan kandidat mana pun!\n");
-    for (int i = 0; i < 4; i++) quat_clear(&ideal->b[i]);
-    int_clear(&ideal->norm);
-    ideal->match_index = 0xff;
-    return false;
-  }
-  ideal->match_index = match_idx;
-  printf("[INFO] Match dengan kandidat ke-%d (norma asli alpha cocok)\n", match_idx);
+  int_set(&ideal->norm, expected_L);
+  int_set(&ideal->b[0].w, &alpha->w);
+  int_set(&ideal->b[0].x, &alpha->x);
+  int_set(&ideal->b[0].y, &alpha->y);
+  int_set(&ideal->b[0].z, &alpha->z);
+  int_neg_2(&ideal->b[1].w, &alpha->x);
+  int_set(&ideal->b[1].x, &alpha->w);
+  int_set(&ideal->b[1].y, &alpha->z);
+  int_neg_2(&ideal->b[1].z, &alpha->y);
+  int_neg_2(&ideal->b[2].w, &alpha->y);
+  int_neg_2(&ideal->b[2].x, &alpha->z);
+  int_set(&ideal->b[2].y, &alpha->w);
+  int_set(&ideal->b[2].z, &alpha->x);
+  int_neg_2(&ideal->b[3].w, &alpha->z);
+  int_set(&ideal->b[3].x, &alpha->y);
+  int_neg_2(&ideal->b[3].y, &alpha->x);
+  int_set(&ideal->b[3].z, &alpha->w);
   return true;
 }
 
@@ -150,7 +136,23 @@ static inline void quat_conj(quaternion_t *res, const quaternion_t *q) {
   int_neg_2(&res->z, &q->z);
 }
 
-static inline void quat_ideal_mul(quaternion_ideal_t *res, const quaternion_ideal_t *I, const quaternion_ideal_t *J) {
+static inline bool quat_is_member(const quaternion_t *alpha, const quaternion_ideal_t *I) {
+  quaternion_t conj_b, product;
+  int_t n_I, rem, dummy;
+  int_set(&n_I, &I->norm);
+  quat_conj(&conj_b, &I->b[0]);
+  quat_mul(&product, alpha, &conj_b);
+  int_mod(&rem, &product.w, &n_I); if (!int_is_zero(&rem)) return false;
+  int_mod(&rem, &product.x, &n_I); if (!int_is_zero(&rem)) return false;
+  int_mod(&rem, &product.y, &n_I); if (!int_is_zero(&rem)) return false;
+  int_mod(&rem, &product.z, &n_I); if (!int_is_zero(&rem)) return false;
+  return true;
+}
+
+static inline void quat_ideal_mul(quaternion_ideal_t *res, 
+    const quaternion_ideal_t *I, 
+    const quaternion_ideal_t *J) 
+{
   quaternion_t candidates[16];
   int_t norms[16];
   bool used[16] = {false};
@@ -170,7 +172,6 @@ static inline void quat_ideal_mul(quaternion_ideal_t *res, const quaternion_idea
         best = i;
       }
     }
-
     if (best != -1) {
       quat_set(&res->b[k], &candidates[best]);
       used[best] = true;
@@ -179,51 +180,33 @@ static inline void quat_ideal_mul(quaternion_ideal_t *res, const quaternion_idea
     }
   }
   int_mul(&res->norm, &I->norm, &J->norm);
-  // Mod PINT untuk menjaga ukuran
-  //for (int i = 0; i < 4; i++) {
-  //  int_mod(&res->b[i].w, &res->b[i].w, &PINT);
-  //  int_mod(&res->b[i].x, &res->b[i].x, &PINT);
-  //  int_mod(&res->b[i].y, &res->b[i].y, &PINT);
-  //  int_mod(&res->b[i].z, &res->b[i].z, &PINT);
-  //}
 }
 
-static inline void quat_ideal_conj(quaternion_ideal_t *res, const quaternion_ideal_t *I) {
-  quaternion_t conj_basis[4];
-  int_t conj_norms[4];
-  for (int i = 0; i < 4; i++) {
-    quat_conj(&conj_basis[i], &I->b[i]);
-    quat_norm(&conj_norms[i], &conj_basis[i]);
-  }
-  bool used[4] = {false};
-  int count = 0;
-  for (int attempt = 0; attempt < 4 && count < 4; attempt++) {
-    int best = -1;
-    int_t best_norm;
-    for (int i = 0; i < 4; i++) {
-      if (used[i]) continue;
-      if (int_is_zero(&conj_norms[i])) continue;
-      if (best == -1) {
-        best = i;
-        best_norm = conj_norms[i];
-      }
+static inline void quat_ideal_serialize(uint8_t out[17 * INT_BYTES], const quaternion_ideal_t *a) {
+  size_t offset = 0;
+  uint64_t v_be;
+  for (int iq=0;iq<4;iq++) {
+    for (size_t i = 0; i < INTBLOCK-1; i++) {
+      v_be = htobe64(a->b[iq].w.bitsu64[i]);
+      memcpy(out + offset, &v_be, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
+      v_be = htobe64(a->b[iq].x.bitsu64[i]);
+      memcpy(out + offset, &v_be, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
+      v_be = htobe64(a->b[iq].y.bitsu64[i]);
+      memcpy(out + offset, &v_be, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
+      v_be = htobe64(a->b[iq].z.bitsu64[i]);
+      memcpy(out + offset, &v_be, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
     }
-    if (best == -1) break;
-    quat_set(&res->b[count], &conj_basis[best]);
-    used[best] = true;
-    count++;
   }
-  for (int i = count; i < 4; i++) {
-    quat_clear(&res->b[i]);
+  for (size_t i = 0; i < INTBLOCK-1; i++) {
+    v_be = htobe64(a->norm.bitsu64[i]);
+    memcpy(out + offset, &v_be, sizeof(uint64_t));
+    offset += sizeof(uint64_t);
   }
-  int_set(&res->norm, &I->norm);
-  // Opsional: mod PINT pada semua komponen agar lebih kecil
-  //for (int i = 0; i < 4; i++) {
-  //  int_mod(&res->b[i].w, &res->b[i].w, &PINT);
-  //  int_mod(&res->b[i].x, &res->b[i].x, &PINT);
-  //  int_mod(&res->b[i].y, &res->b[i].y, &PINT);
-  //  int_mod(&res->b[i].z, &res->b[i].z, &PINT);
-  //}
+  explicit_bzero(&v_be, sizeof(uint64_t));
 }
 
 static inline void quat_print(const char *label, const quaternion_t *q) {
