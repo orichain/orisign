@@ -1,117 +1,60 @@
 
 ---
 
-# ORISIGN: Quantum-Resistant Quaternion Signature
+# ORISIGN
 
-ORISIGN is a high-performance digital signature implementation based on **non-commutative quaternion actions** on Theta null points. It provides 256-bit security with an ultra-compact payload, making it ideal for blockchain validators, secure payment gateways, and low-latency IoT infrastructures.
+**ORISIGN** is a high-performance, isogeny-based signature scheme implementation. It features a custom-tuned arithmetic stack designed to balance the wide-range requirements of quaternion ideals with the efficiency needed for finite field operations over isogeny curves.
 
-## 🚀 Key Features
+## Technical Specifications
 
-- **Non-Commutative Algebra**: Leverages Hamiltonian actions on Theta coordinates to resist linear cryptanalysis.
-- **Ultra-Compact Payload**: Total wire size of only **226 Bytes** (96B Public Key + 130B Signature).
-- **Extreme Throughput**: Capable of processing over **~35,000 verification operations per second** on standard hardware.
-- **Deterministic Signing**: Eliminates key-leakage risks associated with poor entropy sources during nonce generation.
-- **Post-Quantum Ready**: Designed to resist Shor's algorithm via complex isogeny-based/quaternion mathematical structures.
+* **Dual-Stack Arithmetic**:
+* **6-Limb Integer (384-bit)**: Used for big integer and quaternion arithmetic. This provides the necessary headroom for ideal norm multiplications and KLPT solving.
+* **5-Limb FP (320-bit)**: Optimized for finite field operations ($F_{p^2}$). By dropping to 5 limbs for the base field, the implementation achieves significant speedups in the isogeny walks where $F_p$ operations are the primary bottleneck.
 
-## 🛠 Technical Specifications
 
-- **Hash Function**: SHAKE256 with Domain Separation.
-- **Security Level**: 256-bit (NBLOCK-1 * 64).
-- **Encoding**: Base58 for Human-Readable Addresses, Raw Hex for Wire-Format.
-- **Integrity**: Non-Malleable (Strict protection against signature bit-flipping).
+* **Bonsai-Free Ideal Reduction**: Replaces traditional LLL/Bonsai reduction with a deterministic **Brute-Sort Selection**. It evaluates 16 product candidates and selects the optimal basis, ensuring landing stability without the risk of infinite loops or precision-related oscillations.
+* **Optimized Verification Path**:
+* **248-Step Isogeny Walk**: A robust implementation of the isogeny walk from the commitment to the challenge curve.
+* **Direct-to-PK Signing**: The signing process bypasses redundant ideal multiplications by directly solving for the path to the target public key.
 
-## 📂 CRYPTOGRAPHIC AUDIT REPORT           
 
-```text
-==============================================================
-           ORISIGN: CRYPTOGRAPHIC AUDIT REPORT           
-           Protocol: Quaternion Action on Theta               
-           Target: 96B PK | 130B SIG | 226B Total             
-==============================================================
-[1] ENVIRONMENT CHECK
-    Security Bit-Level  : 256-bit
-    Hash Algorithm      : SHAKE256 (32 bytes)
---------------------------------------------------------------
-[2] KEYSPACE ANALYSIS
-    Keygen Latency      : 7.523 ms
-SK                   [128 bytes]: ac35b56d40e4a9f7b6af25ae9af9459c2b3f8cc180d7918cd5437ba7180987b2
-                     81b9b4eda9dd9d4708a972d30efaf7e18ea99bd1f0ae37b4bb82480ee76a5b20
-                     ebc555b638f71956b60c12a4d05d762d16f56caf3e75f005927910f03386ecd2
-                     06987b873c29fa44a7c95793f902568ff3b5d956434544726f850a846667817b
-PK                   [ 96 bytes]: 9cd668bbd6c6d0c6d1afe576bacc60965ae22c00588aa94202a3f8162a1a96fe
-                     083a6d9da6dbc5e790d162882a114aa88e81bb1cf654ed94011bb502238861d6
-                     6a4162d8477f8d4b99bbc746251ba27f8d9496f07c5d961c00b7fb9de0c8649d
-ADDR                 [ 48 bytes]: 2xyhRVWMQFLnVr9QCL7Bh6Y5rmLzLeMayhTnsMrbVWa7Nxy
---------------------------------------------------------------
-[3] PUBLIC KEY COMPRESSION (WIRE-FORMAT)
-    Integrity Status    : VERIFIED (1:1 Match) ✅
---------------------------------------------------------------
-[4] SIGNATURE RECONSTRUCTION
-Encoded_Sig          [130 bytes]: 00009cc4cc3075e0ba36d71f958f32f0d4a8ef80c3904e1f2ab8a26812ca1c45
-                     1d78d84dcf49d5e62a408f09c7dd9a46403400d549110eb6427c00f2cb6c3def
-                     84951017b5c935346b78a0339cfde29b804793e7a553119991000495baac1589
-                     d6805e43d297fd1d39cdcd928590dc1789d6cebb825264396340046ddd9621c9
-                     a65d
-    Verification Check  : AUTHENTIC ✅
---------------------------------------------------------------
 
-[5] SECURITY TEST (FORGERY ATTEMPT)
-    Action              : Signing with manipulated SK...
-    Verification        : REJECTED 🛡️ (SECURE)
+## Performance Benchmarks
 
-[6] MESSAGE INTEGRITY TEST (TAMPERING ATTEMPT)
-    Action              : Verifying Sig with modified message...
-    Verification        : REJECTED 🛡️ (Integrity Confirmed)
+Based on 6-limb/5-limb hybrid arithmetic:
 
-[7] BRUTE FORCE ANALYSIS (1,000 SAMPLE GUESSES)
-    Source of Entropy   : arc4random (CSPRNG)
-    Random Guess Success: 0/1000
-    Security Status     : SECURE 🛡️
+| Operation | Average Time | Throughput |
+| --- | --- | --- |
+| **Signing** | 0.4000s | **2.50 signs/sec** |
+| **Verification** | 0.6633s | **1.51 verify/sec** |
 
-[8] BIT-FLIP ANALYSIS (SIGNATURE MALLEABILITY)
-    Action              : Flipping 1 bit in valid signature...
-    Result              : NON-MALLEABLE ✅
+*Measurements taken over a 248-step isogeny walk.*
 
-[9] SIGNATURE UNIQUENESS TEST (DETERMINISM)
-    Sig 1 vs Sig 2      : IDENTICAL (Deterministic) ✅
+## Implementation Details
 
-[10] PUBLIC KEY INTEGRITY TEST
-    Verify with Tampered PK : REJECTED 🛡️
+### Quaternion Arithmetic
 
-[11] MATHEMATICAL LINEARITY ANALYSIS
-    Action(q1+q2) matches Action(q1)+Action(q2): NO ✅ (NON-LINEAR/STRONG)
-    Result: The Hamiltonian action on Theta is non-commutative or non-linear.
+Unlike standard implementations that rely on floating-point LLL, ORISIGN uses a pure integer-based approach. The `quat_ideal_mul` function generates all possible combinations and sorts them by norm, ensuring the resulting basis is as short as possible for the subsequent isogeny evaluation.
 
-[12] NAÏVE PK-ONLY FORGERY ATTEMPT
-   Action              : Attempting to forge signature using PK * qm...
-   Signature Match     : DIFFERENT ✅ (SECURE)
-   Forgery Verification: REJECTED 🛡️ (SECURE)
+### Field Arithmetic (FP)
 
-[13] PERFORMANCE BENCHMARK (10000 ITERATIONS)
+The 5-limb $F_p$ implementation is tuned for the specific prime used in the SQIsign parameters. This reduction in limb count directly translates to fewer carry-chain operations in the inner loops of the isogeny point doubling and addition formulas.
 
-================ FINAL ARCHITECTURE METRICS ==================
-  ➤ Reliability      : 10000/10000 (100.00% Success Rate)
-  ➤ Sign Speed       : 0.0388 ms / op
-  ➤ Verify Speed     : 0.0279 ms / op
-  ➤ Throughput       : 35803 operations/sec
-  ➤ Network Payload  : 226 bytes (Total Wire Size)
-==============================================================
-```
+---
 
-## Installation
+## Getting Started
 
-The main development and testing environment currently uses **OpenBSD-7.8**.
+The core logic is contained within the following headers:
+
+* `int.h`: 6-limb big integer engine.
+* `fp.h`: 5-limb finite field engine.
 
 ```bash
-git clone https://github.com/orichain/orisign.git
-cd orisign
-gmake clean all
+OpenBSD-78
+gmake clean all orisign
 ./orisign
+
 ```
-
-## License
-
-This project is licensed under GNU Affero General Public License - see the [LICENSE](https://github.com/orichain/orisign/blob/main/LICENSE) file for details.
 
 ---
 
