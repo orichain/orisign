@@ -12,7 +12,6 @@
 * **5-Limb FP (320-bit)**: Optimized for finite field operations ($F_{p^2}$). By dropping to 5 limbs for the base field, the implementation achieves significant speedups in the isogeny walks where $F_p$ operations are the primary bottleneck.
 
 
-* **Bonsai-Free Ideal Reduction**: Replaces traditional LLL/Bonsai reduction with a deterministic **Brute-Sort Selection**. It evaluates 16 product candidates and selects the optimal basis, ensuring landing stability without the risk of infinite loops or precision-related oscillations.
 * **Optimized Verification Path**:
 * **248-Step Isogeny Walk**: A robust implementation of the isogeny walk from the commitment to the challenge curve.
 * **Direct-to-PK Signing**: The signing process bypasses redundant ideal multiplications by directly solving for the path to the target public key.

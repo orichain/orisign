@@ -199,18 +199,6 @@ static inline bool sign(signature_t *sig, const uint8_t *msg, const size_t len, 
       break;
     }
   }
-  quaternion_t alpha;
-  int_t klpt_remw;
-  for (;;) {
-    if (int_solve_klpt(&chl, &alpha, &klpt_remw, NULL, NULL)) {
-      break;
-    }
-  }
-  quaternion_ideal_t skchl;
-  if (!quat_alpha_to_left_ideal(&skchl, &alpha, &chl)) {
-    return false;
-  }
-  quaternion_ideal_t skinv, itmp, itarget;
   int_print("TARGET.norm", &sk->norm);
   quat_print("\nTARGET: ", &sk->b[0]);
   for (;;) {
@@ -218,7 +206,7 @@ static inline bool sign(signature_t *sig, const uint8_t *msg, const size_t len, 
       break;
     }
   }
-  //quat_print("SIGMA: ", &sig->sigma.b[0]);
+  quat_print("SIGMA: ", &sig->sigma.b[0]);
   uint8_t hashjaux[2 * FP_BYTES];
   uint8_t hashjpk[2 * FP_BYTES];
   uint8_t hashsigma[17 * INT_BYTES];
