@@ -1,18 +1,42 @@
 #pragma once
-#include <stdbool.h>
 
-#define FPBLOCK 5
-#define INTBLOCK 6
-
-#define DOMAIN_SEP "ORISIGN-CHALENGE-HASH"
-#define HASHES_BYTES 32
-#define TORSION 248
-#define PUSH_STACK_SIZE 64
-
-#define FP_BYTES ((FPBLOCK-1) * 8)
-#define INT_BYTES ((INTBLOCK-1) * 8)
-#define VERSION_BYTES 2
-#define VERSION_MAJ 0x00
-#define VERSION_MIN 0x00
-
-#define ADDR_MAX_BYTES 64
+#define NWORDS_FIELD 5
+#define NWORDS_ORDER 4
+#define BITS 256
+#define WORD_LEN 64
+#define FP_ENCODED_BYTES 32
+#define RADIX 64
+#define LOG2RADIX 6
+#define QUAT_primality_num_iter 32
+#define QUAT_equiv_bound_coeff 64
+#define DELTABAR 0.995
+#define ETABAR 0.505
+#define TORSION_EVEN_POWER 248
+#define ALTERNATE_CONNECTING_IDEALS (CONNECTING_IDEALS+1)
+#define MAXORD_O0 (EXTREMAL_ORDERS->order)
+#define FINDUV_box_size 2
+#define FINDUV_cube_size 624
+#define NUM_ALTERNATE_EXTREMAL_ORDERS 6
+#define HD_extra_torsion 2
+#define QUAT_repres_bound_input 20
+#define CURVE_E0 (CURVES_WITH_ENDOMORPHISMS->curve)
+#define FP2_ZERO 0
+#define FP2_ONE 1
+#define FP2_I 2
+#define FP2_MINUS_ONE 3
+#define FP2_MINUS_I 4
+#define P_COFACTOR_FOR_2F_BITLENGTH 3
+#define PUBLICKEY_BYTES 65
+#define SECRETKEY_BYTES 353
+#define SIGNATURE_BYTES 148
+#define FP2_ENCODED_BYTES 64
+#define TORSION_2POWER_BYTES 32
+#define SQIsign_response_length 126
+#define SECURITY_BITS 128
+#define HASH_ITERATIONS 64
+#define ACTION_J (CURVES_WITH_ENDOMORPHISMS->action_j)
+#define ACTION_GEN2 (CURVES_WITH_ENDOMORPHISMS->action_gen2)
+#define ACTION_GEN3 (CURVES_WITH_ENDOMORPHISMS->action_gen3)
+#define ACTION_GEN4 (CURVES_WITH_ENDOMORPHISMS->action_gen4)
+#define ACTION_I (CURVES_WITH_ENDOMORPHISMS->action_i)
+#define ENABLE_SIGN
