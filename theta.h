@@ -3,144 +3,81 @@
 #include "types.h"
 #include "ec.h"
 
-  static int
-verify_two_torsion(const theta_couple_point_t *K1_2, const theta_couple_point_t *K2_2, const theta_couple_curve_t *E12)
-{
-  // First check if any point in K1_2 or K2_2 is zero, if they are then the points did not have
-  // order 8 when we started gluing
+static inline int verify_two_torsion(const theta_couple_point_t *K1_2, const theta_couple_point_t *K2_2, const theta_couple_curve_t *E12) {
   if (ec_is_zero(&K1_2->P1) | ec_is_zero(&K1_2->P2) | ec_is_zero(&K2_2->P1) | ec_is_zero(&K2_2->P2)) {
     return 0;
   }
-
-  // Now ensure that P1, Q1 and P2, Q2 are independent. For points of order two this means
-  // that they're not the same
   if (ec_is_equal(&K1_2->P1, &K2_2->P1) | ec_is_equal(&K1_2->P2, &K2_2->P2)) {
     return 0;
   }
-
-  // Finally, double points to ensure all points have order exactly 0
   theta_couple_point_t O1, O2;
   double_couple_point(&O1, K1_2, E12);
   double_couple_point(&O2, K2_2, E12);
-  // If this check fails then the points had order 2*f for some f, and the kernel is malformed.
   if (!(ec_is_zero(&O1.P1) & ec_is_zero(&O1.P2) & ec_is_zero(&O2.P1) & ec_is_zero(&O2.P2))) {
     return 0;
   }
-
   return 1;
 }
 
-  static void
-action_by_translation_z_and_det(fp2_t *z_inv, fp2_t *det_inv, const ec_point_t *P4, const ec_point_t *P2)
-{
-  // Store the Z-coordinate to invert
+static inline void action_by_translation_z_and_det(fp2_t *z_inv, fp2_t *det_inv, const ec_point_t *P4, const ec_point_t *P2) {
   fp2_copy(z_inv, &P4->z);
-
-  // Then collect detij = xij wij - uij zij
   fp2_t tmp;
   fp2_mul(det_inv, &P4->x, &P2->z);
   fp2_mul(&tmp, &P4->z, &P2->x);
   fp2_sub(det_inv, det_inv, &tmp);
 }
 
-  static void
-action_by_translation_compute_matrix(translation_matrix_t *G,
-    const ec_point_t *P4,
-    const ec_point_t *P2,
-    const fp2_t *z_inv,
-    const fp2_t *det_inv)
-{
+static inline void action_by_translation_compute_matrix(translation_matrix_t *G, const ec_point_t *P4, const ec_point_t *P2, const fp2_t *z_inv, const fp2_t *det_inv) {
   fp2_t tmp;
-
-  // Gi.g10 = uij xij /detij - xij/zij
   fp2_mul(&tmp, &P4->x, z_inv);
   fp2_mul(&G->g10, &P4->x, &P2->x);
   fp2_mul(&G->g10, &G->g10, det_inv);
   fp2_sub(&G->g10, &G->g10, &tmp);
-
-  // Gi.g11 = uij zij * detij
   fp2_mul(&G->g11, &P2->x, det_inv);
   fp2_mul(&G->g11, &G->g11, &P4->z);
-
-  // Gi.g00 = -Gi.g11
   fp2_neg(&G->g00, &G->g11);
-
-  // Gi.g01 = - wij zij detij
   fp2_mul(&G->g01, &P2->z, det_inv);
   fp2_mul(&G->g01, &G->g01, &P4->z);
   fp2_neg(&G->g01, &G->g01);
 }
 
-  static int
-action_by_translation(translation_matrix_t *Gi,
-    const theta_couple_point_t *K1_4,
-    const theta_couple_point_t *K2_4,
-    const theta_couple_curve_t *E12)
-{
-  // Compute points of order 2 from Ki_4
+static inline int action_by_translation(translation_matrix_t *Gi, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
   theta_couple_point_t K1_2, K2_2;
   double_couple_point(&K1_2, K1_4, E12);
   double_couple_point(&K2_2, K2_4, E12);
-
   if (!verify_two_torsion(&K1_2, &K2_2, E12)) {
     return 0;
   }
-
-  // We need to invert four Z coordinates and
-  // four determinants which we do with batched
-  // inversion
   fp2_t inverses[8];
   action_by_translation_z_and_det(&inverses[0], &inverses[4], &K1_4->P1, &K1_2.P1);
   action_by_translation_z_and_det(&inverses[1], &inverses[5], &K1_4->P2, &K1_2.P2);
   action_by_translation_z_and_det(&inverses[2], &inverses[6], &K2_4->P1, &K2_2.P1);
   action_by_translation_z_and_det(&inverses[3], &inverses[7], &K2_4->P2, &K2_2.P2);
-
   fp2_batched_inv(inverses, 8);
-  if (fp2_is_zero(&inverses[0]))
-    return 0; // something was wrong with our input (which somehow was not caught by
-              // verify_two_torsion)
-
+  if (fp2_is_zero(&inverses[0])) return 0;
   action_by_translation_compute_matrix(&Gi[0], &K1_4->P1, &K1_2.P1, &inverses[0], &inverses[4]);
   action_by_translation_compute_matrix(&Gi[1], &K1_4->P2, &K1_2.P2, &inverses[1], &inverses[5]);
   action_by_translation_compute_matrix(&Gi[2], &K2_4->P1, &K2_2.P1, &inverses[2], &inverses[6]);
   action_by_translation_compute_matrix(&Gi[3], &K2_4->P2, &K2_2.P2, &inverses[3], &inverses[7]);
-
   return 1;
 }
 
-  static int
-gluing_change_of_basis(basis_change_matrix_t *M,
-    const theta_couple_point_t *K1_4,
-    const theta_couple_point_t *K2_4,
-    const theta_couple_curve_t *E12)
-{
-  // Compute the four 2x2 matrices for the action by translation
-  // on the four points:
+static inline int gluing_change_of_basis(basis_change_matrix_t *M, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
   translation_matrix_t Gi[4];
-  if (!action_by_translation(Gi, K1_4, K2_4, E12))
-    return 0;
-
-  // Computation of the 4x4 matrix from Mij
-  // t001, t101 (resp t002, t102) first column of M11 * M21 (resp M12 * M22)
+  if (!action_by_translation(Gi, K1_4, K2_4, E12)) return 0;
   fp2_t t001, t101, t002, t102, tmp;
-
   fp2_mul(&t001, &Gi[0].g00, &Gi[2].g00);
   fp2_mul(&tmp, &Gi[0].g01, &Gi[2].g10);
   fp2_add(&t001, &t001, &tmp);
-
   fp2_mul(&t101, &Gi[0].g10, &Gi[2].g00);
   fp2_mul(&tmp, &Gi[0].g11, &Gi[2].g10);
   fp2_add(&t101, &t101, &tmp);
-
   fp2_mul(&t002, &Gi[1].g00, &Gi[3].g00);
   fp2_mul(&tmp, &Gi[1].g01, &Gi[3].g10);
   fp2_add(&t002, &t002, &tmp);
-
   fp2_mul(&t102, &Gi[1].g10, &Gi[3].g00);
   fp2_mul(&tmp, &Gi[1].g11, &Gi[3].g10);
   fp2_add(&t102, &t102, &tmp);
-
-  // trace for the first row
   fp2_set_one(&M->m[0][0]);
   fp2_mul(&tmp, &t001, &t002);
   fp2_add(&M->m[0][0], &M->m[0][0], &tmp);
@@ -148,278 +85,173 @@ gluing_change_of_basis(basis_change_matrix_t *M,
   fp2_add(&M->m[0][0], &M->m[0][0], &tmp);
   fp2_mul(&tmp, &Gi[0].g00, &Gi[1].g00);
   fp2_add(&M->m[0][0], &M->m[0][0], &tmp);
-
   fp2_mul(&M->m[0][1], &t001, &t102);
   fp2_mul(&tmp, &Gi[2].g00, &Gi[3].g10);
   fp2_add(&M->m[0][1], &M->m[0][1], &tmp);
   fp2_mul(&tmp, &Gi[0].g00, &Gi[1].g10);
   fp2_add(&M->m[0][1], &M->m[0][1], &tmp);
-
   fp2_mul(&M->m[0][2], &t101, &t002);
   fp2_mul(&tmp, &Gi[2].g10, &Gi[3].g00);
   fp2_add(&M->m[0][2], &M->m[0][2], &tmp);
   fp2_mul(&tmp, &Gi[0].g10, &Gi[1].g00);
   fp2_add(&M->m[0][2], &M->m[0][2], &tmp);
-
   fp2_mul(&M->m[0][3], &t101, &t102);
   fp2_mul(&tmp, &Gi[2].g10, &Gi[3].g10);
   fp2_add(&M->m[0][3], &M->m[0][3], &tmp);
   fp2_mul(&tmp, &Gi[0].g10, &Gi[1].g10);
   fp2_add(&M->m[0][3], &M->m[0][3], &tmp);
-
-  // Compute the action of (0,out.K2_4.P2) for the second row
   fp2_mul(&tmp, &Gi[3].g01, &M->m[0][1]);
   fp2_mul(&M->m[1][0], &Gi[3].g00, &M->m[0][0]);
   fp2_add(&M->m[1][0], &M->m[1][0], &tmp);
-
   fp2_mul(&tmp, &Gi[3].g11, &M->m[0][1]);
   fp2_mul(&M->m[1][1], &Gi[3].g10, &M->m[0][0]);
   fp2_add(&M->m[1][1], &M->m[1][1], &tmp);
-
   fp2_mul(&tmp, &Gi[3].g01, &M->m[0][3]);
   fp2_mul(&M->m[1][2], &Gi[3].g00, &M->m[0][2]);
   fp2_add(&M->m[1][2], &M->m[1][2], &tmp);
-
   fp2_mul(&tmp, &Gi[3].g11, &M->m[0][3]);
   fp2_mul(&M->m[1][3], &Gi[3].g10, &M->m[0][2]);
   fp2_add(&M->m[1][3], &M->m[1][3], &tmp);
-
-  // compute the action of (K1_4.P1,0) for the third row
   fp2_mul(&tmp, &Gi[0].g01, &M->m[0][2]);
   fp2_mul(&M->m[2][0], &Gi[0].g00, &M->m[0][0]);
   fp2_add(&M->m[2][0], &M->m[2][0], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g01, &M->m[0][3]);
   fp2_mul(&M->m[2][1], &Gi[0].g00, &M->m[0][1]);
   fp2_add(&M->m[2][1], &M->m[2][1], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g11, &M->m[0][2]);
   fp2_mul(&M->m[2][2], &Gi[0].g10, &M->m[0][0]);
   fp2_add(&M->m[2][2], &M->m[2][2], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g11, &M->m[0][3]);
   fp2_mul(&M->m[2][3], &Gi[0].g10, &M->m[0][1]);
   fp2_add(&M->m[2][3], &M->m[2][3], &tmp);
-
-  // compute the action of (K1_4.P1,K2_4.P2) for the final row
   fp2_mul(&tmp, &Gi[0].g01, &M->m[1][2]);
   fp2_mul(&M->m[3][0], &Gi[0].g00, &M->m[1][0]);
   fp2_add(&M->m[3][0], &M->m[3][0], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g01, &M->m[1][3]);
   fp2_mul(&M->m[3][1], &Gi[0].g00, &M->m[1][1]);
   fp2_add(&M->m[3][1], &M->m[3][1], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g11, &M->m[1][2]);
   fp2_mul(&M->m[3][2], &Gi[0].g10, &M->m[1][0]);
   fp2_add(&M->m[3][2], &M->m[3][2], &tmp);
-
   fp2_mul(&tmp, &Gi[0].g11, &M->m[1][3]);
   fp2_mul(&M->m[3][3], &Gi[0].g10, &M->m[1][1]);
   fp2_add(&M->m[3][3], &M->m[3][3], &tmp);
-
   return 1;
 }
 
-  static void
-apply_isomorphism_general(theta_point_t *res,
-    const basis_change_matrix_t *M,
-    const theta_point_t *P,
-    const bool Pt_not_zero)
-{
+static inline void apply_isomorphism_general(theta_point_t *res, const basis_change_matrix_t *M, const theta_point_t *P, const bool Pt_not_zero) {
   fp2_t x1;
   theta_point_t temp;
-
   fp2_mul(&temp.x, &P->x, &M->m[0][0]);
   fp2_mul(&x1, &P->y, &M->m[0][1]);
   fp2_add(&temp.x, &temp.x, &x1);
   fp2_mul(&x1, &P->z, &M->m[0][2]);
   fp2_add(&temp.x, &temp.x, &x1);
-
   fp2_mul(&temp.y, &P->x, &M->m[1][0]);
   fp2_mul(&x1, &P->y, &M->m[1][1]);
   fp2_add(&temp.y, &temp.y, &x1);
   fp2_mul(&x1, &P->z, &M->m[1][2]);
   fp2_add(&temp.y, &temp.y, &x1);
-
   fp2_mul(&temp.z, &P->x, &M->m[2][0]);
   fp2_mul(&x1, &P->y, &M->m[2][1]);
   fp2_add(&temp.z, &temp.z, &x1);
   fp2_mul(&x1, &P->z, &M->m[2][2]);
   fp2_add(&temp.z, &temp.z, &x1);
-
   fp2_mul(&temp.t, &P->x, &M->m[3][0]);
   fp2_mul(&x1, &P->y, &M->m[3][1]);
   fp2_add(&temp.t, &temp.t, &x1);
   fp2_mul(&x1, &P->z, &M->m[3][2]);
   fp2_add(&temp.t, &temp.t, &x1);
-
   if (Pt_not_zero) {
     fp2_mul(&x1, &P->t, &M->m[0][3]);
     fp2_add(&temp.x, &temp.x, &x1);
-
     fp2_mul(&x1, &P->t, &M->m[1][3]);
     fp2_add(&temp.y, &temp.y, &x1);
-
     fp2_mul(&x1, &P->t, &M->m[2][3]);
     fp2_add(&temp.z, &temp.z, &x1);
-
     fp2_mul(&x1, &P->t, &M->m[3][3]);
     fp2_add(&temp.t, &temp.t, &x1);
   }
-
   fp2_copy(&res->x, &temp.x);
   fp2_copy(&res->y, &temp.y);
   fp2_copy(&res->z, &temp.z);
   fp2_copy(&res->t, &temp.t);
 }
 
-  static void
-apply_isomorphism(theta_point_t *res, const basis_change_matrix_t *M, const theta_point_t *P)
-{
+static inline void apply_isomorphism(theta_point_t *res, const basis_change_matrix_t *M, const theta_point_t *P) {
   apply_isomorphism_general(res, M, P, true);
 }
 
-  static void
-base_change(theta_point_t *out, const theta_gluing_t *phi, const theta_couple_point_t *T)
+static inline void base_change(theta_point_t *out, const theta_gluing_t *phi, const theta_couple_point_t *T) 
 {
   theta_point_t null_point;
-
-  // null_point = (a : b : c : d)
-  // a = P1.x P2.x, b = P1.x P2.z, c = P1.z P2.x, d = P1.z P2.z
   fp2_mul(&null_point.x, &T->P1.x, &T->P2.x);
   fp2_mul(&null_point.y, &T->P1.x, &T->P2.z);
   fp2_mul(&null_point.z, &T->P2.x, &T->P1.z);
   fp2_mul(&null_point.t, &T->P1.z, &T->P2.z);
-
-  // Apply the basis change
   apply_isomorphism(out, &phi->M, &null_point);
 }
 
-  static inline void
-pointwise_square(theta_point_t *out, const theta_point_t *in)
-{
+static inline void pointwise_square(theta_point_t *out, const theta_point_t *in) {
   fp2_sqr(&out->x, &in->x);
   fp2_sqr(&out->y, &in->y);
   fp2_sqr(&out->z, &in->z);
   fp2_sqr(&out->t, &in->t);
 }
 
-  static inline void
-hadamard(theta_point_t *out, const theta_point_t *in)
-{
+static inline void hadamard(theta_point_t *out, const theta_point_t *in) {
   fp2_t t1, t2, t3, t4;
-
-  // t1 = x + y
   fp2_add(&t1, &in->x, &in->y);
-  // t2 = x - y
   fp2_sub(&t2, &in->x, &in->y);
-  // t3 = z + t
   fp2_add(&t3, &in->z, &in->t);
-  // t4 = z - t
   fp2_sub(&t4, &in->z, &in->t);
-
   fp2_add(&out->x, &t1, &t3);
   fp2_add(&out->y, &t2, &t4);
   fp2_sub(&out->z, &t1, &t3);
   fp2_sub(&out->t, &t2, &t4);
 }
 
-  static inline void
-to_squared_theta(theta_point_t *out, const theta_point_t *in)
-{
+static inline void to_squared_theta(theta_point_t *out, const theta_point_t *in) {
   pointwise_square(out, in);
   hadamard(out, out);
 }
 
-  static int
-gluing_compute(theta_gluing_t *out,
-    const theta_couple_curve_t *E12,
-    const theta_couple_jac_point_t *xyK1_8,
-    const theta_couple_jac_point_t *xyK2_8,
-    bool verify)
-{
-  // Ensure that we have been given the eight torsion
-#ifndef NDEBUG
-  {
-    int check = test_jac_order_twof(&xyK1_8->P1, &E12->E1, 3);
-    if (!check)
-      printf("xyK1_8->P1 does not have order 8");
-    check = test_jac_order_twof(&xyK2_8->P1, &E12->E1, 3);
-    if (!check)
-      printf("xyK2_8->P1 does not have order 8");
-    check = test_jac_order_twof(&xyK1_8->P2, &E12->E2, 3);
-    if (!check)
-      printf("xyK2_8->P1 does not have order 8");
-    check = test_jac_order_twof(&xyK2_8->P2, &E12->E2, 3);
-    if (!check)
-      printf("xyK2_8->P2 does not have order 8");
-  }
-#endif
-
+static inline int gluing_compute(theta_gluing_t *out, const theta_couple_curve_t *E12, const theta_couple_jac_point_t *xyK1_8, const theta_couple_jac_point_t *xyK2_8, bool verify) {
   out->xyK1_8 = *xyK1_8;
   out->domain = *E12;
-
-  // Given points in E[8] x E[8] we need the four torsion below
   theta_couple_jac_point_t xyK1_4, xyK2_4;
-
   double_couple_jac_point(&xyK1_4, xyK1_8, E12);
   double_couple_jac_point(&xyK2_4, xyK2_8, E12);
-
-  // Convert from (X:Y:Z) coordinates to (X:Z)
   theta_couple_point_t K1_8, K2_8;
   theta_couple_point_t K1_4, K2_4;
-
   couple_jac_to_xz(&K1_8, xyK1_8);
   couple_jac_to_xz(&K2_8, xyK2_8);
   couple_jac_to_xz(&K1_4, &xyK1_4);
   couple_jac_to_xz(&K2_4, &xyK2_4);
-
-  // Set the basis change matrix, if we have not been given a valid K[8] for this computation
-  // gluing_change_of_basis will detect this and return 0
   if (!gluing_change_of_basis(&out->M, &K1_4, &K2_4, E12)) {
     printf("gluing failed as kernel does not have correct order");
     return 0;
   }
-
-  // apply the base change to the kernel
   theta_point_t TT1, TT2;
-
   base_change(&TT1, out, &K1_8);
   base_change(&TT2, out, &K2_8);
-
-  // compute the codomain
   to_squared_theta(&TT1, &TT1);
   to_squared_theta(&TT2, &TT2);
-
-  // If the kernel is well formed then TT1.t and TT2.t are zero
-  // if they are not, we exit early as the signature we are validating
-  // is probably malformed
   if (!(fp2_is_zero(&TT1.t) & fp2_is_zero(&TT2.t))) {
     printf("gluing failed TT1.t or TT2.t is not zero");
     return 0;
   }
-  // Test our projective factors are non zero
-  if (fp2_is_zero(&TT1.x) | fp2_is_zero(&TT2.x) | fp2_is_zero(&TT1.y) | fp2_is_zero(&TT2.z) | fp2_is_zero(&TT1.z))
-    return 0; // invalid input
-
-  // Projective factor: Ax
+  if (fp2_is_zero(&TT1.x) | fp2_is_zero(&TT2.x) | fp2_is_zero(&TT1.y) | fp2_is_zero(&TT2.z) | fp2_is_zero(&TT1.z)) return 0;
   fp2_mul(&out->codomain.x, &TT1.x, &TT2.x);
   fp2_mul(&out->codomain.y, &TT1.y, &TT2.x);
   fp2_mul(&out->codomain.z, &TT1.x, &TT2.z);
   fp2_set_zero(&out->codomain.t);
-  // Projective factor: ABCxz
   fp2_mul(&out->precomputation.x, &TT1.y, &TT2.z);
   fp2_copy(&out->precomputation.y, &out->codomain.z);
   fp2_copy(&out->precomputation.z, &out->codomain.y);
   fp2_set_zero(&out->precomputation.t);
-
-  // Compute the two components of phi(K1_8) = (x:x:y:y).
   fp2_mul(&out->imageK1_8.x, &TT1.x, &out->precomputation.x);
   fp2_mul(&out->imageK1_8.y, &TT1.z, &out->precomputation.z);
-
-  // If K1_8 and K2_8 are our 8-torsion points, this ensures that the
-  // 4-torsion points [2]K1_8 and [2]K2_8 are isotropic.
   if (verify) {
     fp2_t t1, t2;
     fp2_mul(&t1, &TT1.y, &out->precomputation.y);
@@ -430,8 +262,6 @@ gluing_compute(theta_gluing_t *out,
     if (!fp2_is_equal(&t2, &t1))
       return 0;
   }
-
-  // compute the final codomain
   hadamard(&out->codomain, &out->codomain);
   return 1;
 }

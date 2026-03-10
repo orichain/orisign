@@ -10,15 +10,15 @@
 
 #define ibz_printf gmp_printf
 
-#define ibz_copy_digit_array(I, T)                                                                                     \
-  do {                                                                                                               \
-    ibz_copy_digits((I), (T), sizeof(T) / sizeof(*(T)));                                                           \
+#define ibz_copy_digit_array(I, T) \
+  do { \
+    ibz_copy_digits((I), (T), sizeof(T) / sizeof(*(T))); \
   } while (0)
 
-#define ibz_to_digit_array(T, I)                                                                                       \
-  do {                                                                                                               \
-    memset((T), 0, sizeof(T));                                                                                     \
-    ibz_to_digits((T), (I));                                                                                       \
+#define ibz_to_digit_array(T, I) \
+  do { \
+    memset((T), 0, sizeof(T)); \
+    ibz_to_digits((T), (I)); \
   } while (0)
 
 static inline void ibz_init(ibz_t *x) {

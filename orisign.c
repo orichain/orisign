@@ -1344,6 +1344,7 @@ int main () {
 
   for (int i = 0; i < N; i++) {
     int ret = sqisign_verify(msg, strlen(msg), sig, SIGNATURE_BYTES, pk);
+    printf("ret %d\n", ret);
   }
 
   uint64_t t12 = get_time_monotonic_ns();
