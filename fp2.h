@@ -223,41 +223,34 @@ static inline void fp2_cswap(fp2_t *a, fp2_t *b, uint32_t ctl) {
   fp_cswap(&(a->im), &(b->im), ctl);
 }
 
-  void
-fp2_frob(fp2_t *out, const fp2_t *in)
-{
+static inline void fp2_frob(fp2_t *out, const fp2_t *in) {
   fp_copy(&(out->re), &(in->re));
   fp_neg(&(out->im), &(in->im));
 }
 
-  static bool
-fp2_dlog_2e_rec(uint64_t *a, long len, fp2_t *pows_f, fp2_t *pows_g, long stacklen)
-{
+static inline bool fp2_dlog_2e_rec(uint64_t *a, long len, fp2_t *pows_f, fp2_t *pows_g, long stacklen) {
   if (len == 0) {
-    // *a = 0;
     for (int i = 0; i < NWORDS_ORDER; i++) {
       a[i] = 0;
     }
     return true;
   } else if (len == 1) {
     if (fp2_is_one(&pows_f[stacklen - 1])) {
-      // a = 0;
       for (int i = 0; i < NWORDS_ORDER; i++) {
         a[i] = 0;
       }
       for (int i = 0; i < stacklen - 1; ++i) {
-        fp2_sqr(&pows_g[i], &pows_g[i]); // new_g = g^2
+        fp2_sqr(&pows_g[i], &pows_g[i]);
       }
       return true;
     } else if (fp2_is_equal(&pows_f[stacklen - 1], &pows_g[stacklen - 1])) {
-      // a = 1;
       a[0] = 1;
       for (int i = 1; i < NWORDS_ORDER; i++) {
         a[i] = 0;
       }
       for (int i = 0; i < stacklen - 1; ++i) {
-        fp2_mul(&pows_f[i], &pows_f[i], &pows_g[i]); // new_f = f*g
-        fp2_sqr(&pows_g[i], &pows_g[i]);             // new_g = g^2
+        fp2_mul(&pows_f[i], &pows_f[i], &pows_g[i]);
+        fp2_sqr(&pows_g[i], &pows_g[i]);
       }
       return true;
     } else {
@@ -272,56 +265,40 @@ fp2_dlog_2e_rec(uint64_t *a, long len, fp2_t *pows_f, fp2_t *pows_g, long stackl
       fp2_sqr(&pows_f[stacklen], &pows_f[stacklen]);
       fp2_sqr(&pows_g[stacklen], &pows_g[stacklen]);
     }
-    // uint32_t dlp1 = 0, dlp2 = 0;
     uint64_t dlp1[NWORDS_ORDER], dlp2[NWORDS_ORDER];
     bool ok;
     ok = fp2_dlog_2e_rec(dlp1, right, pows_f, pows_g, stacklen + 1);
-    if (!ok)
-      return false;
+    if (!ok) return false;
     ok = fp2_dlog_2e_rec(dlp2, left, pows_f, pows_g, stacklen);
-    if (!ok)
-      return false;
-    // a = dlp1 + 2^right * dlp2
+    if (!ok) return false;
     multiple_mp_shiftl(dlp2, right, NWORDS_ORDER);
     mp_add(a, dlp2, dlp1, NWORDS_ORDER);
-
     return true;
   }
 }
 
-// compute DLP: compute scal such that f = g^scal with f, 1/g as input
-  static bool
-fp2_dlog_2e(uint64_t *scal, const fp2_t *f, const fp2_t *g_inverse, int e)
-{
+static inline bool fp2_dlog_2e(uint64_t *scal, const fp2_t *f, const fp2_t *g_inverse, int e) {
   long log, len = e;
-  for (log = 0; len > 1; len >>= 1)
-    log++;
+  for (log = 0; len > 1; len >>= 1) log++;
   log += 1;
-
   fp2_t pows_f[log], pows_g[log];
   pows_f[0] = *f;
   pows_g[0] = *g_inverse;
-
   for (int i = 0; i < NWORDS_ORDER; i++) {
     scal[i] = 0;
   }
-
   bool ok = fp2_dlog_2e_rec(scal, e, pows_f, pows_g, 1);
   assert(ok);
-
   return ok;
 }
 
-  static char *
-fp2_to_bytes(char *enc, const fp2_t *x)
-{
+static inline char *fp2_to_bytes(char *enc, const fp2_t *x) {
   fp2_encode(enc, x);
   return enc + FP2_ENCODED_BYTES;
 }
 
-  static const char *
-fp2_from_bytes(fp2_t *x, const char *enc)
-{
+static inline const char *fp2_from_bytes(fp2_t *x, const char *enc) {
   fp2_decode(x, enc);
   return enc + FP2_ENCODED_BYTES;
 }
+

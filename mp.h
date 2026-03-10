@@ -1,6 +1,4 @@
-#ifndef MP_H
-#define MP_H
-
+#pragma once
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -285,4 +283,3 @@ static inline void mp_invert_matrix(uint64_t *r1, uint64_t *r2, uint64_t *s1, ui
   mp_copy(s2, resd, nwords);
 }
 
-#endif
