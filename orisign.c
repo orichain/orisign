@@ -1,24 +1,14 @@
 #include "constants.h"
+#include "utilities.h"
 #include "orisign.h"
 #include <stdint.h>
-#include <time.h>
 
-static inline void print_hex(const char* label, const uint8_t* data, size_t len, int uppercase) {
-  if (label)
-    printf("%s", label);
-
-  const char* fmt = uppercase ? "%02X" : "%02x";
-
-  for (size_t i = 0; i < len; ++i) {
-    printf(fmt, data[i]);
+void print_fp(uint64_t *a) {
+  for (int i=0;i<NWORDS_FIELD;i++) {
+    printf("0x%016llx%s", 
+        (unsigned long long)a[i], 
+        (i == NWORDS_FIELD - 1) ? "" : ", ");
   }
-  printf("\n");
-}
-
-static inline uint64_t get_time_monotonic_ns() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ((uint64_t)ts.tv_sec * 1000000000ULL) + ts.tv_nsec;
 }
 
 int main () {
@@ -37,7 +27,7 @@ int main () {
 
   const char *msg = "Test123";
 
-  const int N = 2;
+  const int N = 100;
 
   uint64_t t0 = get_time_monotonic_ns();
 

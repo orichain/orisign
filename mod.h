@@ -252,7 +252,7 @@ static inline void modpro(const uint64_t *w, uint64_t *z) {
   modmul(z, t0, z);
 }
 
-static inline void modinv(const uint64_t *x, const uint64_t *h, uint64_t *z) {
+static inline void modinv(const char *file_name, int line_num, const uint64_t *x, const uint64_t *h, uint64_t *z) {
   uint64_t s[5];
   uint64_t t[5];
   if (h == NULL) {

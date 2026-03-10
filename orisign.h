@@ -45,8 +45,15 @@ static inline bool commit(ec_curve_t *E_com, ec_basis_t *basis_even_com, quat_le
 static inline void hash_to_challenge(scalar_t *scalar, const public_key_t *pk, const ec_curve_t *com_curve, const unsigned char *message, size_t length) {
   unsigned char buf[2 * FP2_ENCODED_BYTES];
   fp2_t j1, j2;
-  ec_j_inv(&j1, &pk->curve);
-  ec_j_inv(&j2, com_curve);
+  fp2_t v2inv[2];
+  fp2_t av2inv[2];
+  fp2_t t00[2];
+  batched_ec_j_inv(&j1, &pk->curve, v2inv, av2inv, t00, 0);
+  batched_ec_j_inv(&j2, com_curve, v2inv, av2inv, t00, 1);
+  batched_ec_j_inv_apply(&j2, com_curve, v2inv, av2inv, t00, 1);
+  batched_ec_j_inv_apply(&j1, &pk->curve, v2inv, av2inv, t00, 0);
+  //ec_j_inv(&j1, &pk->curve);
+  //ec_j_inv(&j2, com_curve);
   fp2_encode(buf, &j1);
   fp2_encode(buf + FP2_ENCODED_BYTES, &j2);
   shake256incctx ctx;

@@ -34,7 +34,7 @@ static inline void AC_to_A24(ec_point_t *A24, const ec_curve_t *E) {
 }
 
 static inline void ec_normalize_point(ec_point_t *P) {
-  fp2_inv(&P->z);
+  fp2_inv(__FILE__, __LINE__, &P->z);
   fp2_mul(&P->x, &P->x, &P->z);
   fp2_set_one(&(P->z));
 }
@@ -453,7 +453,7 @@ static inline void weil_n(fp2_t *r, const pairing_params_t *pairing_data) {
   monodromy_i(&R0, pairing_data, true);
   monodromy_i(&R1, pairing_data, false);
   fp2_mul(r, &R0.x, &R1.z);
-  fp2_inv(r);
+  fp2_inv(__FILE__, __LINE__, r);
   fp2_mul(r, r, &R0.z);
   fp2_mul(r, r, &R1.x);
 }
@@ -464,7 +464,7 @@ static inline void cubical_normalization(pairing_params_t *pairing_data, const e
   fp2_copy(&t[1], &P->z);
   fp2_copy(&t[2], &Q->x);
   fp2_copy(&t[3], &Q->z);
-  fp2_batched_inv(t, 4);
+  fp2_batched_inv(__FILE__, __LINE__, t, 4);
   fp2_mul(&pairing_data->ixP, &P->z, &t[0]);
   fp2_mul(&pairing_data->ixQ, &Q->z, &t[2]);
   fp2_mul(&pairing_data->P.x, &P->x, &t[1]);
@@ -528,17 +528,57 @@ static inline uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_
   return ret;
 }
 
+static inline void batched_lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, fp2_t *v2inv, fp2_t *av2inv, int index) {
+  if (index == 0) {
+    fp2_copy(&v2inv[0], &B->P.z);
+    fp2_copy(&v2inv[1], &E->C);
+    fp2_copy(&av2inv[0], &v2inv[0]);
+    fp2_mul(&av2inv[1], &av2inv[0], &v2inv[1]);
+  } else {
+    fp2_copy(&v2inv[2], &B->P.z);
+    fp2_copy(&v2inv[3], &E->C);
+    fp2_mul(&av2inv[2], &av2inv[1], &v2inv[2]);
+    fp2_mul(&av2inv[3], &av2inv[2], &v2inv[3]);
+    fp2_inv(__FILE__, __LINE__, &av2inv[3]);
+  }
+  fp2_set_one(&B->P.z);
+  fp2_set_one(&E->C);
+}
+
+static inline void batched_lift_basis_apply(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, fp2_t *v2inv, fp2_t *av2inv, int index) {
+  fp2_t inverse;
+  if (index == 0) {
+    fp2_mul(&inverse, &av2inv[3], &av2inv[0]);
+    fp2_mul(&E->A, &E->A, &inverse);
+    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[1]);
+    fp2_mul(&B->P.x, &B->P.x, &av2inv[3]);
+  } else {
+    fp2_mul(&inverse, &av2inv[3], &av2inv[2]);
+    fp2_mul(&E->A, &E->A, &inverse);
+    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[3]);
+    fp2_mul(&inverse, &av2inv[3], &av2inv[1]);
+    fp2_mul(&B->P.x, &B->P.x, &inverse);
+    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[2]);
+  }
+}
+
+static inline uint32_t batched_lift_basis_check(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E) {
+  return lift_basis_normalized(P, Q, B, E);
+}
+
+/*
 static inline uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E) {
   fp2_t inverses[2];
   fp2_copy(&inverses[0], &B->P.z);
   fp2_copy(&inverses[1], &E->C);
-  fp2_batched_inv(inverses, 2);
+  fp2_batched_inv(__FILE__, __LINE__, inverses, 2);
   fp2_set_one(&B->P.z);
   fp2_set_one(&E->C);
   fp2_mul(&B->P.x, &B->P.x, &inverses[0]);
   fp2_mul(&E->A, &E->A, &inverses[1]);
   return lift_basis_normalized(P, Q, B, E);
 }
+*/
 
 static inline void DBL(jac_point_t *Q, const jac_point_t *P, const ec_curve_t *AC) {
   fp2_t t0, t1, t2, t3;
@@ -735,7 +775,7 @@ static inline void double_couple_point_iter(theta_couple_point_t *out, unsigned 
 }
 
 static inline void ec_normalize_curve(ec_curve_t *E) {
-  fp2_inv(&E->C);
+  fp2_inv(__FILE__, __LINE__, &E->C);
   fp2_mul(&E->A, &E->A, &E->C);
   fp2_set_one(&E->C);
 }
@@ -866,7 +906,7 @@ static inline uint8_t find_nqr_factor(fp2_t *x, ec_curve_t *curve, const uint8_t
     qr_b = 1;
   } while (!found);
   fp2_copy(x, &z);
-  fp2_inv(x);
+  fp2_inv(__FILE__, __LINE__, x);
   fp2_mul(x, x, &curve->A);
   fp2_neg(x, x);
   hint = n <= 128 ? n - 1 : 0;
@@ -990,7 +1030,7 @@ static inline int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *cu
     } else {
       fp_set_one(&P.x.re);
       fp_set_small(&P.x.im, hint_P);
-      fp2_inv(&P.x);
+      fp2_inv(__FILE__, __LINE__, &P.x);
       fp2_mul(&P.x, &P.x, &curve->A);
       fp2_neg(&P.x, &P.x);
     }
@@ -1022,7 +1062,7 @@ static inline void cubical_normalization_dlog(pairing_dlog_params_t *pairing_dlo
   fp2_copy(&t[8], &RS->Q.x);
   fp2_copy(&t[9], &RS->Q.z);
   fp2_copy(&t[10], &curve->C);
-  fp2_batched_inv(t, 11);
+  fp2_batched_inv(__FILE__, __LINE__, t, 11);
   fp2_mul(&pairing_dlog_data->ixP, &PQ->P.z, &t[0]);
   fp2_mul(&PQ->P.x, &PQ->P.x, &t[1]);
   fp2_set_one(&PQ->P.z);
@@ -1171,7 +1211,7 @@ static inline void tate_dlog_partial(uint64_t *r1, uint64_t *r2, uint64_t *s1, u
     fp2_frob(&frob, &w2[i]);
     fp2_mul(&w2[i], &tmp, &frob);
   }
-  fp2_batched_inv(w2, 5);
+  fp2_batched_inv(__FILE__, __LINE__, w2, 5);
   for (int i = 0; i < 5; i++) {
     fp2_mul(&w1[i], &w1[i], &w2[i]);
   }
@@ -1220,7 +1260,7 @@ static inline void ec_dlog_2_tate(uint64_t *r1, uint64_t *r2, uint64_t *s1, uint
 static inline char *proj_to_bytes(char *enc, const fp2_t *x, const fp2_t *z) {
   assert(!fp2_is_zero(z));
   fp2_t tmp = *z;
-  fp2_inv(&tmp);
+  fp2_inv(__FILE__, __LINE__, &tmp);
   fp2_mul(&tmp, x, &tmp);
   enc = fp2_to_bytes(enc, &tmp);
   return enc;
@@ -1241,6 +1281,44 @@ static inline const char *ec_curve_from_bytes(ec_curve_t *curve, const char *enc
   return proj_from_bytes(&curve->A, &curve->C, enc);
 }
 
+static inline void batched_ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve, fp2_t *v2inv, fp2_t *av2inv, fp2_t *t00, int index) {
+  fp2_t t0, t1;
+  fp2_sqr(&t1, &curve->C);
+  fp2_sqr(j_inv, &curve->A);
+  fp2_add(&t0, &t1, &t1);
+  fp2_sub(&t0, j_inv, &t0);
+  fp2_sub(&t0, &t0, &t1);
+  fp2_sub(j_inv, &t0, &t1);
+  fp2_sqr(&t1, &t1);
+  fp2_mul(j_inv, j_inv, &t1);
+  fp2_add(&t0, &t0, &t0);
+  fp2_add(&t0, &t0, &t0);
+  fp2_sqr(&t1, &t0);
+  fp2_mul(&t0, &t0, &t1);
+  fp2_add(&t0, &t0, &t0);
+  fp2_add(&t0, &t0, &t0);
+  fp2_copy(&t00[index], &t0);
+  fp2_copy(&v2inv[index], j_inv);
+  if (index == 0) {
+    fp2_copy(&av2inv[0], &v2inv[0]);
+  } else {
+    fp2_mul(&av2inv[1], &av2inv[0], &v2inv[1]);
+    fp2_inv(__FILE__, __LINE__, &av2inv[1]);
+  }
+}
+
+static inline void batched_ec_j_inv_apply(fp2_t *j_inv, const ec_curve_t *curve, fp2_t *v2inv, fp2_t *av2inv, fp2_t *t00, int index) {
+  fp2_t inverse;
+  if (index == 0) {
+    fp2_mul(j_inv, &t00[index], &av2inv[1]);
+  } else {
+    fp2_mul(&inverse, &av2inv[1], &av2inv[0]);
+    fp2_mul(j_inv, &t00[index], &inverse);
+    fp2_mul(&av2inv[1], &av2inv[1], &v2inv[1]);
+  }
+}
+
+/*
 static inline void ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve) {
   fp2_t t0, t1;
   fp2_sqr(&t1, &curve->C);
@@ -1257,9 +1335,10 @@ static inline void ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve) {
   fp2_mul(&t0, &t0, &t1);
   fp2_add(&t0, &t0, &t0);
   fp2_add(&t0, &t0, &t0);
-  fp2_inv(j_inv);
+  fp2_inv(__FILE__, __LINE__, j_inv);
   fp2_mul(j_inv, &t0, j_inv);
 }
+*/
 
 static inline void ec_biscalar_mul_ibz_vec(ec_point_t *res, const ibz_vec_2_t *scalar_vec, const int f, const ec_basis_t *PQ, const ec_curve_t *curve) {
   uint64_t scalars[2][NWORDS_ORDER];
@@ -1274,7 +1353,7 @@ static inline void xisog_2_singular(ec_kps2_t *kps, ec_point_t *B24, ec_point_t 
   fp2_add(&t0, &A24.x, &A24.x);
   fp2_sub(&t0, &t0, &A24.z);
   fp2_add(&t0, &t0, &t0);
-  fp2_inv(&A24.z);
+  fp2_inv(__FILE__, __LINE__, &A24.z);
   fp2_mul(&t0, &t0, &A24.z);
   fp2_copy(&kps->K.x, &t0);
   fp2_add(&B24->x, &t0, &t0);

@@ -53,7 +53,7 @@ static inline int action_by_translation(translation_matrix_t *Gi, const theta_co
   action_by_translation_z_and_det(&inverses[1], &inverses[5], &K1_4->P2, &K1_2.P2);
   action_by_translation_z_and_det(&inverses[2], &inverses[6], &K2_4->P1, &K2_2.P1);
   action_by_translation_z_and_det(&inverses[3], &inverses[7], &K2_4->P2, &K2_2.P2);
-  fp2_batched_inv(inverses, 8);
+  fp2_batched_inv(__FILE__, __LINE__, inverses, 8);
   if (fp2_is_zero(&inverses[0])) return 0;
   action_by_translation_compute_matrix(&Gi[0], &K1_4->P1, &K1_2.P1, &inverses[0], &inverses[4]);
   action_by_translation_compute_matrix(&Gi[1], &K1_4->P2, &K1_2.P2, &inverses[1], &inverses[5]);
@@ -683,8 +683,17 @@ static inline int _theta_chain_compute_impl(unsigned n, theta_couple_curve_t *E1
   theta_couple_jac_point_t xyT1, xyT2;
   ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
   ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
-  if (!lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1)) return 0;
-  if (!lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2)) return 0;
+
+  fp2_t v2inv[4];
+  fp2_t av2inv[4];
+  batched_lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, v2inv, av2inv, 0);
+  batched_lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, v2inv, av2inv, 1);
+  batched_lift_basis_apply(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, v2inv, av2inv, 1);
+  batched_lift_basis_apply(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, v2inv, av2inv, 0);
+  if (!batched_lift_basis_check(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1)) return 0;
+  if (!batched_lift_basis_check(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2)) return 0;
+  //if (!lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1)) return 0;
+  //if (!lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2)) return 0;
   const unsigned extra = HD_extra_torsion * extra_torsion;
   theta_point_t pts[numP ? numP : 1];
   int space = 1;

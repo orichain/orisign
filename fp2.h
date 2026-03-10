@@ -84,12 +84,12 @@ static inline void fp2_sqr(fp2_t *x, const fp2_t *y) {
   fp_mul(&(x->re), &sum, &diff);
 }
 
-static inline void fp2_inv(fp2_t *x) {
+static inline void fp2_inv(const char *file_name, int line_num, fp2_t *x) {
   fp_t t0, t1;
   fp_sqr(&t0, &(x->re));
   fp_sqr(&t1, &(x->im));
   fp_add(&t0, &t0, &t1);
-  fp_inv(&t0);
+  fp_inv(file_name, line_num, &t0);
   fp_mul(&(x->re), &(x->re), &t0);
   fp_mul(&(x->im), &(x->im), &t0);
   fp_neg(&(x->im), &(x->im));
@@ -149,7 +149,7 @@ static inline void fp2_half(fp2_t *x, const fp2_t *y) {
   fp_half(&(x->im), &(y->im));
 }
 
-static inline void fp2_batched_inv(fp2_t *x, int len) {
+static inline void fp2_batched_inv(const char *file_name, int line_num, fp2_t *x, int len) {
   fp2_t t1[len], t2[len];
   fp2_t inverse;
   fp2_copy(&t1[0], &x[0]);
@@ -157,7 +157,7 @@ static inline void fp2_batched_inv(fp2_t *x, int len) {
     fp2_mul(&t1[i], &t1[i - 1], &x[i]);
   }
   fp2_copy(&inverse, &t1[len - 1]);
-  fp2_inv(&inverse);
+  fp2_inv(file_name, line_num, &inverse);
   fp2_copy(&t2[0], &inverse);
   for (int i = 1; i < len; i++) {
     fp2_mul(&t2[i], &t2[i - 1], &x[len - i]);

@@ -59,8 +59,8 @@ static inline void fp_mul(fp_t *out, const fp_t *a, const fp_t *b) {
   modmul(*a, *b, *out);
 }
 
-static inline void fp_inv(fp_t *x) {
-  modinv(*x, NULL, *x);
+static inline void fp_inv(const char *file_name, int line_num, fp_t *x) {
+  modinv(file_name, line_num, *x, NULL, *x);
 }
 
 static inline uint32_t fp_is_square(const fp_t *a) {
