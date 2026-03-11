@@ -1,6 +1,6 @@
+#include "api.h"
 #include "constants.h"
 #include "utilities.h"
-#include "orisign.h"
 #include <stdint.h>
 
 void print_fp(uint64_t *a) {
@@ -12,18 +12,18 @@ void print_fp(uint64_t *a) {
 }
 
 int main () {
-  unsigned char pk[PUBLICKEY_BYTES];
-  unsigned char sk[SECRETKEY_BYTES];
-  unsigned char pk2[PUBLICKEY_BYTES];
-  unsigned char sk2[SECRETKEY_BYTES];
-  unsigned char sig[SIGNATURE_BYTES];
+  unsigned char pk[CRYPTO_PUBLICKEYBYTES];
+  unsigned char sk[CRYPTO_SECRETKEYBYTES];
+  unsigned char pk2[CRYPTO_PUBLICKEYBYTES];
+  unsigned char sk2[CRYPTO_SECRETKEYBYTES];
+  unsigned char sig[CRYPTO_BYTES];
   unsigned long long siglen;
 
   sqisign_keypair(pk, sk);
   sqisign_keypair(pk2, sk2);
 
-  print_hex("SK: ", sk, SECRETKEY_BYTES, 1);
-  print_hex("PK: ", pk, PUBLICKEY_BYTES, 1);
+  print_hex("SK: ", sk, CRYPTO_SECRETKEYBYTES, 1);
+  print_hex("PK: ", pk, CRYPTO_PUBLICKEYBYTES, 1);
 
   const char *msg = "Test123";
 
@@ -52,7 +52,7 @@ int main () {
   uint64_t t02 = get_time_monotonic_ns();
 
   for (int i = 0; i < N; i++) {
-    int ret = sqisign_verify(msg, strlen(msg), sig, SIGNATURE_BYTES, pk);
+    int ret = sqisign_verify(msg, strlen(msg), sig, CRYPTO_BYTES, pk);
     //printf("ret %d\n", ret);
   }
 

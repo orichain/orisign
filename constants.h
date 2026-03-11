@@ -26,9 +26,6 @@
 #define FP2_MINUS_ONE 3
 #define FP2_MINUS_I 4
 #define P_COFACTOR_FOR_2F_BITLENGTH 3
-#define PUBLICKEY_BYTES 65
-#define SECRETKEY_BYTES 353
-#define SIGNATURE_BYTES 148
 #define FP2_ENCODED_BYTES 64
 #define TORSION_2POWER_BYTES 32
 #define SQIsign_response_length 126
