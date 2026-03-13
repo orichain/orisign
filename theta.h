@@ -41,7 +41,11 @@ static inline void action_by_translation_compute_matrix(translation_matrix_t *G,
   fp2_neg(&G->g01, &G->g01);
 }
 
-static inline int action_by_translation(const char *file_name, int line_num, translation_matrix_t *Gi, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
+static inline int action_by_translation(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    translation_matrix_t *Gi, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
   theta_couple_point_t K1_2, K2_2;
   double_couple_point(&K1_2, K1_4, E12);
   double_couple_point(&K2_2, K2_4, E12);
@@ -53,7 +57,11 @@ static inline int action_by_translation(const char *file_name, int line_num, tra
   action_by_translation_z_and_det(&inverses[1], &inverses[5], &K1_4->P2, &K1_2.P2);
   action_by_translation_z_and_det(&inverses[2], &inverses[6], &K2_4->P1, &K2_2.P1);
   action_by_translation_z_and_det(&inverses[3], &inverses[7], &K2_4->P2, &K2_2.P2);
-  fp2_batched_inv(file_name, line_num, inverses, 8);
+  fp2_batched_inv(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      inverses, 8);
   if (fp2_is_zero(&inverses[0])) return 0;
   action_by_translation_compute_matrix(&Gi[0], &K1_4->P1, &K1_2.P1, &inverses[0], &inverses[4]);
   action_by_translation_compute_matrix(&Gi[1], &K1_4->P2, &K1_2.P2, &inverses[1], &inverses[5]);
@@ -62,9 +70,17 @@ static inline int action_by_translation(const char *file_name, int line_num, tra
   return 1;
 }
 
-static inline int gluing_change_of_basis(const char *file_name, int line_num, basis_change_matrix_t *M, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
+static inline int gluing_change_of_basis(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    basis_change_matrix_t *M, const theta_couple_point_t *K1_4, const theta_couple_point_t *K2_4, const theta_couple_curve_t *E12) {
   translation_matrix_t Gi[4];
-  if (!action_by_translation(file_name, line_num, Gi, K1_4, K2_4, E12)) return 0;
+  if (!action_by_translation(
+#if DEBUG_MODINV
+        file_name, line_num, 
+#endif
+        Gi, K1_4, K2_4, E12)) return 0;
   fp2_t t001, t101, t002, t102, tmp;
   fp2_mul(&t001, &Gi[0].g00, &Gi[2].g00);
   fp2_mul(&tmp, &Gi[0].g01, &Gi[2].g10);
@@ -216,7 +232,11 @@ static inline void to_squared_theta(theta_point_t *out, const theta_point_t *in)
   hadamard(out, out);
 }
 
-static inline int gluing_compute(const char *file_name, int line_num, theta_gluing_t *out, const theta_couple_curve_t *E12, const theta_couple_jac_point_t *xyK1_8, const theta_couple_jac_point_t *xyK2_8, bool verify) {
+static inline int gluing_compute(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    theta_gluing_t *out, const theta_couple_curve_t *E12, const theta_couple_jac_point_t *xyK1_8, const theta_couple_jac_point_t *xyK2_8, bool verify) {
   out->xyK1_8 = *xyK1_8;
   out->domain = *E12;
   theta_couple_jac_point_t xyK1_4, xyK2_4;
@@ -228,7 +248,11 @@ static inline int gluing_compute(const char *file_name, int line_num, theta_glui
   couple_jac_to_xz(&K2_8, xyK2_8);
   couple_jac_to_xz(&K1_4, &xyK1_4);
   couple_jac_to_xz(&K2_4, &xyK2_4);
-  if (!gluing_change_of_basis(file_name, line_num, &out->M, &K1_4, &K2_4, E12)) {
+  if (!gluing_change_of_basis(
+#if DEBUG_MODINV
+        file_name, line_num, 
+#endif
+        &out->M, &K1_4, &K2_4, E12)) {
     printf("gluing failed as kernel does not have correct order");
     return 0;
   }
@@ -678,12 +702,23 @@ static inline int theta_point_to_montgomery_point(theta_couple_point_t *P12, con
   return 1;
 }
 
-static inline int _theta_chain_compute_impl(const char *file_name, int line_num, unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, bool verify, bool randomize) {
+static inline int _theta_chain_compute_impl(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, bool verify, bool randomize) {
   theta_structure_t theta;
   theta_couple_jac_point_t xyT1, xyT2;
   ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
   ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
-  if (!lift_basis(file_name, line_num, &xyT1.P1, &xyT2.P1, &bas1, &E12->E1, &xyT1.P2, &xyT2.P2, &bas2, &E12->E2)) return 0;
+  resu32_2_t lb2;
+  lift_basis_2(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &lb2, &xyT1.P1, &xyT2.P1, &bas1, &E12->E1, &xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
+  if (!lb2.res1) return 0;
+  if (!lb2.res2) return 0;
   const unsigned extra = HD_extra_torsion * extra_torsion;
   theta_point_t pts[numP ? numP : 1];
   int space = 1;
@@ -707,7 +742,11 @@ static inline int _theta_chain_compute_impl(const char *file_name, int line_num,
   theta_point_t thetaQ1[space], thetaQ2[space];
   theta_gluing_t first_step;
   assert(todo[current] == 1);
-  if (!gluing_compute(file_name, line_num, &first_step, E12, &jacQ1[current], &jacQ2[current], verify)) return 0;
+  if (!gluing_compute(
+#if DEBUG_MODINV
+        file_name, line_num, 
+#endif
+        &first_step, E12, &jacQ1[current], &jacQ2[current], verify)) return 0;
   for (unsigned j = 0; j < numP; ++j) {
     assert(ec_is_zero(&P12[j].P1) || ec_is_zero(&P12[j].P2));
     if (!gluing_eval_point_special_case(&pts[j], &P12[j], &first_step)) return 0;
@@ -779,20 +818,56 @@ static inline int _theta_chain_compute_impl(const char *file_name, int line_num,
   return 1;
 }
 
-static inline int theta_chain_compute_and_eval(const char *file_name, int line_num, unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
-  return _theta_chain_compute_impl(file_name, line_num, n, E12, ker, extra_torsion, E34, P12, numP, false, false);
+static inline int theta_chain_compute_and_eval(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
+  return _theta_chain_compute_impl(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      n, E12, ker, extra_torsion, E34, P12, numP, false, false);
 }
 
-static inline int theta_chain_compute_and_eval_randomized(const char *file_name, int line_num, unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
-  return _theta_chain_compute_impl(file_name, line_num, n, E12, ker, extra_torsion, E34, P12, numP, false, true);
+static inline int theta_chain_compute_and_eval_randomized(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
+  return _theta_chain_compute_impl(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      n, E12, ker, extra_torsion, E34, P12, numP, false, true);
 }
 
-static inline int theta_chain_compute_and_eval_verify(const char *file_name, int line_num, unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
-  return _theta_chain_compute_impl(file_name, line_num, n, E12, ker, extra_torsion, E34, P12, numP, true, false);
+static inline int theta_chain_compute_and_eval_verify(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    unsigned n, theta_couple_curve_t *E12, const theta_kernel_couple_points_t *ker, bool extra_torsion, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP) {
+  return _theta_chain_compute_impl(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      n, E12, ker, extra_torsion, E34, P12, numP, true, false);
 }
 
-static inline int test_couple_point_order_twof(const char *file_name, int line_num, const theta_couple_point_t *T, const theta_couple_curve_t *E, int t) {
-  int check_P1 = test_point_order_twof(file_name, line_num, &T->P1, &E->E1, t);
-  int check_P2 = test_point_order_twof(file_name, line_num, &T->P2, &E->E2, t);
+static inline int test_couple_point_order_twof(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    const theta_couple_point_t *T, const theta_couple_curve_t *E, int t) {
+  int check_P1 = test_point_order_twof(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &T->P1, &E->E1, t);
+  int check_P2 = test_point_order_twof(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &T->P2, &E->E2, t);
   return check_P1 & check_P2;
 }

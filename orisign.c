@@ -22,16 +22,19 @@ int main () {
   sqisign_keypair(pk, sk);
   sqisign_keypair(pk2, sk2);
 
-  print_hex("SK: ", sk, CRYPTO_SECRETKEYBYTES, 1);
-  print_hex("PK: ", pk, CRYPTO_PUBLICKEYBYTES, 1);
+  print_hex("SK : ", sk, CRYPTO_SECRETKEYBYTES, 1);
+  print_hex("PK : ", pk, CRYPTO_PUBLICKEYBYTES, 1);
 
   const char *msg = "Test123";
-
+#if DEBUG_MODINV
+  const int N = 1;
+#else
   const int N = 100;
+#endif
   int ctr;
-
+#if DEBUG_MODINV
   printf("\n=== SIGN START ===\n");
-
+#endif
   uint64_t t0 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {
@@ -40,6 +43,8 @@ int main () {
   }
 
   uint64_t t1 = get_time_monotonic_ns();
+
+  print_hex("SIG: ", sig, CRYPTO_BYTES, 1);
 
   uint64_t total_ns = t1 - t0;
 
@@ -52,9 +57,9 @@ int main () {
   printf("Avg per sign   : %.3f us\n", per_sign_us);
   printf("Sign per sec   : %.2f ops/sec\n", sign_per_sec);
   printf("Success        : %d/%d\n", ctr, N);
-
+#if DEBUG_MODINV
   printf("\n=== VRF START ===\n");
-
+#endif
   uint64_t t02 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {

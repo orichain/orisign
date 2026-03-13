@@ -262,3 +262,15 @@ typedef struct {
   fp2_t Nz;
   fp2_t D;
 } ec_isom_t;
+
+typedef struct {
+  uint32_t res1;
+  uint32_t res2;
+} resu32_2_t;
+
+typedef struct {
+  uint32_t res1;
+  uint32_t res2;
+  uint32_t res3;
+} resu32_3_t;
+

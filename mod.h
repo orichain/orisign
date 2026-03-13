@@ -1,8 +1,12 @@
 #pragma once
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/_null.h>
+#include "constants.h"
+
+#if DEBUG_MODINV
+#include <stdio.h>
+#endif
 
 static inline uint64_t prop_old(uint64_t *n) {
   int i;
@@ -433,8 +437,14 @@ static inline void modpro_old(const uint64_t *w, uint64_t *z) {
   modmul(z, t0, z);
 }
 
-static inline void modinv(const char *file_name, int line_num, const uint64_t *x, const uint64_t *h, uint64_t *z) {
-  //printf("modinv called %s:%d\n", file_name, line_num);
+static inline void modinv(
+#if DEBUG_MODINV
+    const char *file_name, int line_num, 
+#endif
+    const uint64_t *x, const uint64_t *h, uint64_t *z) {
+#if DEBUG_MODINV
+  printf("modinv called %s:%d\n", file_name, line_num);
+#endif
   uint64_t s[5];
   uint64_t t[5];
   if (h == NULL) {
@@ -543,20 +553,18 @@ static inline int modqr(const uint64_t *h, const uint64_t *x) {
 }
 
 static inline void modcmv(int b, const uint64_t *g, uint64_t *f) {
-    uint64_t mask = -(uint64_t)(b & 1);
-
-    for (int i = 0; i < 5; i++)
-        f[i] ^= mask & (f[i] ^ g[i]);
+  uint64_t mask = -(uint64_t)(b & 1);
+  for (int i = 0; i < 5; i++)
+    f[i] ^= mask & (f[i] ^ g[i]);
 }
 
 static inline void modcsw(int b, uint64_t *g, uint64_t *f) {
-    uint64_t mask = -(uint64_t)(b & 1);
-
-    for (int i = 0; i < 5; i++) {
-        uint64_t t = mask & (f[i] ^ g[i]);
-        f[i] ^= t;
-        g[i] ^= t;
-    }
+  uint64_t mask = -(uint64_t)(b & 1);
+  for (int i = 0; i < 5; i++) {
+    uint64_t t = mask & (f[i] ^ g[i]);
+    f[i] ^= t;
+    g[i] ^= t;
+  }
 }
 
 static inline void modcmv_old(int b, const uint64_t *g, volatile uint64_t *f) {
