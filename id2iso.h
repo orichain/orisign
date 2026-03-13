@@ -355,7 +355,7 @@ static inline int find_uv(ibz_t *u, ibz_t *v, quat_alg_elem_t *beta1, quat_alg_e
   return found;
 }
 
-static inline int matrix_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, ibz_mat_2x2_t *mat, int f) {
+static inline int matrix_application_even_basis(const char *file_name, int line_num, ec_basis_t *bas, const ec_curve_t *E, ibz_mat_2x2_t *mat, int f) {
   uint64_t scalars[2][NWORDS_ORDER] = { 0 };
   int ret;
   ibz_t tmp, pow_two;
@@ -370,23 +370,23 @@ static inline int matrix_application_even_basis(ec_basis_t *bas, const ec_curve_
   ibz_mod(&(*mat)[1][1], &(*mat)[1][1], &pow_two);
   ibz_to_digit_array(scalars[0], &(*mat)[0][0]);
   ibz_to_digit_array(scalars[1], &(*mat)[1][0]);
-  ec_biscalar_mul(&bas->P, scalars[0], scalars[1], f, &tmp_bas, E);
+  ec_biscalar_mul(file_name, line_num, &bas->P, scalars[0], scalars[1], f, &tmp_bas, E);
   ibz_to_digit_array(scalars[0], &(*mat)[0][1]);
   ibz_to_digit_array(scalars[1], &(*mat)[1][1]);
-  ec_biscalar_mul(&bas->Q, scalars[0], scalars[1], f, &tmp_bas, E);
+  ec_biscalar_mul(file_name, line_num, &bas->Q, scalars[0], scalars[1], f, &tmp_bas, E);
   ibz_sub(&tmp, &(*mat)[0][0], &(*mat)[0][1]);
   ibz_mod(&tmp, &tmp, &pow_two);
   ibz_to_digit_array(scalars[0], &tmp);
   ibz_sub(&tmp, &(*mat)[1][0], &(*mat)[1][1]);
   ibz_mod(&tmp, &tmp, &pow_two);
   ibz_to_digit_array(scalars[1], &tmp);
-  ret = ec_biscalar_mul(&bas->PmQ, scalars[0], scalars[1], f, &tmp_bas, E);
+  ret = ec_biscalar_mul(file_name, line_num, &bas->PmQ, scalars[0], scalars[1], f, &tmp_bas, E);
   ibz_finalize(&tmp);
   ibz_finalize(&pow_two);
   return ret;
 }
 
-static inline void endomorphism_application_even_basis(ec_basis_t *bas, const int index_alternate_curve, const ec_curve_t *E, const quat_alg_elem_t *theta, int f) {
+static inline void endomorphism_application_even_basis(const char *file_name, int line_num, ec_basis_t *bas, const int index_alternate_curve, const ec_curve_t *E, const quat_alg_elem_t *theta, int f) {
   ibz_t tmp;
   ibz_init(&tmp);
   ibz_vec_4_t coeffs;
@@ -413,20 +413,20 @@ static inline void endomorphism_application_even_basis(ec_basis_t *bas, const in
       ibz_mul(&mat[i][j], &mat[i][j], &content);
     }
   }
-  matrix_application_even_basis(bas, E, &mat, f);
+  matrix_application_even_basis(file_name, line_num, bas, E, &mat, f);
   ibz_vec_4_finalize(&coeffs);
   ibz_mat_2x2_finalize(&mat);
   ibz_finalize(&content);
   ibz_finalize(&tmp);
 }
 
-static inline int _fixed_degree_isogeny_impl(quat_left_ideal_t *lideal, const ibz_t *u, bool small, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, const int index_alternate_order) {
+static inline int _fixed_degree_isogeny_impl(const char *file_name, int line_num, quat_left_ideal_t *lideal, const ibz_t *u, bool small, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, const int index_alternate_order) {
   int ret;
   ibz_t two_pow, tmp;
   quat_alg_elem_t theta;
   ec_curve_t E0;
   copy_curve(&E0, &CURVES_WITH_ENDOMORPHISMS[index_alternate_order].curve);
-  ec_curve_normalize_A24(&E0);
+  ec_curve_normalize_A24(file_name, line_num, &E0);
   unsigned length;
   int u_bitsize = ibz_bitsize(u);
   if (!small) {
@@ -479,9 +479,9 @@ static inline int _fixed_degree_isogeny_impl(quat_left_ideal_t *lideal, const ib
   quat_lattice_finalize(&order_hnf.order);
   ec_basis_t B0_two;
   copy_basis(&B0_two, &CURVES_WITH_ENDOMORPHISMS[index_alternate_order].basis_even);
-  assert(test_basis_order_twof(&B0_two, &E0, TORSION_EVEN_POWER));
-  ec_dbl_iter_basis(&B0_two, TORSION_EVEN_POWER - length - HD_extra_torsion, &B0_two, &E0);
-  assert(test_basis_order_twof(&B0_two, &E0, length + HD_extra_torsion));
+  assert(test_basis_order_twof(file_name, line_num, &B0_two, &E0, TORSION_EVEN_POWER));
+  ec_dbl_iter_basis(file_name, line_num, &B0_two, TORSION_EVEN_POWER - length - HD_extra_torsion, &B0_two, &E0);
+  assert(test_basis_order_twof(file_name, line_num, &B0_two, &E0, length + HD_extra_torsion));
   theta_couple_point_t T1;
   theta_couple_point_t T2, T1m2;
   copy_point(&T1.P1, &B0_two.P);
@@ -498,14 +498,14 @@ static inline int _fixed_degree_isogeny_impl(quat_left_ideal_t *lideal, const ib
   ibz_mul(&theta.coord[3], &theta.coord[3], &tmp);
   ec_basis_t B0_two_theta;
   copy_basis(&B0_two_theta, &B0_two);
-  endomorphism_application_even_basis(&B0_two_theta, index_alternate_order, &E0, &theta, length + HD_extra_torsion);
-  assert(test_basis_order_twof(&B0_two_theta, &E0, length + HD_extra_torsion));
+  endomorphism_application_even_basis(file_name, line_num, &B0_two_theta, index_alternate_order, &E0, &theta, length + HD_extra_torsion);
+  assert(test_basis_order_twof(file_name, line_num, &B0_two_theta, &E0, length + HD_extra_torsion));
   theta_couple_curve_t E00;
   E00.E1 = E0;
   E00.E2 = E0;
   theta_kernel_couple_points_t dim_two_ker;
   copy_bases_to_kernel(&dim_two_ker, &B0_two, &B0_two_theta);
-  ret = theta_chain_compute_and_eval(length, &E00, &dim_two_ker, true, E34, P12, numP);
+  ret = theta_chain_compute_and_eval(file_name, line_num, length, &E00, &dim_two_ker, true, E34, P12, numP);
   if (!ret) goto cleanup;
   assert(length);
   ret = (int)length;
@@ -516,11 +516,11 @@ cleanup:
   return ret;
 }
 
-static inline int fixed_degree_isogeny_and_eval(quat_left_ideal_t *lideal, const ibz_t *u, bool small, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, const int index_alternate_order) {
-  return _fixed_degree_isogeny_impl(lideal, u, small, E34, P12, numP, index_alternate_order);
+static inline int fixed_degree_isogeny_and_eval(const char *file_name, int line_num, quat_left_ideal_t *lideal, const ibz_t *u, bool small, theta_couple_curve_t *E34, theta_couple_point_t *P12, size_t numP, const int index_alternate_order) {
+  return _fixed_degree_isogeny_impl(file_name, line_num, lideal, u, small, E34, P12, numP, index_alternate_order);
 }
 
-static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, quat_alg_elem_t *beta2, ibz_t *u, ibz_t *v, ibz_t *d1, ibz_t *d2, ec_curve_t *codomain, ec_basis_t *basis, const quat_left_ideal_t *lideal, const quat_alg_t *Bpoo) {
+static inline int dim2id2iso_ideal_to_isogeny_clapotis(const char *file_name, int line_num, quat_alg_elem_t *beta1, quat_alg_elem_t *beta2, ibz_t *u, ibz_t *v, ibz_t *d1, ibz_t *d2, ec_curve_t *codomain, ec_basis_t *basis, const quat_left_ideal_t *lideal, const quat_alg_t *Bpoo) {
   ibz_t target, tmp, two_pow;
   quat_alg_elem_t theta;
   ibz_t norm_d;
@@ -578,12 +578,12 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   pushed_points[0] = P;
   pushed_points[1] = Q;
   pushed_points[2] = PmQ;
-  ret = fixed_degree_isogeny_and_eval(&idealu, u, true, &Fu_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points), index_order1);
+  ret = fixed_degree_isogeny_and_eval(file_name, line_num, &idealu, u, true, &Fu_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points), index_order1);
   if (!ret) {
     goto cleanup;
   }
-  assert(test_point_order_twof(&V1->P1, &Fu_codomain.E1, TORSION_EVEN_POWER));
-  assert(test_point_order_twof(&V1->P2, &Fu_codomain.E2, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &V1->P1, &Fu_codomain.E1, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &V1->P2, &Fu_codomain.E2, TORSION_EVEN_POWER));
   copy_point(&bas_u.P, &V1->P1);
   copy_point(&bas_u.Q, &V2->P1);
   copy_point(&bas_u.PmQ, &V1m2->P1);
@@ -597,12 +597,12 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   pushed_points[0] = P;
   pushed_points[1] = Q;
   pushed_points[2] = PmQ;
-  ret = fixed_degree_isogeny_and_eval(&idealv, v, true, &Fv_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points), index_order2);
+  ret = fixed_degree_isogeny_and_eval(file_name, line_num, &idealv, v, true, &Fv_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points), index_order2);
   if (!ret) {
     goto cleanup;
   }
-  assert(test_point_order_twof(&V1->P1, &Fv_codomain.E1, TORSION_EVEN_POWER));
-  assert(test_point_order_twof(&V1->P2, &Fv_codomain.E2, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &V1->P1, &Fv_codomain.E1, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &V1->P2, &Fv_codomain.E2, TORSION_EVEN_POWER));
   copy_point(&bas2.P, &V1->P1);
   copy_point(&bas2.Q, &V2->P1);
   copy_point(&bas2.PmQ, &V1m2->P1);
@@ -616,8 +616,8 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   ibz_mul(&theta.coord[1], &theta.coord[1], &tmp);
   ibz_mul(&theta.coord[2], &theta.coord[2], &tmp);
   ibz_mul(&theta.coord[3], &theta.coord[3], &tmp);
-  endomorphism_application_even_basis(&bas2, 0, &Fv_codomain.E1, &theta, TORSION_EVEN_POWER);
-  assert(test_basis_order_twof(&bas2, &Fv_codomain.E1, TORSION_EVEN_POWER));
+  endomorphism_application_even_basis(file_name, line_num, &bas2, 0, &Fv_codomain.E1, &theta, TORSION_EVEN_POWER);
+  assert(test_basis_order_twof(file_name, line_num, &bas2, &Fv_codomain.E1, TORSION_EVEN_POWER));
   copy_point(&ker.T1.P2, &bas2.P);
   copy_point(&ker.T2.P2, &bas2.Q);
   copy_point(&ker.T1m2.P2, &bas2.PmQ);
@@ -627,10 +627,10 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   double_couple_point_iter(&ker.T1, TORSION_EVEN_POWER - exp, &ker.T1, &E01);
   double_couple_point_iter(&ker.T2, TORSION_EVEN_POWER - exp, &ker.T2, &E01);
   double_couple_point_iter(&ker.T1m2, TORSION_EVEN_POWER - exp, &ker.T1m2, &E01);
-  assert(test_point_order_twof(&ker.T1.P1, &E01.E1, exp));
-  assert(test_point_order_twof(&ker.T1m2.P2, &E01.E2, exp));
+  assert(test_point_order_twof(file_name, line_num, &ker.T1.P1, &E01.E1, exp));
+  assert(test_point_order_twof(file_name, line_num, &ker.T1m2.P2, &E01.E2, exp));
   assert(ibz_is_odd(u));
-  assert(test_basis_order_twof(&bas_u, &E01.E1, TORSION_EVEN_POWER));
+  assert(test_basis_order_twof(file_name, line_num, &bas_u, &E01.E1, TORSION_EVEN_POWER));
   copy_point(&pushed_points[0].P1, &bas_u.P);
   copy_point(&pushed_points[2].P1, &bas_u.PmQ);
   copy_point(&pushed_points[1].P1, &bas_u.Q);
@@ -638,7 +638,7 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   ec_point_init(&pushed_points[1].P2);
   ec_point_init(&pushed_points[2].P2);
   theta_couple_curve_t theta_codomain;
-  ret = theta_chain_compute_and_eval_randomized(exp, &E01, &ker, false, &theta_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points));
+  ret = theta_chain_compute_and_eval_randomized(file_name, line_num, exp, &E01, &ker, false, &theta_codomain, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points));
   if (!ret) {
     goto cleanup;
   }
@@ -646,16 +646,16 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   T1 = pushed_points[0];
   T2 = pushed_points[1];
   T1m2 = pushed_points[2];
-  assert(test_point_order_twof(&T1.P2, &theta_codomain.E2, TORSION_EVEN_POWER));
-  assert(test_point_order_twof(&T1.P1, &theta_codomain.E1, TORSION_EVEN_POWER));
-  assert(test_point_order_twof(&T1m2.P2, &theta_codomain.E2, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &T1.P2, &theta_codomain.E2, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &T1.P1, &theta_codomain.E1, TORSION_EVEN_POWER));
+  assert(test_point_order_twof(file_name, line_num, &T1m2.P2, &theta_codomain.E2, TORSION_EVEN_POWER));
   copy_point(&basis->P, &T1.P1);
   copy_point(&basis->Q, &T2.P1);
   copy_point(&basis->PmQ, &T1m2.P1);
   copy_curve(codomain, &theta_codomain.E1);
   fp2_t w0, w1;
-  weil(&w0, TORSION_EVEN_POWER, &bas1.P, &bas1.Q, &bas1.PmQ, &E1);
-  weil(&w1, TORSION_EVEN_POWER, &basis->P, &basis->Q, &basis->PmQ, codomain);
+  weil(file_name, line_num, &w0, TORSION_EVEN_POWER, &bas1.P, &bas1.Q, &bas1.PmQ, &E1);
+  weil(file_name, line_num, &w1, TORSION_EVEN_POWER, &basis->P, &basis->Q, &basis->PmQ, codomain);
   uint64_t digit_d[NWORDS_ORDER] = { 0 };
   ibz_mul(&tmp, d1, u);
   ibz_mul(&tmp, &tmp, u);
@@ -678,7 +678,7 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(quat_alg_elem_t *beta1, q
   ibz_mul(&beta1->coord[1], &beta1->coord[1], &tmp);
   ibz_mul(&beta1->coord[2], &beta1->coord[2], &tmp);
   ibz_mul(&beta1->coord[3], &beta1->coord[3], &tmp);
-  endomorphism_application_even_basis(basis, 0, codomain, beta1, TORSION_EVEN_POWER);
+  endomorphism_application_even_basis(file_name, line_num, basis, 0, codomain, beta1, TORSION_EVEN_POWER);
 cleanup:
   ibz_finalize(&norm_d);
   ibz_finalize(&test1);
@@ -690,7 +690,7 @@ cleanup:
   return ret;
 }
 
-static inline int dim2id2iso_arbitrary_isogeny_evaluation(ec_basis_t *basis, ec_curve_t *codomain, const quat_left_ideal_t *lideal) {
+static inline int dim2id2iso_arbitrary_isogeny_evaluation(const char *file_name, int line_num, ec_basis_t *basis, ec_curve_t *codomain, const quat_left_ideal_t *lideal) {
   int ret;
   quat_alg_elem_t beta1, beta2;
   ibz_t u, v, d1, d2;
@@ -700,7 +700,7 @@ static inline int dim2id2iso_arbitrary_isogeny_evaluation(ec_basis_t *basis, ec_
   ibz_init(&v);
   ibz_init(&d1);
   ibz_init(&d2);
-  ret = dim2id2iso_ideal_to_isogeny_clapotis(&beta1, &beta2, &u, &v, &d1, &d2, codomain, basis, lideal, &QUATALG_PINFTY);
+  ret = dim2id2iso_ideal_to_isogeny_clapotis(file_name, line_num, &beta1, &beta2, &u, &v, &d1, &d2, codomain, basis, lideal, &QUATALG_PINFTY);
   quat_alg_elem_finalize(&beta1);
   quat_alg_elem_finalize(&beta2);
   ibz_finalize(&u);
@@ -710,13 +710,13 @@ static inline int dim2id2iso_arbitrary_isogeny_evaluation(ec_basis_t *basis, ec_
   return ret;
 }
 
-static inline void _change_of_basis_matrix_tate(ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f, bool invert) {
+static inline void _change_of_basis_matrix_tate(const char *file_name, int line_num, ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f, bool invert) {
   uint64_t x1[NWORDS_ORDER] = { 0 }, x2[NWORDS_ORDER] = { 0 }, x3[NWORDS_ORDER] = { 0 }, x4[NWORDS_ORDER] = { 0 };
   if (invert) {
-    ec_dlog_2_tate(x1, x2, x3, x4, B1, B2, E, f);
+    ec_dlog_2_tate(file_name, line_num, x1, x2, x3, x4, B1, B2, E, f);
     mp_invert_matrix(x1, x2, x3, x4, f, NWORDS_ORDER);
   } else {
-    ec_dlog_2_tate(x1, x2, x3, x4, B2, B1, E, f);
+    ec_dlog_2_tate(file_name, line_num, x1, x2, x3, x4, B2, B1, E, f);
   }
   ibz_copy_digit_array(&((*mat)[0][0]), x1);
   ibz_copy_digit_array(&((*mat)[1][0]), x2);
@@ -724,12 +724,12 @@ static inline void _change_of_basis_matrix_tate(ibz_mat_2x2_t *mat, const ec_bas
   ibz_copy_digit_array(&((*mat)[1][1]), x4);
 }
 
-static inline void change_of_basis_matrix_tate(ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f) {
-  _change_of_basis_matrix_tate(mat, B1, B2, E, f, false);
+static inline void change_of_basis_matrix_tate(const char *file_name, int line_num, ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f) {
+  _change_of_basis_matrix_tate(file_name, line_num, mat, B1, B2, E, f, false);
 }
 
-static inline void change_of_basis_matrix_tate_invert(ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f) {
-  _change_of_basis_matrix_tate(mat, B1, B2, E, f, true);
+static inline void change_of_basis_matrix_tate_invert(const char *file_name, int line_num, ibz_mat_2x2_t *mat, const ec_basis_t *B1, const ec_basis_t *B2, ec_curve_t *E, int f) {
+  _change_of_basis_matrix_tate(file_name, line_num, mat, B1, B2, E, f, true);
 }
 
 static inline void id2iso_kernel_dlogs_to_ideal_even(quat_left_ideal_t *lideal, const ibz_vec_2_t *vec2, int f) {

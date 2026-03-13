@@ -33,19 +33,51 @@ static inline void AC_to_A24(ec_point_t *A24, const ec_curve_t *E) {
   fp2_add(&A24->z, &A24->z, &A24->z);
 }
 
-static inline void ec_normalize_point(ec_point_t *P) {
-  fp2_inv(__FILE__, __LINE__, &P->z);
+static inline void ec_normalize_point(const char *file_name, int line_num, ec_point_t *P) {
+  fp2_inv(file_name, line_num, &P->z);
   fp2_mul(&P->x, &P->x, &P->z);
   fp2_set_one(&(P->z));
 }
 
-static inline void ec_curve_normalize_A24(ec_curve_t *E) {
+static inline void ec_normalize_point_2(const char *file_name, int line_num, ec_point_t *P1, ec_point_t *P2) {
+  fp2_t inverses[2];
+  fp2_copy(&inverses[0], &P1->z);
+  fp2_copy(&inverses[1], &P2->z);
+  fp2_batched_inv(file_name, line_num, inverses, 2);
+  fp2_mul(&P1->x, &P1->x, &inverses[0]);
+  fp2_mul(&P2->x, &P2->x, &inverses[1]);
+  fp2_set_one(&(P1->z));
+  fp2_set_one(&(P2->z));
+}
+
+static inline void ec_curve_normalize_A24(const char *file_name, int line_num, ec_curve_t *E) {
   if (!E->is_A24_computed_and_normalized) {
     AC_to_A24(&E->A24, E);
-    ec_normalize_point(&E->A24);
+    ec_normalize_point(file_name, line_num, &E->A24);
     E->is_A24_computed_and_normalized = true;
   }
   assert(fp2_is_one(&E->A24.z));
+}
+
+static inline void ec_curve_normalize_A24_2(const char *file_name, int line_num, ec_curve_t *E1, ec_curve_t *E2) {
+  if (!E1->is_A24_computed_and_normalized && !E2->is_A24_computed_and_normalized) {
+    AC_to_A24(&E1->A24, E1);
+    AC_to_A24(&E2->A24, E2);
+    ec_normalize_point_2(file_name, line_num, &E1->A24, &E2->A24);
+  } else {
+    if (!E1->is_A24_computed_and_normalized) {
+      AC_to_A24(&E1->A24, E1);
+      ec_normalize_point(file_name, line_num, &E1->A24);
+      E1->is_A24_computed_and_normalized = true;
+    }
+    if (!E2->is_A24_computed_and_normalized) {
+      AC_to_A24(&E2->A24, E2);
+      ec_normalize_point(file_name, line_num, &E2->A24);
+      E2->is_A24_computed_and_normalized = true;
+    }
+  }
+  assert(fp2_is_one(&E1->A24.z));
+  assert(fp2_is_one(&E2->A24.z));
 }
 
 static inline void copy_basis(ec_basis_t *B1, const ec_basis_t *B0) {
@@ -96,33 +128,95 @@ static inline void xDBL_A24(ec_point_t *Q, const ec_point_t *P, const ec_point_t
   fp2_mul(&Q->z, &t0, &t2);
 }
 
-static inline void ec_dbl_iter(ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve) {
+static inline void ec_dbl_iter(const char *file_name, int line_num, ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve) {
   if (n == 0) {
     copy_point(res, P);
-    return;
-  }
-  if (n > 50) {
-    ec_curve_normalize_A24(curve);
-  }
-  if (curve->is_A24_computed_and_normalized) {
-    assert(fp2_is_one(&curve->A24.z));
-    xDBL_A24(res, P, &curve->A24, true);
-    for (int i = 0; i < n - 1; i++) {
-      assert(fp2_is_one(&curve->A24.z));
-      xDBL_A24(res, res, &curve->A24, true);
-    }
   } else {
-    xDBL(res, P, (const ec_point_t *)curve);
-    for (int i = 0; i < n - 1; i++) {
-      xDBL(res, res, (const ec_point_t *)curve);
+    if (n > 50) {
+      ec_curve_normalize_A24(file_name, line_num, curve);
+    }
+    if (curve->is_A24_computed_and_normalized) {
+      assert(fp2_is_one(&curve->A24.z));
+      xDBL_A24(res, P, &curve->A24, true);
+      for (int i = 0; i < n - 1; i++) {
+        assert(fp2_is_one(&curve->A24.z));
+        xDBL_A24(res, res, &curve->A24, true);
+      }
+    } else {
+      xDBL(res, P, (const ec_point_t *)curve);
+      for (int i = 0; i < n - 1; i++) {
+        xDBL(res, res, (const ec_point_t *)curve);
+      }
     }
   }
 }
 
-static inline void ec_dbl_iter_basis(ec_basis_t *res, int n, const ec_basis_t *B, ec_curve_t *curve) {
-  ec_dbl_iter(&res->P, n, &B->P, curve);
-  ec_dbl_iter(&res->Q, n, &B->Q, curve);
-  ec_dbl_iter(&res->PmQ, n, &B->PmQ, curve);
+static inline void ec_dbl_iter_2(const char *file_name, int line_num, ec_point_t *res1, int n1, const ec_point_t *P1, ec_curve_t *curve1, ec_point_t *res2, int n2, const ec_point_t *P2, ec_curve_t *curve2) {
+  if (n1 == 0 && n2 == 0) {
+    copy_point(res1, P1);
+    copy_point(res2, P2);
+  } else {
+    if (n1 > 50 && n2 > 50) {
+      ec_curve_normalize_A24_2(file_name, line_num, curve1, curve2);
+    } else {
+      if (n1 == 0) {
+        copy_point(res1, P1);
+      } else {
+        if (n1 > 50) {
+          ec_curve_normalize_A24(file_name, line_num, curve1);
+        }
+      }
+      if (n2 == 0) {
+        copy_point(res2, P2);
+      } else {
+        if (n2 > 50) {
+          ec_curve_normalize_A24(file_name, line_num, curve2);
+        }
+      }
+    }
+    if (n1 != 0) {
+      if (curve1->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve1->A24.z));
+        xDBL_A24(res1, P1, &curve1->A24, true);
+        for (int i = 0; i < n1 - 1; i++) {
+          assert(fp2_is_one(&curve1->A24.z));
+          xDBL_A24(res1, res1, &curve1->A24, true);
+        }
+      } else {
+        xDBL(res1, P1, (const ec_point_t *)curve1);
+        for (int i = 0; i < n1 - 1; i++) {
+          xDBL(res1, res1, (const ec_point_t *)curve1);
+        }
+      }
+    }
+    if (n2 != 0) {
+      if (curve2->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve2->A24.z));
+        xDBL_A24(res2, P2, &curve2->A24, true);
+        for (int i = 0; i < n2 - 1; i++) {
+          assert(fp2_is_one(&curve2->A24.z));
+          xDBL_A24(res2, res2, &curve2->A24, true);
+        }
+      } else {
+        xDBL(res2, P2, (const ec_point_t *)curve2);
+        for (int i = 0; i < n2 - 1; i++) {
+          xDBL(res2, res2, (const ec_point_t *)curve2);
+        }
+      }
+    }
+  }
+}
+
+static inline void ec_dbl_iter_basis(const char *file_name, int line_num, ec_basis_t *res, int n, const ec_basis_t *B, ec_curve_t *curve) {
+  ec_dbl_iter(file_name, line_num, &res->P, n, &B->P, curve);
+  ec_dbl_iter(file_name, line_num, &res->Q, n, &B->Q, curve);
+  ec_dbl_iter(file_name, line_num, &res->PmQ, n, &B->PmQ, curve);
+}
+
+static inline void ec_dbl_iter_basis_2(const char *file_name, int line_num, ec_basis_t *res1, int n1, const ec_basis_t *B1, ec_curve_t *curve1, ec_basis_t *res2, int n2, const ec_basis_t *B2, ec_curve_t *curve2) {
+  ec_dbl_iter_2(file_name, line_num, &res1->P, n1, &B1->P, curve1, &res2->P, n2, &B2->P, curve2);
+  ec_dbl_iter_2(file_name, line_num, &res1->Q, n1, &B1->Q, curve1, &res2->Q, n2, &B2->Q, curve2);
+  ec_dbl_iter_2(file_name, line_num, &res1->PmQ, n1, &B1->PmQ, curve1, &res2->PmQ, n2, &B2->PmQ, curve2);
 }
 
 static inline void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t *curve) {
@@ -134,22 +228,22 @@ static inline void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t
   }
 }
 
-static inline int test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t) {
+static inline int test_point_order_twof(const char *file_name, int line_num, const ec_point_t *P, const ec_curve_t *E, int t) {
   ec_point_t test;
   ec_curve_t curve;
   test = *P;
   copy_curve(&curve, E);
   if (ec_is_zero(&test)) return 0;
-  ec_dbl_iter(&test, t - 1, &test, &curve);
+  ec_dbl_iter(file_name, line_num, &test, t - 1, &test, &curve);
   if (ec_is_zero(&test)) return 0;
   ec_dbl(&test, &test, &curve);
   return ec_is_zero(&test);
 }
 
-static inline int test_basis_order_twof(const ec_basis_t *B, const ec_curve_t *E, int t) {
-  int check_P = test_point_order_twof(&B->P, E, t);
-  int check_Q = test_point_order_twof(&B->Q, E, t);
-  int check_PmQ = test_point_order_twof(&B->PmQ, E, t);
+static inline int test_basis_order_twof(const char *file_name, int line_num, const ec_basis_t *B, const ec_curve_t *E, int t) {
+  int check_P = test_point_order_twof(file_name, line_num, &B->P, E, t);
+  int check_Q = test_point_order_twof(file_name, line_num, &B->Q, E, t);
+  int check_PmQ = test_point_order_twof(file_name, line_num, &B->PmQ, E, t);
   return check_P & check_Q & check_PmQ;
 }
 
@@ -326,7 +420,7 @@ static inline int xDBLMUL(ec_point_t *S, const ec_point_t *P, const uint64_t *k,
   return 1;
 }
 
-static inline int ec_biscalar_mul(ec_point_t *res, const uint64_t *scalarP, const uint64_t *scalarQ, const int kbits, const ec_basis_t *PQ, const ec_curve_t *curve) {
+static inline int ec_biscalar_mul(const char *file_name, int line_num, ec_point_t *res, const uint64_t *scalarP, const uint64_t *scalarQ, const int kbits, const ec_basis_t *PQ, const ec_curve_t *curve) {
   if (fp2_is_zero(&PQ->PmQ.z)) return 0;
   if (kbits == 1) {
     if (!ec_is_two_torsion(&PQ->P, curve) || !ec_is_two_torsion(&PQ->Q, curve) || !ec_is_two_torsion(&PQ->PmQ, curve)) return 0;
@@ -343,7 +437,7 @@ static inline int ec_biscalar_mul(ec_point_t *res, const uint64_t *scalarP, cons
     ec_curve_t E;
     copy_curve(&E, curve);
     if (!fp2_is_zero(&curve->A)) {
-      ec_curve_normalize_A24(&E);
+      ec_curve_normalize_A24(file_name, line_num, &E);
     }
     return xDBLMUL(res, &PQ->P, scalarP, &PQ->Q, scalarQ, &PQ->PmQ, kbits, (const ec_curve_t *)&E);
   }
@@ -448,23 +542,23 @@ static inline void monodromy_i(ec_point_t *R, const pairing_params_t *pairing_da
   point_ratio(R, &PnQ, &nQ, &P);
 }
 
-static inline void weil_n(fp2_t *r, const pairing_params_t *pairing_data) {
+static inline void weil_n(const char *file_name, int line_num, fp2_t *r, const pairing_params_t *pairing_data) {
   ec_point_t R0, R1;
   monodromy_i(&R0, pairing_data, true);
   monodromy_i(&R1, pairing_data, false);
   fp2_mul(r, &R0.x, &R1.z);
-  fp2_inv(__FILE__, __LINE__, r);
+  fp2_inv(file_name, line_num, r);
   fp2_mul(r, r, &R0.z);
   fp2_mul(r, r, &R1.x);
 }
 
-static inline void cubical_normalization(pairing_params_t *pairing_data, const ec_point_t *P, const ec_point_t *Q) {
+static inline void cubical_normalization(const char *file_name, int line_num, pairing_params_t *pairing_data, const ec_point_t *P, const ec_point_t *Q) {
   fp2_t t[4];
   fp2_copy(&t[0], &P->x);
   fp2_copy(&t[1], &P->z);
   fp2_copy(&t[2], &Q->x);
   fp2_copy(&t[3], &Q->z);
-  fp2_batched_inv(__FILE__, __LINE__, t, 4);
+  fp2_batched_inv(file_name, line_num, t, 4);
   fp2_mul(&pairing_data->ixP, &P->z, &t[0]);
   fp2_mul(&pairing_data->ixQ, &Q->z, &t[2]);
   fp2_mul(&pairing_data->P.x, &P->x, &t[1]);
@@ -473,14 +567,14 @@ static inline void cubical_normalization(pairing_params_t *pairing_data, const e
   fp2_set_one(&pairing_data->Q.z);
 }
 
-static inline void weil(fp2_t *r, uint32_t e, const ec_point_t *P, const ec_point_t *Q, const ec_point_t *PQ, ec_curve_t *E) {
+static inline void weil(const char *file_name, int line_num, fp2_t *r, uint32_t e, const ec_point_t *P, const ec_point_t *Q, const ec_point_t *PQ, ec_curve_t *E) {
   pairing_params_t pairing_data;
   pairing_data.e = e;
-  cubical_normalization(&pairing_data, P, Q);
+  cubical_normalization(file_name, line_num, &pairing_data, P, Q);
   copy_point(&pairing_data.PQ, PQ);
-  ec_curve_normalize_A24(E);
+  ec_curve_normalize_A24(file_name, line_num, E);
   copy_point(&pairing_data.A24, &E->A24);
-  weil_n(r, &pairing_data);
+  weil_n(file_name, line_num, r, &pairing_data);
 }
 
 static inline uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve) {
@@ -528,57 +622,27 @@ static inline uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_
   return ret;
 }
 
-static inline void batched_lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, fp2_t *v2inv, fp2_t *av2inv, int index) {
-  if (index == 0) {
-    fp2_copy(&v2inv[0], &B->P.z);
-    fp2_copy(&v2inv[1], &E->C);
-    fp2_copy(&av2inv[0], &v2inv[0]);
-    fp2_mul(&av2inv[1], &av2inv[0], &v2inv[1]);
-  } else {
-    fp2_copy(&v2inv[2], &B->P.z);
-    fp2_copy(&v2inv[3], &E->C);
-    fp2_mul(&av2inv[2], &av2inv[1], &v2inv[2]);
-    fp2_mul(&av2inv[3], &av2inv[2], &v2inv[3]);
-    fp2_inv(__FILE__, __LINE__, &av2inv[3]);
-  }
-  fp2_set_one(&B->P.z);
-  fp2_set_one(&E->C);
+static inline uint32_t lift_basis(const char *file_name, int line_num, 
+    jac_point_t *P1, jac_point_t *Q1, ec_basis_t *B1, ec_curve_t *E1,
+    jac_point_t *P2, jac_point_t *Q2, ec_basis_t *B2, ec_curve_t *E2
+    )
+{
+  fp2_t inverses[4];
+  fp2_copy(&inverses[0], &B1->P.z);
+  fp2_copy(&inverses[1], &E1->C);
+  fp2_copy(&inverses[2], &B2->P.z);
+  fp2_copy(&inverses[3], &E2->C);
+  fp2_batched_inv(file_name, line_num, inverses, 4);
+  fp2_set_one(&B1->P.z);
+  fp2_set_one(&E1->C);
+  fp2_mul(&B1->P.x, &B1->P.x, &inverses[0]);
+  fp2_mul(&E1->A, &E1->A, &inverses[1]);
+  fp2_set_one(&B2->P.z);
+  fp2_set_one(&E2->C);
+  fp2_mul(&B2->P.x, &B2->P.x, &inverses[2]);
+  fp2_mul(&E2->A, &E2->A, &inverses[3]);
+  return (lift_basis_normalized(P1, Q1, B1, E1) && lift_basis_normalized(P2, Q2, B2, E2));
 }
-
-static inline void batched_lift_basis_apply(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, fp2_t *v2inv, fp2_t *av2inv, int index) {
-  fp2_t inverse;
-  if (index == 0) {
-    fp2_mul(&inverse, &av2inv[3], &av2inv[0]);
-    fp2_mul(&E->A, &E->A, &inverse);
-    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[1]);
-    fp2_mul(&B->P.x, &B->P.x, &av2inv[3]);
-  } else {
-    fp2_mul(&inverse, &av2inv[3], &av2inv[2]);
-    fp2_mul(&E->A, &E->A, &inverse);
-    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[3]);
-    fp2_mul(&inverse, &av2inv[3], &av2inv[1]);
-    fp2_mul(&B->P.x, &B->P.x, &inverse);
-    fp2_mul(&av2inv[3], &av2inv[3], &v2inv[2]);
-  }
-}
-
-static inline uint32_t batched_lift_basis_check(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E) {
-  return lift_basis_normalized(P, Q, B, E);
-}
-
-/*
-static inline uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E) {
-  fp2_t inverses[2];
-  fp2_copy(&inverses[0], &B->P.z);
-  fp2_copy(&inverses[1], &E->C);
-  fp2_batched_inv(__FILE__, __LINE__, inverses, 2);
-  fp2_set_one(&B->P.z);
-  fp2_set_one(&E->C);
-  fp2_mul(&B->P.x, &B->P.x, &inverses[0]);
-  fp2_mul(&E->A, &E->A, &inverses[1]);
-  return lift_basis_normalized(P, Q, B, E);
-}
-*/
 
 static inline void DBL(jac_point_t *Q, const jac_point_t *P, const ec_curve_t *AC) {
   fp2_t t0, t1, t2, t3;
@@ -774,15 +838,26 @@ static inline void double_couple_point_iter(theta_couple_point_t *out, unsigned 
   }
 }
 
-static inline void ec_normalize_curve(ec_curve_t *E) {
-  fp2_inv(__FILE__, __LINE__, &E->C);
+static inline void ec_normalize_curve(const char *file_name, int line_num, ec_curve_t *E) {
+  fp2_inv(file_name, line_num, &E->C);
   fp2_mul(&E->A, &E->A, &E->C);
   fp2_set_one(&E->C);
 }
 
-static inline void ec_normalize_curve_and_A24(ec_curve_t *E) {
+static inline void ec_normalize_curve_2(const char *file_name, int line_num, ec_curve_t *E1, ec_curve_t *E2) {
+  fp2_t inverses[2];
+  fp2_copy(&inverses[0], &E1->C);
+  fp2_copy(&inverses[1], &E2->C);
+  fp2_batched_inv(__FILE__, __LINE__, inverses, 2);
+  fp2_mul(&E1->A, &E1->A, &inverses[0]);
+  fp2_mul(&E2->A, &E2->A, &inverses[1]);
+  fp2_set_one(&E1->C);
+  fp2_set_one(&E2->C);
+}
+
+static inline void ec_normalize_curve_and_A24(const char *file_name, int line_num, ec_curve_t *E) {
   if (!fp2_is_one(&E->C)) {
-    ec_normalize_curve(E);
+    ec_normalize_curve(file_name, line_num, E);
   }
   if (!E->is_A24_computed_and_normalized) {
     fp2_add_one(&E->A24.x, &E->A);
@@ -792,6 +867,37 @@ static inline void ec_normalize_curve_and_A24(ec_curve_t *E) {
     fp2_half(&E->A24.x, &E->A24.x);
     fp2_set_one(&E->A24.z);
     E->is_A24_computed_and_normalized = true;
+  }
+}
+
+static inline void ec_normalize_curve_and_A24_2(const char *file_name, int line_num, ec_curve_t *E1, ec_curve_t *E2) {
+  if (!fp2_is_one(&E1->C) && !fp2_is_one(&E2->C)) {
+    ec_normalize_curve_2(file_name, line_num, E1, E2);
+  } else {
+    if (!fp2_is_one(&E1->C)) {
+      ec_normalize_curve(file_name, line_num, E1);
+    }
+    if (!fp2_is_one(&E2->C)) {
+      ec_normalize_curve(file_name, line_num, E2);
+    }
+  }
+  if (!E1->is_A24_computed_and_normalized) {
+    fp2_add_one(&E1->A24.x, &E1->A);
+    fp2_add_one(&E1->A24.x, &E1->A24.x);
+    fp_copy(&E1->A24.x.im, &E1->A.im);
+    fp2_half(&E1->A24.x, &E1->A24.x);
+    fp2_half(&E1->A24.x, &E1->A24.x);
+    fp2_set_one(&E1->A24.z);
+    E1->is_A24_computed_and_normalized = true;
+  }
+  if (!E2->is_A24_computed_and_normalized) {
+    fp2_add_one(&E2->A24.x, &E2->A);
+    fp2_add_one(&E2->A24.x, &E2->A24.x);
+    fp_copy(&E2->A24.x.im, &E2->A.im);
+    fp2_half(&E2->A24.x, &E2->A24.x);
+    fp2_half(&E2->A24.x, &E2->A24.x);
+    fp2_set_one(&E2->A24.z);
+    E2->is_A24_computed_and_normalized = true;
   }
 }
 
@@ -880,7 +986,7 @@ static inline uint8_t find_nA_x_coord(fp2_t *x, ec_curve_t *curve, const uint8_t
   return hint;
 }
 
-static inline uint8_t find_nqr_factor(fp2_t *x, ec_curve_t *curve, const uint8_t start) {
+static inline uint8_t find_nqr_factor(const char *file_name, int line_num, fp2_t *x, ec_curve_t *curve, const uint8_t start) {
   uint8_t hint;
   uint32_t found = 0;
   uint16_t n = start;
@@ -906,7 +1012,7 @@ static inline uint8_t find_nqr_factor(fp2_t *x, ec_curve_t *curve, const uint8_t
     qr_b = 1;
   } while (!found);
   fp2_copy(x, &z);
-  fp2_inv(__FILE__, __LINE__, x);
+  fp2_inv(file_name, line_num, x);
   fp2_mul(x, x, &curve->A);
   fp2_neg(x, x);
   hint = n <= 128 ? n - 1 : 0;
@@ -968,22 +1074,22 @@ static inline void xMUL(ec_point_t *Q, const ec_point_t *P, const uint64_t *k, c
   fp2_copy(&Q->z, &R0.z);
 }
 
-static inline void ec_mul(ec_point_t *res, const uint64_t *scalar, const int kbits, const ec_point_t *P, ec_curve_t *curve) {
+static inline void ec_mul(const char *file_name, int line_num, ec_point_t *res, const uint64_t *scalar, const int kbits, const ec_point_t *P, ec_curve_t *curve) {
   if (kbits > 50) {
-    ec_curve_normalize_A24(curve);
+    ec_curve_normalize_A24(file_name, line_num, curve);
   }
   xMUL(res, P, scalar, kbits, curve);
 }
 
-static inline void clear_cofactor_for_maximal_even_order(ec_point_t *P, ec_curve_t *curve, int f) {
-  ec_mul(P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
+static inline void clear_cofactor_for_maximal_even_order(const char *file_name, int line_num, ec_point_t *P, ec_curve_t *curve, int f) {
+  ec_mul(file_name, line_num, P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
   for (int i = 0; i < TORSION_EVEN_POWER - f; i++) {
     xDBL_A24(P, P, &curve->A24, curve->is_A24_computed_and_normalized);
   }
 }
 
-static inline uint8_t ec_curve_to_basis_2f_to_hint(ec_basis_t *PQ2, ec_curve_t *curve, int f) {
-  ec_normalize_curve_and_A24(curve);
+static inline uint8_t ec_curve_to_basis_2f_to_hint(const char *file_name, int line_num, ec_basis_t *PQ2, ec_curve_t *curve, int f) {
+  ec_normalize_curve_and_A24(file_name, line_num, curve);
   if (fp2_is_zero(&curve->A)) {
     ec_basis_E0_2f(PQ2, curve, f);
     return 0;
@@ -994,14 +1100,14 @@ static inline uint8_t ec_curve_to_basis_2f_to_hint(ec_basis_t *PQ2, ec_curve_t *
   if (!hint_A) {
     hint = find_nA_x_coord(&P.x, curve, 1);
   } else {
-    hint = find_nqr_factor(&P.x, curve, 1);
+    hint = find_nqr_factor(file_name, line_num, &P.x, curve, 1);
   }
   fp2_set_one(&P.z);
   fp2_add(&Q.x, &curve->A, &P.x);
   fp2_neg(&Q.x, &Q.x);
   fp2_set_one(&Q.z);
-  clear_cofactor_for_maximal_even_order(&P, curve, f);
-  clear_cofactor_for_maximal_even_order(&Q, curve, f);
+  clear_cofactor_for_maximal_even_order(file_name, line_num, &P, curve, f);
+  clear_cofactor_for_maximal_even_order(file_name, line_num, &Q, curve, f);
   difference_point(&PQ2->Q, &P, &Q, curve);
   copy_point(&PQ2->P, &P);
   copy_point(&PQ2->PmQ, &Q);
@@ -1009,8 +1115,7 @@ static inline uint8_t ec_curve_to_basis_2f_to_hint(ec_basis_t *PQ2, ec_curve_t *
   return (hint << 1) | hint_A;
 }
 
-static inline int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *curve, int f, const uint8_t hint) {
-  ec_normalize_curve_and_A24(curve);
+static inline int ec_curve_to_basis_2f_from_hint(const char *file_name, int line_num, ec_basis_t *PQ2, ec_curve_t *curve, int f, const uint8_t hint) {
   if (fp2_is_zero(&curve->A)) {
     ec_basis_E0_2f(PQ2, curve, f);
     return 1;
@@ -1022,7 +1127,7 @@ static inline int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *cu
     if (!hint_A) {
       find_nA_x_coord(&P.x, curve, 128);
     } else {
-      find_nqr_factor(&P.x, curve, 128);
+      find_nqr_factor(file_name, line_num, &P.x, curve, 128);
     }
   } else {
     if (!hint_A) {
@@ -1030,7 +1135,7 @@ static inline int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *cu
     } else {
       fp_set_one(&P.x.re);
       fp_set_small(&P.x.im, hint_P);
-      fp2_inv(__FILE__, __LINE__, &P.x);
+      fp2_inv(file_name, line_num, &P.x);
       fp2_mul(&P.x, &P.x, &curve->A);
       fp2_neg(&P.x, &P.x);
     }
@@ -1039,15 +1144,15 @@ static inline int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *cu
   fp2_add(&Q.x, &curve->A, &P.x);
   fp2_neg(&Q.x, &Q.x);
   fp2_set_one(&Q.z);
-  clear_cofactor_for_maximal_even_order(&P, curve, f);
-  clear_cofactor_for_maximal_even_order(&Q, curve, f);
+  clear_cofactor_for_maximal_even_order(file_name, line_num, &P, curve, f);
+  clear_cofactor_for_maximal_even_order(file_name, line_num, &Q, curve, f);
   difference_point(&PQ2->Q, &P, &Q, curve);
   copy_point(&PQ2->P, &P);
   copy_point(&PQ2->PmQ, &Q);
   return 1;
 }
 
-static inline void cubical_normalization_dlog(pairing_dlog_params_t *pairing_dlog_data, ec_curve_t *curve) {
+static inline void cubical_normalization_dlog(const char *file_name, int line_num, pairing_dlog_params_t *pairing_dlog_data, ec_curve_t *curve) {
   fp2_t t[11];
   ec_basis_t *PQ = &pairing_dlog_data->PQ;
   ec_basis_t *RS = &pairing_dlog_data->RS;
@@ -1062,7 +1167,7 @@ static inline void cubical_normalization_dlog(pairing_dlog_params_t *pairing_dlo
   fp2_copy(&t[8], &RS->Q.x);
   fp2_copy(&t[9], &RS->Q.z);
   fp2_copy(&t[10], &curve->C);
-  fp2_batched_inv(__FILE__, __LINE__, t, 11);
+  fp2_batched_inv(file_name, line_num, t, 11);
   fp2_mul(&pairing_dlog_data->ixP, &PQ->P.z, &t[0]);
   fp2_mul(&PQ->P.x, &PQ->P.x, &t[1]);
   fp2_set_one(&PQ->P.z);
@@ -1155,7 +1260,7 @@ static inline void clear_cofac(fp2_t *r, const fp2_t *a) {
   }
 }
 
-static inline void tate_dlog_partial(uint64_t *r1, uint64_t *r2, uint64_t *s1, uint64_t *s2, pairing_dlog_params_t *pairing_dlog_data) {
+static inline void tate_dlog_partial(const char *file_name, int line_num, uint64_t *r1, uint64_t *r2, uint64_t *s1, uint64_t *s2, pairing_dlog_params_t *pairing_dlog_data) {
   uint32_t e_full = TORSION_EVEN_POWER;
   uint32_t e_diff = e_full - pairing_dlog_data->e;
   ec_point_t nP, nQ, nR, nS, nPQ, PnR, PnS, nRQ, nSQ;
@@ -1211,7 +1316,7 @@ static inline void tate_dlog_partial(uint64_t *r1, uint64_t *r2, uint64_t *s1, u
     fp2_frob(&frob, &w2[i]);
     fp2_mul(&w2[i], &tmp, &frob);
   }
-  fp2_batched_inv(__FILE__, __LINE__, w2, 5);
+  fp2_batched_inv(file_name, line_num, w2, 5);
   for (int i = 0; i < 5; i++) {
     fp2_mul(&w1[i], &w1[i], &w2[i]);
   }
@@ -1245,22 +1350,22 @@ static inline void compute_difference_points(pairing_dlog_params_t *pairing_dlog
   jac_to_xz(&pairing_dlog_data->diff.SmQ, &temp);
 }
 
-static inline void ec_dlog_2_tate(uint64_t *r1, uint64_t *r2, uint64_t *s1, uint64_t *s2, const ec_basis_t *PQ, const ec_basis_t *RS, ec_curve_t *curve, int e) {
-  ec_curve_normalize_A24(curve);
+static inline void ec_dlog_2_tate(const char *file_name, int line_num, uint64_t *r1, uint64_t *r2, uint64_t *s1, uint64_t *s2, const ec_basis_t *PQ, const ec_basis_t *RS, ec_curve_t *curve, int e) {
+  ec_curve_normalize_A24(file_name, line_num, curve);
   pairing_dlog_params_t pairing_dlog_data;
   pairing_dlog_data.e = e;
   pairing_dlog_data.PQ = *PQ;
   pairing_dlog_data.RS = *RS;
   pairing_dlog_data.A24 = curve->A24;
-  cubical_normalization_dlog(&pairing_dlog_data, curve);
+  cubical_normalization_dlog(file_name, line_num, &pairing_dlog_data, curve);
   compute_difference_points(&pairing_dlog_data, curve);
-  tate_dlog_partial(r1, r2, s1, s2, &pairing_dlog_data);
+  tate_dlog_partial(file_name, line_num, r1, r2, s1, s2, &pairing_dlog_data);
 }
 
-static inline char *proj_to_bytes(char *enc, const fp2_t *x, const fp2_t *z) {
+static inline char *proj_to_bytes(const char *file_name, int line_num, char *enc, const fp2_t *x, const fp2_t *z) {
   assert(!fp2_is_zero(z));
   fp2_t tmp = *z;
-  fp2_inv(__FILE__, __LINE__, &tmp);
+  fp2_inv(file_name, line_num, &tmp);
   fp2_mul(&tmp, x, &tmp);
   enc = fp2_to_bytes(enc, &tmp);
   return enc;
@@ -1272,8 +1377,8 @@ static inline const char *proj_from_bytes(fp2_t *x, fp2_t *z, const char *enc) {
   return enc;
 }
 
-static inline char *ec_curve_to_bytes(char *enc, const ec_curve_t *curve) {
-  return proj_to_bytes(enc, &curve->A, &curve->C);
+static inline char *ec_curve_to_bytes(const char *file_name, int line_num, char *enc, const ec_curve_t *curve) {
+  return proj_to_bytes(file_name, line_num, enc, &curve->A, &curve->C);
 }
 
 static inline const char *ec_curve_from_bytes(ec_curve_t *curve, const char *enc) {
@@ -1281,79 +1386,60 @@ static inline const char *ec_curve_from_bytes(ec_curve_t *curve, const char *enc
   return proj_from_bytes(&curve->A, &curve->C, enc);
 }
 
-static inline void batched_ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve, fp2_t *v2inv, fp2_t *av2inv, fp2_t *t00, int index) {
-  fp2_t t0, t1;
-  fp2_sqr(&t1, &curve->C);
-  fp2_sqr(j_inv, &curve->A);
+static inline void ec_j_inv(const char *file_name, int line_num, fp2_t *j_inv1, const ec_curve_t *curve1, fp2_t *j_inv2, const ec_curve_t *curve2) {
+  fp2_t t0, t1, tr1, tr2;
+  fp2_sqr(&t1, &curve1->C);
+  fp2_sqr(j_inv1, &curve1->A);
   fp2_add(&t0, &t1, &t1);
-  fp2_sub(&t0, j_inv, &t0);
+  fp2_sub(&t0, j_inv1, &t0);
   fp2_sub(&t0, &t0, &t1);
-  fp2_sub(j_inv, &t0, &t1);
+  fp2_sub(j_inv1, &t0, &t1);
   fp2_sqr(&t1, &t1);
-  fp2_mul(j_inv, j_inv, &t1);
+  fp2_mul(j_inv1, j_inv1, &t1);
   fp2_add(&t0, &t0, &t0);
   fp2_add(&t0, &t0, &t0);
   fp2_sqr(&t1, &t0);
   fp2_mul(&t0, &t0, &t1);
   fp2_add(&t0, &t0, &t0);
-  fp2_add(&t0, &t0, &t0);
-  fp2_copy(&t00[index], &t0);
-  fp2_copy(&v2inv[index], j_inv);
-  if (index == 0) {
-    fp2_copy(&av2inv[0], &v2inv[0]);
-  } else {
-    fp2_mul(&av2inv[1], &av2inv[0], &v2inv[1]);
-    fp2_inv(__FILE__, __LINE__, &av2inv[1]);
-  }
-}
+  fp2_add(&tr1, &t0, &t0);
 
-static inline void batched_ec_j_inv_apply(fp2_t *j_inv, const ec_curve_t *curve, fp2_t *v2inv, fp2_t *av2inv, fp2_t *t00, int index) {
-  fp2_t inverse;
-  if (index == 0) {
-    fp2_mul(j_inv, &t00[index], &av2inv[1]);
-  } else {
-    fp2_mul(&inverse, &av2inv[1], &av2inv[0]);
-    fp2_mul(j_inv, &t00[index], &inverse);
-    fp2_mul(&av2inv[1], &av2inv[1], &v2inv[1]);
-  }
-}
-
-/*
-static inline void ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve) {
-  fp2_t t0, t1;
-  fp2_sqr(&t1, &curve->C);
-  fp2_sqr(j_inv, &curve->A);
+  fp2_sqr(&t1, &curve2->C);
+  fp2_sqr(j_inv2, &curve2->A);
   fp2_add(&t0, &t1, &t1);
-  fp2_sub(&t0, j_inv, &t0);
+  fp2_sub(&t0, j_inv2, &t0);
   fp2_sub(&t0, &t0, &t1);
-  fp2_sub(j_inv, &t0, &t1);
+  fp2_sub(j_inv2, &t0, &t1);
   fp2_sqr(&t1, &t1);
-  fp2_mul(j_inv, j_inv, &t1);
+  fp2_mul(j_inv2, j_inv2, &t1);
   fp2_add(&t0, &t0, &t0);
   fp2_add(&t0, &t0, &t0);
   fp2_sqr(&t1, &t0);
   fp2_mul(&t0, &t0, &t1);
   fp2_add(&t0, &t0, &t0);
-  fp2_add(&t0, &t0, &t0);
-  fp2_inv(__FILE__, __LINE__, j_inv);
-  fp2_mul(j_inv, &t0, j_inv);
-}
-*/
+  fp2_add(&tr2, &t0, &t0);
 
-static inline void ec_biscalar_mul_ibz_vec(ec_point_t *res, const ibz_vec_2_t *scalar_vec, const int f, const ec_basis_t *PQ, const ec_curve_t *curve) {
+  fp2_t inverses[2];
+  fp2_copy(&inverses[0], j_inv1);
+  fp2_copy(&inverses[1], j_inv2);
+  fp2_batched_inv(file_name, line_num, inverses, 2);
+  fp2_mul(j_inv1, &tr1, &inverses[0]);
+  fp2_mul(j_inv2, &tr2, &inverses[1]);
+}
+
+static inline void ec_biscalar_mul_ibz_vec(const char *file_name, int line_num, ec_point_t *res, const ibz_vec_2_t *scalar_vec, const int f, const ec_basis_t *PQ, const ec_curve_t *curve) {
   uint64_t scalars[2][NWORDS_ORDER];
   ibz_to_digit_array(scalars[0], &(*scalar_vec)[0]);
   ibz_to_digit_array(scalars[1], &(*scalar_vec)[1]);
-  ec_biscalar_mul(res, scalars[0], scalars[1], f, PQ, curve);
+  ec_biscalar_mul(file_name, line_num, res, scalars[0], scalars[1], f, PQ, curve);
 }
 
-static inline void xisog_2_singular(ec_kps2_t *kps, ec_point_t *B24, ec_point_t A24) {
+static inline void xisog_2_singular(const char *file_name, int line_num, ec_kps2_t *kps, ec_point_t *B24, ec_point_t A24) {
   fp2_t t0, four;
   fp2_set_small(&four, 4);
   fp2_add(&t0, &A24.x, &A24.x);
   fp2_sub(&t0, &t0, &A24.z);
   fp2_add(&t0, &t0, &t0);
-  fp2_inv(__FILE__, __LINE__, &A24.z);
+  fp2_inv(file_name, line_num, &A24.z);
   fp2_mul(&t0, &t0, &A24.z);
   fp2_copy(&kps->K.x, &t0);
   fp2_add(&B24->x, &t0, &t0);
@@ -1443,7 +1529,7 @@ static inline void A24_to_AC(ec_curve_t *E, const ec_point_t *A24) {
   fp2_copy(&E->C, &A24->z);
 }
 
-static inline uint32_t ec_eval_small_chain(ec_curve_t *curve, const ec_point_t *kernel, int len, ec_point_t *points, unsigned len_points, bool special) {
+static inline uint32_t ec_eval_small_chain(const char *file_name, int line_num, ec_curve_t *curve, const ec_point_t *kernel, int len, ec_point_t *points, unsigned len_points, bool special) {
   ec_point_t A24;
   AC_to_A24(&A24, curve);
   ec_kps2_t kps;
@@ -1458,7 +1544,7 @@ static inline uint32_t ec_eval_small_chain(ec_curve_t *curve, const ec_point_t *
     if (fp2_is_zero(&small_K.x)) {
       if (special) {
         ec_point_t B24;
-        xisog_2_singular(&kps, &B24, A24);
+        xisog_2_singular(file_name, line_num, &kps, &B24, A24);
         xeval_2_singular(&big_K, &big_K, 1, &kps);
         xeval_2_singular(points, points, len_points, &kps);
         copy_point(&A24, &B24);
@@ -1503,8 +1589,8 @@ static inline int ec_ladder3pt(ec_point_t *R, const uint64_t *m, const ec_point_
   return 1;
 }
 
-static inline uint32_t ec_eval_even_strategy(ec_curve_t *curve, ec_point_t *points, unsigned len_points, const ec_point_t *kernel, const int isog_len) {
-  ec_curve_normalize_A24(curve);
+static inline uint32_t ec_eval_even_strategy(const char *file_name, int line_num, ec_curve_t *curve, ec_point_t *points, unsigned len_points, const ec_point_t *kernel, const int isog_len) {
+  ec_curve_normalize_A24(file_name, line_num, curve);
   ec_point_t A24;
   copy_point(&A24, &curve->A24);
   int space = 1;
@@ -1557,9 +1643,9 @@ static inline uint32_t ec_eval_even_strategy(ec_curve_t *curve, ec_point_t *poin
   return 0;
 }
 
-static inline uint32_t ec_eval_even(ec_curve_t *image, ec_isog_even_t *phi, ec_point_t *points, unsigned len_points) {
+static inline uint32_t ec_eval_even(const char *file_name, int line_num, ec_curve_t *image, ec_isog_even_t *phi, ec_point_t *points, unsigned len_points) {
   copy_curve(image, &phi->curve);
-  return ec_eval_even_strategy(image, points, len_points, &phi->kernel, phi->length);
+  return ec_eval_even_strategy(file_name, line_num, image, points, len_points, &phi->kernel, phi->length);
 }
 
 static inline uint32_t ec_isomorphism(ec_isom_t *isom, const ec_curve_t *from, const ec_curve_t *to) {

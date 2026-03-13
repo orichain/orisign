@@ -84,10 +84,10 @@ static inline void fp_div3(fp_t *out, const fp_t *a) {
 }
 
 static inline void fp_select(fp_t *d, const fp_t *a0, const fp_t *a1, uint32_t ctl) {
-    uint64_t cw = (int32_t)ctl;
-    for (unsigned int i = 0; i < NWORDS_FIELD; i++) {
-        (*d)[i] = (*a0)[i] ^ (cw & ((*a0)[i] ^ (*a1)[i]));
-    }
+  uint64_t cw = (int32_t)ctl;
+  for (unsigned int i = 0; i < NWORDS_FIELD; i++) {
+    (*d)[i] = (*a0)[i] ^ (cw & ((*a0)[i] ^ (*a1)[i]));
+  }
 }
 
 static inline void fp_encode(void *dst, const fp_t *a) {

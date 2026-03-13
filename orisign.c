@@ -27,13 +27,16 @@ int main () {
 
   const char *msg = "Test123";
 
-  const int N = 100;
+  const int N = 1;
+  int ctr;
+
+  printf("\n=== SIGN START ===\n");
 
   uint64_t t0 = get_time_monotonic_ns();
-
+  ctr = 0;
   for (int i = 0; i < N; i++) {
-    sqisign_sign(sig, &siglen, msg, strlen(msg), sk);
-    //print_hex("SIG: ", sig, SIGNATURE_BYTES, 1);
+    int ret = sqisign_sign(sig, &siglen, msg, strlen(msg), sk);
+    if (ret == 0) ctr++;
   }
 
   uint64_t t1 = get_time_monotonic_ns();
@@ -48,12 +51,15 @@ int main () {
   printf("Total time     : %.3f ms\n", total_ms);
   printf("Avg per sign   : %.3f us\n", per_sign_us);
   printf("Sign per sec   : %.2f ops/sec\n", sign_per_sec);
+  printf("Success        : %d/%d\n", ctr, N);
+
+  printf("\n=== VRF START ===\n");
 
   uint64_t t02 = get_time_monotonic_ns();
-
+  ctr = 0;
   for (int i = 0; i < N; i++) {
     int ret = sqisign_verify(msg, strlen(msg), sig, CRYPTO_BYTES, pk);
-    //printf("ret %d\n", ret);
+    if (ret == 0) ctr++;
   }
 
   uint64_t t12 = get_time_monotonic_ns();
@@ -66,8 +72,9 @@ int main () {
 
   printf("\n=== VRF PROFILING ===\n");
   printf("Total time     : %.3f ms\n", total_ms2);
-  printf("Avg per vrf   : %.3f us\n", per_sign_us2);
-  printf("Vrf per sec   : %.2f ops/sec\n", sign_per_sec2);
+  printf("Avg per vrf    : %.3f us\n", per_sign_us2);
+  printf("Vrf per sec    : %.2f ops/sec\n", sign_per_sec2);
+  printf("Success        : %d/%d\n", ctr, N);
 
   return 0;
 }

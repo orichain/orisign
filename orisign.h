@@ -22,12 +22,12 @@ static inline int protocols_keygen(public_key_t *pk, secret_key_t *sk) {
   while (!found) {
     found = quat_sampling_random_ideal_O0_given_norm(&sk->secret_ideal, &SEC_DEGREE, 1, &QUAT_represent_integer_params, NULL);
     found = found && quat_lideal_prime_norm_reduced_equivalent(&sk->secret_ideal, &QUATALG_PINFTY, QUAT_primality_num_iter, QUAT_equiv_bound_coeff);
-    found = found && dim2id2iso_arbitrary_isogeny_evaluation(&B_0_two, &sk->curve, &sk->secret_ideal);
+    found = found && dim2id2iso_arbitrary_isogeny_evaluation(__FILE__, __LINE__, &B_0_two, &sk->curve, &sk->secret_ideal);
   }
-  assert(test_basis_order_twof(&B_0_two, &sk->curve, TORSION_EVEN_POWER));
-  pk->hint_pk = ec_curve_to_basis_2f_to_hint(&sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER);
-  assert(test_basis_order_twof(&sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER));
-  change_of_basis_matrix_tate(&sk->mat_BAcan_to_BA0_two, &sk->canonical_basis, &B_0_two, &sk->curve, TORSION_EVEN_POWER);
+  assert(test_basis_order_twof(__FILE__, __LINE__, &B_0_two, &sk->curve, TORSION_EVEN_POWER));
+  pk->hint_pk = ec_curve_to_basis_2f_to_hint(__FILE__, __LINE__, &sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER);
+  assert(test_basis_order_twof(__FILE__, __LINE__, &sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER));
+  change_of_basis_matrix_tate(__FILE__, __LINE__, &sk->mat_BAcan_to_BA0_two, &sk->canonical_basis, &B_0_two, &sk->curve, TORSION_EVEN_POWER);
   copy_curve(&pk->curve, &sk->curve);
   pk->curve.is_A24_computed_and_normalized = false;
   assert(fp2_is_one(&pk->curve.C) == 0xFFFFFFFF);
@@ -38,22 +38,14 @@ static inline bool commit(ec_curve_t *E_com, ec_basis_t *basis_even_com, quat_le
   bool found = false;
   found = quat_sampling_random_ideal_O0_given_norm(lideal_com, &COM_DEGREE, 1, &QUAT_represent_integer_params, NULL);
   found = found && quat_lideal_prime_norm_reduced_equivalent(lideal_com, &QUATALG_PINFTY, QUAT_primality_num_iter, QUAT_equiv_bound_coeff);
-  found = found && dim2id2iso_arbitrary_isogeny_evaluation(basis_even_com, E_com, lideal_com);
+  found = found && dim2id2iso_arbitrary_isogeny_evaluation(__FILE__, __LINE__, basis_even_com, E_com, lideal_com);
   return found;
 }
 
 static inline void hash_to_challenge(scalar_t *scalar, const public_key_t *pk, const ec_curve_t *com_curve, const unsigned char *message, size_t length) {
   unsigned char buf[2 * FP2_ENCODED_BYTES];
   fp2_t j1, j2;
-  fp2_t v2inv[2];
-  fp2_t av2inv[2];
-  fp2_t t00[2];
-  batched_ec_j_inv(&j1, &pk->curve, v2inv, av2inv, t00, 0);
-  batched_ec_j_inv(&j2, com_curve, v2inv, av2inv, t00, 1);
-  batched_ec_j_inv_apply(&j2, com_curve, v2inv, av2inv, t00, 1);
-  batched_ec_j_inv_apply(&j1, &pk->curve, v2inv, av2inv, t00, 0);
-  //ec_j_inv(&j1, &pk->curve);
-  //ec_j_inv(&j2, com_curve);
+  ec_j_inv(__FILE__, __LINE__, &j1, &pk->curve, &j2, com_curve);
   fp2_encode(buf, &j1);
   fp2_encode(buf + FP2_ENCODED_BYTES, &j2);
   shake256incctx ctx;
@@ -182,7 +174,7 @@ static inline int evaluate_random_aux_isogeny_signature(ec_curve_t *E_aux, ec_ba
   int found = quat_sampling_random_ideal_O0_given_norm(&lideal_aux, norm, 0, &QUAT_represent_integer_params, &QUAT_prime_cofactor);
   if (found) {
     quat_lideal_inter(&lideal_aux_resp_com, lideal_com_resp, &lideal_aux, &QUATALG_PINFTY);
-    found = dim2id2iso_arbitrary_isogeny_evaluation(B_aux, E_aux, &lideal_aux_resp_com);
+    found = dim2id2iso_arbitrary_isogeny_evaluation(__FILE__, __LINE__, B_aux, E_aux, &lideal_aux_resp_com);
     quat_left_ideal_finalize(&lideal_aux_resp_com);
     quat_left_ideal_finalize(&lideal_aux);
   }
@@ -197,9 +189,9 @@ static inline int compute_dim2_isogeny_challenge(theta_couple_curve_with_basis_t
   copy_bases_to_kernel(&dim_two_ker, &domain->B1, &domain->B2);
   uint64_t scalar[NWORDS_ORDER];
   ibz_to_digit_array(scalar, degree_resp_inv);
-  ec_mul(&dim_two_ker.T1.P2, scalar, reduced_order, &dim_two_ker.T1.P2, &EcomXEaux.E2);
-  ec_mul(&dim_two_ker.T2.P2, scalar, reduced_order, &dim_two_ker.T2.P2, &EcomXEaux.E2);
-  ec_mul(&dim_two_ker.T1m2.P2, scalar, reduced_order, &dim_two_ker.T1m2.P2, &EcomXEaux.E2);
+  ec_mul(__FILE__, __LINE__, &dim_two_ker.T1.P2, scalar, reduced_order, &dim_two_ker.T1.P2, &EcomXEaux.E2);
+  ec_mul(__FILE__, __LINE__, &dim_two_ker.T2.P2, scalar, reduced_order, &dim_two_ker.T2.P2, &EcomXEaux.E2);
+  ec_mul(__FILE__, __LINE__, &dim_two_ker.T1m2.P2, scalar, reduced_order, &dim_two_ker.T1m2.P2, &EcomXEaux.E2);
   double_couple_point_iter(&dim_two_ker.T1, exp_diadic_val_full_resp, &dim_two_ker.T1, &EcomXEaux);
   double_couple_point_iter(&dim_two_ker.T2, exp_diadic_val_full_resp, &dim_two_ker.T2, &EcomXEaux);
   double_couple_point_iter(&dim_two_ker.T1m2, exp_diadic_val_full_resp, &dim_two_ker.T1m2, &EcomXEaux);
@@ -212,8 +204,8 @@ static inline int compute_dim2_isogeny_challenge(theta_couple_curve_with_basis_t
   ec_point_init(&Tev2->P2);
   ec_point_init(&Tev1m2->P2);
   theta_couple_curve_t codomain_product;
-  if (!theta_chain_compute_and_eval_randomized(pow_dim2_deg_resp, &EcomXEaux, &dim_two_ker, true, &codomain_product, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points))) return 0;
-  assert(test_couple_point_order_twof(Tev1, &codomain_product, reduced_order));
+  if (!theta_chain_compute_and_eval_randomized(__FILE__, __LINE__, pow_dim2_deg_resp, &EcomXEaux, &dim_two_ker, true, &codomain_product, pushed_points, sizeof(pushed_points) / sizeof(*pushed_points))) return 0;
+  assert(test_couple_point_order_twof(__FILE__, __LINE__, Tev1, &codomain_product, reduced_order));
   copy_curve(&codomain->E1, &codomain_product.E2);
   copy_curve(&codomain->E2, &codomain_product.E1);
   copy_point(&codomain->B1.P, &Tev1->P2);
@@ -240,12 +232,12 @@ static inline int compute_small_chain_isogeny_signature(ec_curve_t *E_chall_2, e
   copy_point(&points[0], &B_chall_2->P);
   copy_point(&points[1], &B_chall_2->Q);
   copy_point(&points[2], &B_chall_2->PmQ);
-  ec_dbl_iter_basis(B_chall_2, pow_dim2_deg_resp + HD_extra_torsion, B_chall_2, E_chall_2);
-  assert(test_basis_order_twof(B_chall_2, E_chall_2, length));
+  ec_dbl_iter_basis(__FILE__, __LINE__, B_chall_2, pow_dim2_deg_resp + HD_extra_torsion, B_chall_2, E_chall_2);
+  assert(test_basis_order_twof(__FILE__, __LINE__, B_chall_2, E_chall_2, length));
   ec_point_t ker;
-  ec_biscalar_mul_ibz_vec(&ker, &vec_resp_two, length, B_chall_2, E_chall_2);
-  assert(test_point_order_twof(&ker, E_chall_2, length));
-  if (ec_eval_small_chain(E_chall_2, &ker, length, points, 3, true)) {
+  ec_biscalar_mul_ibz_vec(__FILE__, __LINE__, &ker, &vec_resp_two, length, B_chall_2, E_chall_2);
+  assert(test_point_order_twof(__FILE__, __LINE__, &ker, E_chall_2, length));
+  if (ec_eval_small_chain(__FILE__, __LINE__, E_chall_2, &ker, length, points, 3, true)) {
     ret = 0;
   }
   copy_point(&B_chall_2->P, &points[0]);
@@ -263,12 +255,12 @@ static inline int compute_challenge_codomain_signature(const signature_t *sig, s
   copy_basis(&bas_sk, &sk->canonical_basis);
   phi_chall.curve = sk->curve;
   phi_chall.length = TORSION_EVEN_POWER - sig->backtracking;
-  assert(test_basis_order_twof(&bas_sk, &sk->curve, TORSION_EVEN_POWER));
+  assert(test_basis_order_twof(__FILE__, __LINE__, &bas_sk, &sk->curve, TORSION_EVEN_POWER));
   ec_ladder3pt(&phi_chall.kernel, sig->chall_coeff, &bas_sk.P, &bas_sk.Q, &bas_sk.PmQ, &sk->curve);
-  assert(test_point_order_twof(&phi_chall.kernel, &sk->curve, TORSION_EVEN_POWER));
-  ec_dbl_iter(&phi_chall.kernel, sig->backtracking, &phi_chall.kernel, &sk->curve);
-  assert(test_point_order_twof(&phi_chall.kernel, E_chall, phi_chall.length));
-  if (ec_eval_even(E_chall, &phi_chall, NULL, 0)) return 0;
+  assert(test_point_order_twof(__FILE__, __LINE__, &phi_chall.kernel, &sk->curve, TORSION_EVEN_POWER));
+  ec_dbl_iter(__FILE__, __LINE__, &phi_chall.kernel, sig->backtracking, &phi_chall.kernel, &sk->curve);
+  assert(test_point_order_twof(__FILE__, __LINE__, &phi_chall.kernel, E_chall, phi_chall.length));
+  if (ec_eval_even(__FILE__, __LINE__, E_chall, &phi_chall, NULL, 0)) return 0;
   ec_isom_t isom;
   if (ec_isomorphism(&isom, E_chall_2, E_chall)) return 0;
   ec_iso_eval(&B_chall_2->P, &isom);
@@ -278,7 +270,7 @@ static inline int compute_challenge_codomain_signature(const signature_t *sig, s
 }
 
 static inline void set_aux_curve_signature(signature_t *sig, ec_curve_t *E_aux) {
-  ec_normalize_curve(E_aux);
+  ec_normalize_curve(__FILE__, __LINE__, E_aux);
   fp2_copy(&sig->E_aux_A, &E_aux->A);
 }
 
@@ -287,11 +279,11 @@ static inline void compute_and_set_basis_change_matrix(signature_t *sig, const e
   ibz_mat_2x2_init(&mat_Baux2_to_Baux2_can);
   ibz_mat_2x2_init(&mat_Bchall_can_to_Bchall);
   ec_basis_t B_can_chall, B_aux_2_can;
-  sig->hint_chall = ec_curve_to_basis_2f_to_hint(&B_can_chall, E_chall, TORSION_EVEN_POWER);
-  sig->hint_aux = ec_curve_to_basis_2f_to_hint(&B_aux_2_can, E_aux_2, TORSION_EVEN_POWER);
-  change_of_basis_matrix_tate_invert(&mat_Baux2_to_Baux2_can, &B_aux_2_can, B_aux_2, E_aux_2, f);
-  matrix_application_even_basis(B_chall_2, E_chall, &mat_Baux2_to_Baux2_can, f);
-  change_of_basis_matrix_tate(&mat_Bchall_can_to_Bchall, B_chall_2, &B_can_chall, E_chall, f);
+  sig->hint_chall = ec_curve_to_basis_2f_to_hint(__FILE__, __LINE__, &B_can_chall, E_chall, TORSION_EVEN_POWER);
+  sig->hint_aux = ec_curve_to_basis_2f_to_hint(__FILE__, __LINE__, &B_aux_2_can, E_aux_2, TORSION_EVEN_POWER);
+  change_of_basis_matrix_tate_invert(__FILE__, __LINE__, &mat_Baux2_to_Baux2_can, &B_aux_2_can, B_aux_2, E_aux_2, f);
+  matrix_application_even_basis(__FILE__, __LINE__, B_chall_2, E_chall, &mat_Baux2_to_Baux2_can, f);
+  change_of_basis_matrix_tate(__FILE__, __LINE__, &mat_Bchall_can_to_Bchall, B_chall_2, &B_can_chall, E_chall, f);
   assert(ibz_bitsize(&mat_Bchall_can_to_Bchall[0][0]) <= SQIsign_response_length + HD_extra_torsion);
   assert(ibz_bitsize(&mat_Bchall_can_to_Bchall[0][1]) <= SQIsign_response_length + HD_extra_torsion);
   assert(ibz_bitsize(&mat_Bchall_can_to_Bchall[1][0]) <= SQIsign_response_length + HD_extra_torsion);
@@ -344,16 +336,20 @@ static inline int protocols_sign(signature_t *sig, const public_key_t *pk, secre
         continue;
       }
       reduced_order = pow_dim2_deg_resp + HD_extra_torsion + sig->two_resp_length;
-      ec_dbl_iter_basis(&Ecom_Eaux.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1);
-      ec_dbl_iter_basis(&Ecom_Eaux.B2, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B2, &Ecom_Eaux.E2);
+      ec_dbl_iter_basis_2(__FILE__, __LINE__, 
+          &Ecom_Eaux.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1,
+          &Ecom_Eaux.B2, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B2, &Ecom_Eaux.E2
+          );
       ret = compute_dim2_isogeny_challenge(&Eaux2_Echall2, &Ecom_Eaux, &degree_resp_inv, pow_dim2_deg_resp, sig->two_resp_length, reduced_order);
       if (!ret) continue;
     } else {
       copy_curve(&Eaux2_Echall2.E1, &Ecom_Eaux.E1);
       copy_curve(&Eaux2_Echall2.E2, &Ecom_Eaux.E1);
       reduced_order = sig->two_resp_length;
-      ec_dbl_iter_basis(&Eaux2_Echall2.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1);
-      ec_dbl_iter_basis(&Eaux2_Echall2.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1);
+      ec_dbl_iter_basis_2(__FILE__, __LINE__, 
+          &Eaux2_Echall2.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1,
+          &Eaux2_Echall2.B1, TORSION_EVEN_POWER - reduced_order, &Ecom_Eaux.B1, &Ecom_Eaux.E1
+          );
       copy_basis(&Eaux2_Echall2.B2, &Eaux2_Echall2.B1);
     }
     if (sig->two_resp_length > 0) {
@@ -396,13 +392,14 @@ static inline int compute_challenge_verify(ec_curve_t *E_chall, const signature_
   ec_isog_even_t phi_chall;
   copy_curve(&phi_chall.curve, Epk);
   phi_chall.length = TORSION_EVEN_POWER - sig->backtracking;
-  if (!ec_curve_to_basis_2f_from_hint(&bas_EA, &phi_chall.curve, TORSION_EVEN_POWER, hint_pk)) return 0;
+  ec_normalize_curve_and_A24(__FILE__, __LINE__, &phi_chall.curve);
+  if (!ec_curve_to_basis_2f_from_hint(__FILE__, __LINE__, &bas_EA, &phi_chall.curve, TORSION_EVEN_POWER, hint_pk)) return 0;
   if (!ec_ladder3pt(&phi_chall.kernel, sig->chall_coeff, &bas_EA.P, &bas_EA.Q, &bas_EA.PmQ, &phi_chall.curve)) {
     return 0;
   };
-  ec_dbl_iter(&phi_chall.kernel, sig->backtracking, &phi_chall.kernel, &phi_chall.curve);
+  ec_dbl_iter(__FILE__, __LINE__, &phi_chall.kernel, sig->backtracking, &phi_chall.kernel, &phi_chall.curve);
   copy_curve(E_chall, &phi_chall.curve);
-  if (ec_eval_even(E_chall, &phi_chall, NULL, 0)) return 0;
+  if (ec_eval_even(__FILE__, __LINE__, E_chall, &phi_chall, NULL, 0)) return 0;
   return 1;
 }
 
@@ -412,20 +409,23 @@ static inline int matrix_scalar_application_even_basis(ec_basis_t *bas, const ec
   memset(scalar1, 0, NWORDS_ORDER * sizeof(uint64_t));
   ec_basis_t tmp_bas;
   copy_basis(&tmp_bas, bas);
-  if (!ec_biscalar_mul(&bas->P, (*mat)[0][0], (*mat)[1][0], f, &tmp_bas, E)) return 0;
-  if (!ec_biscalar_mul(&bas->Q, (*mat)[0][1], (*mat)[1][1], f, &tmp_bas, E)) return 0;
+  if (!ec_biscalar_mul(__FILE__, __LINE__, &bas->P, (*mat)[0][0], (*mat)[1][0], f, &tmp_bas, E)) return 0;
+  if (!ec_biscalar_mul(__FILE__, __LINE__, &bas->Q, (*mat)[0][1], (*mat)[1][1], f, &tmp_bas, E)) return 0;
   mp_sub(scalar0, (*mat)[0][0], (*mat)[0][1], NWORDS_ORDER);
   mp_mod_2exp(scalar0, f, NWORDS_ORDER);
   mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
   mp_mod_2exp(scalar1, f, NWORDS_ORDER);
-  return ec_biscalar_mul(&bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
+  return ec_biscalar_mul(__FILE__, __LINE__, &bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
 }
 
 static inline int challenge_and_aux_basis_verify(ec_basis_t *B_chall_can, ec_basis_t *B_aux_can, ec_curve_t *E_chall, ec_curve_t *E_aux, signature_t *sig, const int pow_dim2_deg_resp) {
-  if (!ec_curve_to_basis_2f_from_hint(B_chall_can, E_chall, TORSION_EVEN_POWER, sig->hint_chall)) return 0;
-  ec_dbl_iter_basis(B_chall_can, TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion - sig->two_resp_length, B_chall_can, E_chall);
-  if (!ec_curve_to_basis_2f_from_hint(B_aux_can, E_aux, TORSION_EVEN_POWER, sig->hint_aux)) return 0;
-  ec_dbl_iter_basis(B_aux_can, TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion, B_aux_can, E_aux);
+  ec_normalize_curve_and_A24_2(__FILE__, __LINE__, E_chall, E_aux);
+  if (!ec_curve_to_basis_2f_from_hint(__FILE__, __LINE__, B_chall_can, E_chall, TORSION_EVEN_POWER, sig->hint_chall)) return 0;
+  if (!ec_curve_to_basis_2f_from_hint(__FILE__, __LINE__, B_aux_can, E_aux, TORSION_EVEN_POWER, sig->hint_aux)) return 0;
+  ec_dbl_iter_basis_2(__FILE__, __LINE__, 
+      B_chall_can, TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion - sig->two_resp_length, B_chall_can, E_chall,
+      B_aux_can, TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion, B_aux_can, E_aux
+      );
   return matrix_scalar_application_even_basis(B_chall_can, E_chall, &sig->mat_Bchall_can_to_B_chall, pow_dim2_deg_resp + HD_extra_torsion + sig->two_resp_length);
 }
 
@@ -439,8 +439,8 @@ static inline int two_response_isogeny_verify(ec_curve_t *E_chall, ec_basis_t *B
   copy_point(&points[0], &B_chall_can->P);
   copy_point(&points[1], &B_chall_can->Q);
   copy_point(&points[2], &B_chall_can->PmQ);
-  ec_dbl_iter(&ker, pow_dim2_deg_resp + HD_extra_torsion, &ker, E_chall);
-  if (ec_eval_small_chain(E_chall, &ker, sig->two_resp_length, points, 3, false)) {
+  ec_dbl_iter(__FILE__, __LINE__, &ker, pow_dim2_deg_resp + HD_extra_torsion, &ker, E_chall);
+  if (ec_eval_small_chain(__FILE__, __LINE__, E_chall, &ker, sig->two_resp_length, points, 3, false)) {
     return 0;
   }
   copy_point(&B_chall_can->P, &points[0]);
@@ -467,7 +467,7 @@ static inline int compute_commitment_curve_verify(ec_curve_t *E_com, const ec_ba
       return 0;
     }
   } else {
-    codomain_splits = theta_chain_compute_and_eval_verify(pow_dim2_deg_resp, &EchallxEaux, &dim_two_ker, true, &codomain, NULL, 0);
+    codomain_splits = theta_chain_compute_and_eval_verify(__FILE__, __LINE__, pow_dim2_deg_resp, &EchallxEaux, &dim_two_ker, true, &codomain, NULL, 0);
   }
   copy_curve(E_com, &codomain.E1);
   return codomain_splits;
@@ -505,7 +505,7 @@ static inline int protocols_verify(signature_t *sig, const public_key_t *pk, con
 }
 
 static inline char *public_key_to_bytes(char *enc, const public_key_t *pk) {
-  enc = ec_curve_to_bytes(enc, &pk->curve);
+  enc = ec_curve_to_bytes(__FILE__, __LINE__, enc, &pk->curve);
   *enc++ = pk->hint_pk;
   return enc;
 }
@@ -553,7 +553,8 @@ static inline void secret_key_from_bytes(secret_key_t *sk, public_key_t *pk, con
   enc = ibz_from_bytes(&sk->mat_BAcan_to_BA0_two[1][0], enc, TORSION_2POWER_BYTES, false);
   enc = ibz_from_bytes(&sk->mat_BAcan_to_BA0_two[1][1], enc, TORSION_2POWER_BYTES, false);
   sk->curve = pk->curve;
-  ec_curve_to_basis_2f_from_hint(&sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER, pk->hint_pk);
+  ec_normalize_curve_and_A24(__FILE__, __LINE__, &sk->curve);
+  ec_curve_to_basis_2f_from_hint(__FILE__, __LINE__, &sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER, pk->hint_pk);
 }
 
 static inline void signature_to_bytes(char *enc, const signature_t *sig) {

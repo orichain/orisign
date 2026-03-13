@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/_null.h>
 
 static inline uint64_t prop(uint64_t *n) {
@@ -253,6 +254,7 @@ static inline void modpro(const uint64_t *w, uint64_t *z) {
 }
 
 static inline void modinv(const char *file_name, int line_num, const uint64_t *x, const uint64_t *h, uint64_t *z) {
+  printf("modinv called %s:%d\n", file_name, line_num);
   uint64_t s[5];
   uint64_t t[5];
   if (h == NULL) {
