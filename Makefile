@@ -1,5 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -fwrapv -fno-strict-aliasing -fPIC -I/usr/local/include
+
+CFLAGS = -O3 -march=native -fomit-frame-pointer -funroll-loops -fno-tree-vectorize -fwrapv -fno-strict-aliasing -fPIC -I/usr/local/include
 LDFLAGS = -L/usr/local/lib -lm -lgmp
 LIBNAME = liborisign.a
 

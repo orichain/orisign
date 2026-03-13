@@ -1,9 +1,10 @@
 #pragma once
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/_null.h>
 
-static inline uint64_t prop(uint64_t *n) {
+static inline uint64_t prop_old(uint64_t *n) {
   int i;
   uint64_t mask = ((uint64_t)1 << 51u) - (uint64_t)1;
   int64_t carry = (int64_t)n[0];
@@ -16,6 +17,24 @@ static inline uint64_t prop(uint64_t *n) {
   }
   n[4] += (uint64_t)carry;
   return -((n[4] >> 1) >> 62u);
+}
+
+static inline uint64_t prop(uint64_t *n) {
+  const uint64_t mask = ((uint64_t)1<<51) - 1;
+  int64_t carry;
+  carry = (int64_t)n[0] >> 51;
+  n[0] &= mask;
+  n[1] += carry;
+  carry = (int64_t)n[1] >> 51;
+  n[1] &= mask;
+  n[2] += carry;
+  carry = (int64_t)n[2] >> 51;
+  n[2] &= mask;
+  n[3] += carry;
+  carry = (int64_t)n[3] >> 51;
+  n[3] &= mask;
+  n[4] += carry;
+  return -((n[4] >> 1) >> 62);
 }
 
 static inline int flatten(uint64_t *n) {
@@ -73,7 +92,120 @@ static inline void modneg(const uint64_t *b, uint64_t *n) {
   (void)prop(n);
 }
 
-static inline void modmul(const uint64_t *a, const uint64_t *b, uint64_t *c) {
+static inline void modmul(const uint64_t *a, const uint64_t *b, uint64_t *c){
+  const uint64_t p4 = 0x500000000000ULL;
+  const uint64_t mask = 0x7ffffffffffffULL;
+  uint64_t a0=a[0],a1=a[1],a2=a[2],a3=a[3],a4=a[4];
+  uint64_t b0=b[0],b1=b[1],b2=b[2],b3=b[3],b4=b[4];
+  __uint128_t t0,t1;
+  t0 = (__uint128_t)a0*b0;
+  uint64_t v0 = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a0*b1;
+  t1  = (__uint128_t)a1*b0;
+  t0 += t1;
+  uint64_t v1 = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a0*b2;
+  t1  = (__uint128_t)a1*b1;
+  t0 += t1;
+  t1  = (__uint128_t)a2*b0;
+  t0 += t1;
+  uint64_t v2 = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a0*b3;
+  t1  = (__uint128_t)a1*b2;
+  t0 += t1;
+  t1  = (__uint128_t)a2*b1;
+  t0 += t1;
+  t1  = (__uint128_t)a3*b0;
+  t0 += t1;
+  uint64_t v3 = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a0*b4;
+  t1  = (__uint128_t)a1*b3;
+  t0 += t1;
+  t1  = (__uint128_t)a2*b2;
+  t0 += t1;
+  t1  = (__uint128_t)a3*b1;
+  t0 += t1;
+  t1  = (__uint128_t)a4*b0;
+  t0 += t1;
+  t0 += (__uint128_t)v0 * p4;
+  uint64_t v4 = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a1*b4;
+  t1  = (__uint128_t)a2*b3;
+  t0 += t1;
+  t1  = (__uint128_t)a3*b2;
+  t0 += t1;
+  t1  = (__uint128_t)a4*b1;
+  t0 += t1;
+  t0 += (__uint128_t)v1 * p4;
+  c[0] = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a2*b4;
+  t1  = (__uint128_t)a3*b3;
+  t0 += t1;
+  t1  = (__uint128_t)a4*b2;
+  t0 += t1;
+  t0 += (__uint128_t)v2 * p4;
+  c[1] = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a3*b4;
+  t1  = (__uint128_t)a4*b3;
+  t0 += t1;
+  t0 += (__uint128_t)v3 * p4;
+  c[2] = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  t0 += (__uint128_t)a4*b4;
+  t0 += (__uint128_t)v4 * p4;
+  c[3] = (uint64_t)t0 & mask;
+  t0 >>= 51;
+  c[4] = (uint64_t)t0;
+}
+
+static inline void modsqr(const uint64_t *a, uint64_t *c) {
+  const uint64_t p4 = 0x500000000000ULL;
+  const uint64_t mask = 0x7ffffffffffffULL;
+  uint64_t a0=a[0],a1=a[1],a2=a[2],a3=a[3],a4=a[4];
+  __uint128_t t;
+  t = (__uint128_t)a0*a0;
+  uint64_t v0 = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a0*a1*2;
+  uint64_t v1 = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a0*a2*2 + (__uint128_t)a1*a1;
+  uint64_t v2 = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a0*a3*2 + (__uint128_t)a1*a2*2;
+  uint64_t v3 = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a0*a4*2 + (__uint128_t)a1*a3*2 + (__uint128_t)a2*a2;
+  t += (__uint128_t)v0 * p4;
+  uint64_t v4 = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a1*a4*2 + (__uint128_t)a2*a3*2;
+  t += (__uint128_t)v1 * p4;
+  c[0] = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a2*a4*2 + (__uint128_t)a3*a3;
+  t += (__uint128_t)v2 * p4;
+  c[1] = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a3*a4*2;
+  t += (__uint128_t)v3 * p4;
+  c[2] = (uint64_t)t & mask;
+  t >>= 51;
+  t += (__uint128_t)a4*a4;
+  t += (__uint128_t)v4 * p4;
+  c[3] = (uint64_t)t & mask;
+  t >>= 51;
+  c[4] = (uint64_t)t;
+}
+
+static inline void modmul_old(const uint64_t *a, const uint64_t *b, uint64_t *c) {
   __uint128_t t = 0;
   uint64_t p4 = 0x500000000000u;
   uint64_t q = ((uint64_t)1 << 51u);
@@ -129,7 +261,7 @@ static inline void modmul(const uint64_t *a, const uint64_t *b, uint64_t *c) {
   c[4] = (uint64_t)t;
 }
 
-static inline void modsqr(const uint64_t *a, uint64_t *c) {
+static inline void modsqr_old(const uint64_t *a, uint64_t *c) {
   __uint128_t tot;
   __uint128_t t = 0;
   uint64_t p4 = 0x500000000000u;
@@ -193,6 +325,10 @@ static inline void modsqr(const uint64_t *a, uint64_t *c) {
 }
 
 static inline void modcpy(const uint64_t *a, uint64_t *c) {
+  memcpy(c, a, 5 * sizeof(uint64_t));
+}
+
+static inline void modcpy_old(const uint64_t *a, uint64_t *c) {
   int i;
   for (i = 0; i < 5; i++) {
     c[i] = a[i];
@@ -200,13 +336,57 @@ static inline void modcpy(const uint64_t *a, uint64_t *c) {
 }
 
 static inline void modnsqr(uint64_t *a, int n) {
-  int i;
-  for (i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     modsqr(a, a);
   }
 }
 
 static inline void modpro(const uint64_t *w, uint64_t *z) {
+  uint64_t x[5] = {w[0],w[1],w[2],w[3],w[4]};
+  uint64_t t0[5];
+  uint64_t t1[5];
+  uint64_t t2[5];
+  uint64_t t3[5];
+  modsqr(x, z);
+  modmul(x, z, t0);
+  modsqr(t0, z);
+  modmul(x, z, z);
+  modsqr(z, t1);
+  modsqr(t1, t3);
+  modsqr(t3, t2);
+  uint64_t t4[5] = {t2[0],t2[1],t2[2],t2[3],t2[4]};
+  modnsqr(t4, 3);
+  modmul(t2, t4, t2);
+  modcpy(t2, t4);
+  modnsqr(t4, 6);
+  modmul(t2, t4, t2);
+  modcpy(t2, t4);
+  modnsqr(t4, 2);
+  modmul(t3, t4, t3);
+  modnsqr(t3, 13);
+  modmul(t2, t3, t2);
+  modcpy(t2, t3);
+  modnsqr(t3, 27);
+  modmul(t2, t3, t2);
+  modmul(z, t2, z);
+  modcpy(z, t2);
+  modnsqr(t2, 4);
+  modmul(t1, t2, t1);
+  modmul(t0, t1, t0);
+  modmul(t1, t0, t1);
+  modmul(t0, t1, t0);
+  modmul(t1, t0, t2);
+  modmul(t0, t2, t0);
+  modmul(t1, t0, t1);
+  modnsqr(t1, 63);
+  modmul(t0, t1, t1);
+  modnsqr(t1, 64);
+  modmul(t0, t1, t0);
+  modnsqr(t0, 57);
+  modmul(z, t0, z);
+}
+
+static inline void modpro_old(const uint64_t *w, uint64_t *z) {
   uint64_t x[5];
   uint64_t t0[5];
   uint64_t t1[5];
@@ -254,7 +434,7 @@ static inline void modpro(const uint64_t *w, uint64_t *z) {
 }
 
 static inline void modinv(const char *file_name, int line_num, const uint64_t *x, const uint64_t *h, uint64_t *z) {
-  printf("modinv called %s:%d\n", file_name, line_num);
+  //printf("modinv called %s:%d\n", file_name, line_num);
   uint64_t s[5];
   uint64_t t[5];
   if (h == NULL) {
@@ -310,6 +490,10 @@ static inline int modis0(const uint64_t *a) {
 }
 
 static inline void modzer(uint64_t *a) {
+  memset(a,0,5*sizeof(uint64_t));
+}
+
+static inline void modzer_old(uint64_t *a) {
   int i;
   for (i = 0; i < 5; i++) {
     a[i] = 0;
@@ -317,6 +501,12 @@ static inline void modzer(uint64_t *a) {
 }
 
 static inline void modone(uint64_t *a) {
+  modzer(a);
+  a[0] = 1;
+  nres(a, a);
+}
+
+static inline void modone_old(uint64_t *a) {
   int i;
   a[0] = 1;
   for (i = 1; i < 5; i++) {
@@ -352,7 +542,24 @@ static inline int modqr(const uint64_t *h, const uint64_t *x) {
   return modis1(r) | modis0(x);
 }
 
-static inline void modcmv(int b, const uint64_t *g, volatile uint64_t *f) {
+static inline void modcmv(int b, const uint64_t *g, uint64_t *f) {
+    uint64_t mask = -(uint64_t)(b & 1);
+
+    for (int i = 0; i < 5; i++)
+        f[i] ^= mask & (f[i] ^ g[i]);
+}
+
+static inline void modcsw(int b, uint64_t *g, uint64_t *f) {
+    uint64_t mask = -(uint64_t)(b & 1);
+
+    for (int i = 0; i < 5; i++) {
+        uint64_t t = mask & (f[i] ^ g[i]);
+        f[i] ^= t;
+        g[i] ^= t;
+    }
+}
+
+static inline void modcmv_old(int b, const uint64_t *g, volatile uint64_t *f) {
   int i;
   uint64_t c0, c1, s, t;
   uint64_t r = 0x3cc3c33c5aa5a55au;
@@ -366,7 +573,7 @@ static inline void modcmv(int b, const uint64_t *g, volatile uint64_t *f) {
   }
 }
 
-static inline void modcsw(int b, volatile uint64_t *g, volatile uint64_t *f) {
+static inline void modcsw_old(int b, volatile uint64_t *g, volatile uint64_t *f) {
   int i;
   uint64_t c0, c1, s, t, w;
   uint64_t r = 0x3cc3c33c5aa5a55au;

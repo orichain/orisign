@@ -27,7 +27,7 @@ int main () {
 
   const char *msg = "Test123";
 
-  const int N = 1;
+  const int N = 100;
   int ctr;
 
   printf("\n=== SIGN START ===\n");
