@@ -82,10 +82,63 @@ static inline void ec_normalize_point_3(
       inverses, 3);
   fp2_mul(&P1->x, &P1->x, &inverses[0]);
   fp2_mul(&P2->x, &P2->x, &inverses[1]);
-  fp2_mul(&P3->x, &P3->x, &inverses[3]);
+  fp2_mul(&P3->x, &P3->x, &inverses[2]);
   fp2_set_one(&(P1->z));
   fp2_set_one(&(P2->z));
   fp2_set_one(&(P3->z));
+}
+
+static inline void ec_normalize_point_4(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_point_t *P1, ec_point_t *P2, ec_point_t *P3, ec_point_t *P4) {
+  fp2_t inverses[4];
+  fp2_copy(&inverses[0], &P1->z);
+  fp2_copy(&inverses[1], &P2->z);
+  fp2_copy(&inverses[2], &P3->z);
+  fp2_copy(&inverses[3], &P4->z);
+  fp2_batched_inv(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      inverses, 4);
+  fp2_mul(&P1->x, &P1->x, &inverses[0]);
+  fp2_mul(&P2->x, &P2->x, &inverses[1]);
+  fp2_mul(&P3->x, &P3->x, &inverses[2]);
+  fp2_mul(&P4->x, &P4->x, &inverses[3]);
+  fp2_set_one(&(P1->z));
+  fp2_set_one(&(P2->z));
+  fp2_set_one(&(P3->z));
+  fp2_set_one(&(P4->z));
+}
+
+static inline void ec_normalize_point_5(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_point_t *P1, ec_point_t *P2, ec_point_t *P3, ec_point_t *P4, ec_point_t *P5) {
+  fp2_t inverses[5];
+  fp2_copy(&inverses[0], &P1->z);
+  fp2_copy(&inverses[1], &P2->z);
+  fp2_copy(&inverses[2], &P3->z);
+  fp2_copy(&inverses[3], &P4->z);
+  fp2_copy(&inverses[4], &P5->z);
+  fp2_batched_inv(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      inverses, 5);
+  fp2_mul(&P1->x, &P1->x, &inverses[0]);
+  fp2_mul(&P2->x, &P2->x, &inverses[1]);
+  fp2_mul(&P3->x, &P3->x, &inverses[2]);
+  fp2_mul(&P4->x, &P4->x, &inverses[3]);
+  fp2_mul(&P5->x, &P5->x, &inverses[4]);
+  fp2_set_one(&(P1->z));
+  fp2_set_one(&(P2->z));
+  fp2_set_one(&(P3->z));
+  fp2_set_one(&(P4->z));
+  fp2_set_one(&(P5->z));
 }
 
 static inline void ec_curve_normalize_A24(
@@ -638,29 +691,6 @@ static inline void test_point_order_twof_3(
   res->res1 = ec_is_zero(&test1);
   res->res2 = ec_is_zero(&test2);
   res->res3 = ec_is_zero(&test3);
-}
-
-static inline int test_basis_order_twof(
-#if DEBUG_MODINV
-    const char *file_name, int line_num,
-#endif
-    const ec_basis_t *B, const ec_curve_t *E, int t) {
-  int check_P = test_point_order_twof(
-#if DEBUG_MODINV
-      file_name, line_num, 
-#endif
-      &B->P, E, t);
-  int check_Q = test_point_order_twof(
-#if DEBUG_MODINV
-      file_name, line_num, 
-#endif
-      &B->Q, E, t);
-  int check_PmQ = test_point_order_twof(
-#if DEBUG_MODINV
-      file_name, line_num, 
-#endif
-      &B->PmQ, E, t);
-  return check_P & check_Q & check_PmQ;
 }
 
 static inline uint32_t ec_is_two_torsion(const ec_point_t *P, const ec_curve_t *E) {

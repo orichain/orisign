@@ -511,21 +511,24 @@ static inline int _fixed_degree_isogeny_impl(
   quat_lattice_finalize(&order_hnf.order);
   ec_basis_t B0_two;
   copy_basis(&B0_two, &CURVES_WITH_ENDOMORPHISMS[index_alternate_order].basis_even);
-  assert(test_basis_order_twof(
+  resu32_3_t res;
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      __FILE__, __LINE__, 
 #endif
-        &B0_two, &E0, TORSION_EVEN_POWER));
+      &res, &B0_two.P, &E0, TORSION_EVEN_POWER, &B0_two.Q, &E0, TORSION_EVEN_POWER, &B0_two.PmQ, &E0, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   ec_dbl_iter_basis(
 #if DEBUG_MODINV
       file_name, line_num, 
 #endif
       &B0_two, TORSION_EVEN_POWER - length - HD_extra_torsion, &B0_two, &E0);
-  assert(test_basis_order_twof(
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      __FILE__, __LINE__, 
 #endif
-        &B0_two, &E0, length + HD_extra_torsion));
+      &res, &B0_two.P, &E0, length + HD_extra_torsion, &B0_two.Q, &E0, length + HD_extra_torsion, &B0_two.PmQ, &E0, length + HD_extra_torsion);
+  assert(res.res1 & res.res2 & res.res3);
   theta_couple_point_t T1;
   theta_couple_point_t T2, T1m2;
   copy_point(&T1.P1, &B0_two.P);
@@ -547,11 +550,12 @@ static inline int _fixed_degree_isogeny_impl(
       file_name, line_num, 
 #endif
       &B0_two_theta, index_alternate_order, &E0, &theta, length + HD_extra_torsion);
-  assert(test_basis_order_twof(
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      __FILE__, __LINE__, 
 #endif
-        &B0_two_theta, &E0, length + HD_extra_torsion));
+      &res, &B0_two_theta.P, &E0, length + HD_extra_torsion, &B0_two_theta.Q, &E0, length + HD_extra_torsion, &B0_two_theta.PmQ, &E0, length + HD_extra_torsion);
+  assert(res.res1 & res.res2 & res.res3);
   theta_couple_curve_t E00;
   E00.E1 = E0;
   E00.E2 = E0;
@@ -708,11 +712,13 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(
       file_name, line_num, 
 #endif
       &bas2, 0, &Fv_codomain.E1, &theta, TORSION_EVEN_POWER);
-  assert(test_basis_order_twof(
+  resu32_3_t res;
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      __FILE__, __LINE__, 
 #endif
-        &bas2, &Fv_codomain.E1, TORSION_EVEN_POWER));
+      &res, &bas2.P, &Fv_codomain.E1, TORSION_EVEN_POWER, &bas2.Q, &Fv_codomain.E1, TORSION_EVEN_POWER, &bas2.PmQ, &Fv_codomain.E1, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   copy_point(&ker.T1.P2, &bas2.P);
   copy_point(&ker.T2.P2, &bas2.Q);
   copy_point(&ker.T1m2.P2, &bas2.PmQ);
@@ -730,11 +736,12 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(
   assert(tpot2.res1);
   assert(tpot2.res2);
   assert(ibz_is_odd(u));
-  assert(test_basis_order_twof(
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      __FILE__, __LINE__, 
 #endif
-        &bas_u, &E01.E1, TORSION_EVEN_POWER));
+      &res, &bas_u.P, &E01.E1, TORSION_EVEN_POWER, &bas_u.Q, &E01.E1, TORSION_EVEN_POWER, &bas_u.PmQ, &E01.E1, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   copy_point(&pushed_points[0].P1, &bas_u.P);
   copy_point(&pushed_points[2].P1, &bas_u.PmQ);
   copy_point(&pushed_points[1].P1, &bas_u.Q);

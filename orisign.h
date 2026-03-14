@@ -28,21 +28,24 @@ static inline int protocols_keygen(public_key_t *pk, secret_key_t *sk) {
 #endif
         &B_0_two, &sk->curve, &sk->secret_ideal);
   }
-  assert(test_basis_order_twof(
+  resu32_3_t res;
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        __FILE__, __LINE__, 
+      __FILE__, __LINE__, 
 #endif
-        &B_0_two, &sk->curve, TORSION_EVEN_POWER));
+      &res, &B_0_two.P, &sk->curve, TORSION_EVEN_POWER, &B_0_two.Q, &sk->curve, TORSION_EVEN_POWER, &B_0_two.PmQ, &sk->curve, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   pk->hint_pk = ec_curve_to_basis_2f_to_hint(
 #if DEBUG_MODINV
       __FILE__, __LINE__, 
 #endif
       &sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER);
-  assert(test_basis_order_twof(
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        __FILE__, __LINE__, 
+      __FILE__, __LINE__, 
 #endif
-        &sk->canonical_basis, &sk->curve, TORSION_EVEN_POWER));
+      &res, &sk->canonical_basis.P, &sk->curve, TORSION_EVEN_POWER, &sk->canonical_basis.Q, &sk->curve, TORSION_EVEN_POWER, &sk->canonical_basis.PmQ, &sk->curve, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   change_of_basis_matrix_tate(
 #if DEBUG_MODINV
       __FILE__, __LINE__, 
@@ -289,11 +292,13 @@ static inline int compute_small_chain_isogeny_signature(ec_curve_t *E_chall_2, e
       __FILE__, __LINE__, 
 #endif
       B_chall_2, pow_dim2_deg_resp + HD_extra_torsion, B_chall_2, E_chall_2);
-  assert(test_basis_order_twof(
+  resu32_3_t res;
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        __FILE__, __LINE__, 
+      __FILE__, __LINE__, 
 #endif
-        B_chall_2, E_chall_2, length));
+      &res, &B_chall_2->P, E_chall_2, length, &B_chall_2->Q, E_chall_2, length, &B_chall_2->PmQ, E_chall_2, length);
+  assert(res.res1 & res.res2 & res.res3);
   ec_point_t ker;
   ec_biscalar_mul_ibz_vec(
 #if DEBUG_MODINV
@@ -327,11 +332,13 @@ static inline int compute_challenge_codomain_signature(const signature_t *sig, s
   copy_basis(&bas_sk, &sk->canonical_basis);
   phi_chall.curve = sk->curve;
   phi_chall.length = TORSION_EVEN_POWER - sig->backtracking;
-  assert(test_basis_order_twof(
+  resu32_3_t res;
+  test_point_order_twof_3(
 #if DEBUG_MODINV
-        __FILE__, __LINE__, 
+      __FILE__, __LINE__, 
 #endif
-        &bas_sk, &sk->curve, TORSION_EVEN_POWER));
+      &res, &bas_sk.P, &sk->curve, TORSION_EVEN_POWER, &bas_sk.Q, &sk->curve, TORSION_EVEN_POWER, &bas_sk.PmQ, &sk->curve, TORSION_EVEN_POWER);
+  assert(res.res1 & res.res2 & res.res3);
   ec_ladder3pt(&phi_chall.kernel, sig->chall_coeff, &bas_sk.P, &bas_sk.Q, &bas_sk.PmQ, &sk->curve);
   assert(test_point_order_twof(
 #if DEBUG_MODINV
