@@ -274,3 +274,17 @@ typedef struct {
   uint32_t res3;
 } resu32_3_t;
 
+typedef struct {
+  uint32_t res1;
+  uint32_t res2;
+  uint32_t res3;
+  uint32_t res4;
+} resu32_4_t;
+
+typedef struct {
+  uint32_t res1;
+  uint32_t res2;
+  uint32_t res3;
+  uint32_t res4;
+  uint32_t res5;
+} resu32_5_t;

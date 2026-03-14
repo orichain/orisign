@@ -163,34 +163,13 @@ static inline void ec_curve_normalize_A24_2(
     const char *file_name, int line_num,
 #endif
     ec_curve_t *E1, ec_curve_t *E2) {
-  if (!E1->is_A24_computed_and_normalized && !E2->is_A24_computed_and_normalized) {
-    AC_to_A24(&E1->A24, E1);
-    AC_to_A24(&E2->A24, E2);
-    ec_normalize_point_2(
+  AC_to_A24(&E1->A24, E1);
+  AC_to_A24(&E2->A24, E2);
+  ec_normalize_point_2(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      file_name, line_num, 
 #endif
-        &E1->A24, &E2->A24);
-  } else {
-    if (!E1->is_A24_computed_and_normalized) {
-      AC_to_A24(&E1->A24, E1);
-      ec_normalize_point(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          &E1->A24);
-      E1->is_A24_computed_and_normalized = true;
-    }
-    if (!E2->is_A24_computed_and_normalized) {
-      AC_to_A24(&E2->A24, E2);
-      ec_normalize_point(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          &E2->A24);
-      E2->is_A24_computed_and_normalized = true;
-    }
-  }
+      &E1->A24, &E2->A24);
   assert(fp2_is_one(&E1->A24.z));
   assert(fp2_is_one(&E2->A24.z));
 }
@@ -200,71 +179,59 @@ static inline void ec_curve_normalize_A24_3(
     const char *file_name, int line_num,
 #endif
     ec_curve_t *E1, ec_curve_t *E2, ec_curve_t *E3) {
-  if (!E1->is_A24_computed_and_normalized && !E2->is_A24_computed_and_normalized && !E3->is_A24_computed_and_normalized) {
-    AC_to_A24(&E1->A24, E1);
-    AC_to_A24(&E2->A24, E2);
-    AC_to_A24(&E3->A24, E3);
-    ec_normalize_point_3(
+  AC_to_A24(&E1->A24, E1);
+  AC_to_A24(&E2->A24, E2);
+  AC_to_A24(&E3->A24, E3);
+  ec_normalize_point_3(
 #if DEBUG_MODINV
-        file_name, line_num, 
+      file_name, line_num, 
 #endif
-        &E1->A24, &E2->A24, &E3->A24);
-  } else if (!E1->is_A24_computed_and_normalized && !E2->is_A24_computed_and_normalized && E3->is_A24_computed_and_normalized) {
-    AC_to_A24(&E1->A24, E1);
-    AC_to_A24(&E2->A24, E2);
-    ec_normalize_point_2(
-#if DEBUG_MODINV
-        file_name, line_num, 
-#endif
-        &E1->A24, &E2->A24);
-  } else if (!E1->is_A24_computed_and_normalized && E2->is_A24_computed_and_normalized && !E3->is_A24_computed_and_normalized) {
-    AC_to_A24(&E1->A24, E1);
-    AC_to_A24(&E3->A24, E3);
-    ec_normalize_point_2(
-#if DEBUG_MODINV
-        file_name, line_num, 
-#endif
-        &E1->A24, &E3->A24);
-  } else if (E1->is_A24_computed_and_normalized && !E2->is_A24_computed_and_normalized && !E3->is_A24_computed_and_normalized) {
-    AC_to_A24(&E2->A24, E2);
-    AC_to_A24(&E3->A24, E3);
-    ec_normalize_point_2(
-#if DEBUG_MODINV
-        file_name, line_num, 
-#endif
-        &E2->A24, &E3->A24);
-  } else {
-    if (!E1->is_A24_computed_and_normalized) {
-      AC_to_A24(&E1->A24, E1);
-      ec_normalize_point(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          &E1->A24);
-      E1->is_A24_computed_and_normalized = true;
-    }
-    if (!E2->is_A24_computed_and_normalized) {
-      AC_to_A24(&E2->A24, E2);
-      ec_normalize_point(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          &E2->A24);
-      E2->is_A24_computed_and_normalized = true;
-    }
-    if (!E3->is_A24_computed_and_normalized) {
-      AC_to_A24(&E3->A24, E3);
-      ec_normalize_point(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          &E3->A24);
-      E3->is_A24_computed_and_normalized = true;
-    }
-  }
+      &E1->A24, &E2->A24, &E3->A24);
   assert(fp2_is_one(&E1->A24.z));
   assert(fp2_is_one(&E2->A24.z));
   assert(fp2_is_one(&E3->A24.z));
+}
+
+static inline void ec_curve_normalize_A24_4(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_curve_t *E1, ec_curve_t *E2, ec_curve_t *E3, ec_curve_t *E4) {
+  AC_to_A24(&E1->A24, E1);
+  AC_to_A24(&E2->A24, E2);
+  AC_to_A24(&E3->A24, E3);
+  AC_to_A24(&E4->A24, E4);
+  ec_normalize_point_4(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &E1->A24, &E2->A24, &E3->A24, &E4->A24);
+  assert(fp2_is_one(&E1->A24.z));
+  assert(fp2_is_one(&E2->A24.z));
+  assert(fp2_is_one(&E3->A24.z));
+  assert(fp2_is_one(&E4->A24.z));
+}
+
+static inline void ec_curve_normalize_A24_5(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_curve_t *E1, ec_curve_t *E2, ec_curve_t *E3, ec_curve_t *E4, ec_curve_t *E5) {
+  AC_to_A24(&E1->A24, E1);
+  AC_to_A24(&E2->A24, E2);
+  AC_to_A24(&E3->A24, E3);
+  AC_to_A24(&E4->A24, E4);
+  AC_to_A24(&E5->A24, E5);
+  ec_normalize_point_5(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &E1->A24, &E2->A24, &E3->A24, &E4->A24, &E5->A24);
+  assert(fp2_is_one(&E1->A24.z));
+  assert(fp2_is_one(&E2->A24.z));
+  assert(fp2_is_one(&E3->A24.z));
+  assert(fp2_is_one(&E4->A24.z));
+  assert(fp2_is_one(&E5->A24.z));
 }
 
 static inline void copy_basis(ec_basis_t *B1, const ec_basis_t *B0) {
@@ -355,36 +322,11 @@ static inline void ec_dbl_iter_2(
     copy_point(res1, P1);
     copy_point(res2, P2);
   } else {
-    if (n1 > 50 && n2 > 50) {
-      ec_curve_normalize_A24_2(
+    ec_curve_normalize_A24_2(
 #if DEBUG_MODINV
-          file_name, line_num, 
+        file_name, line_num, 
 #endif
-          curve1, curve2);
-    } else {
-      if (n1 == 0) {
-        copy_point(res1, P1);
-      } else {
-        if (n1 > 50) {
-          ec_curve_normalize_A24(
-#if DEBUG_MODINV
-              file_name, line_num, 
-#endif
-              curve1);
-        }
-      }
-      if (n2 == 0) {
-        copy_point(res2, P2);
-      } else {
-        if (n2 > 50) {
-          ec_curve_normalize_A24(
-#if DEBUG_MODINV
-              file_name, line_num, 
-#endif
-              curve2);
-        }
-      }
-    }
+        curve1, curve2);
     if (n1 != 0) {
       if (curve1->is_A24_computed_and_normalized) {
         assert(fp2_is_one(&curve1->A24.z));
@@ -399,7 +341,7 @@ static inline void ec_dbl_iter_2(
           xDBL(res1, res1, (const ec_point_t *)curve1);
         }
       }
-    }
+    } else copy_point(res1, P1);
     if (n2 != 0) {
       if (curve2->is_A24_computed_and_normalized) {
         assert(fp2_is_one(&curve2->A24.z));
@@ -414,7 +356,7 @@ static inline void ec_dbl_iter_2(
           xDBL(res2, res2, (const ec_point_t *)curve2);
         }
       }
-    }
+    } else copy_point(res2, P2);
   }
 }
 
@@ -428,65 +370,11 @@ static inline void ec_dbl_iter_3(
     copy_point(res2, P2);
     copy_point(res3, P3);
   } else {
-    if (n1 > 50 && n2 > 50 && n3 > 50) {
-      ec_curve_normalize_A24_3(
+    ec_curve_normalize_A24_3(
 #if DEBUG_MODINV
-          file_name, line_num, 
+        file_name, line_num, 
 #endif
-          curve1, curve2, curve3);
-    } else if (n1 > 50 && n2 > 50 && n3 <= 50) {
-      ec_curve_normalize_A24_2(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          curve1, curve2);
-    } else if (n1 > 50 && n2 <= 50 && n3 > 50) {
-      ec_curve_normalize_A24_2(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          curve1, curve3);
-    } else if (n1 <= 50 && n2 > 50 && n3 > 50) {
-      ec_curve_normalize_A24_2(
-#if DEBUG_MODINV
-          file_name, line_num, 
-#endif
-          curve2, curve3);
-    } else {
-      if (n1 == 0) {
-        copy_point(res1, P1);
-      } else {
-        if (n1 > 50) {
-          ec_curve_normalize_A24(
-#if DEBUG_MODINV
-              file_name, line_num, 
-#endif
-              curve1);
-        }
-      }
-      if (n2 == 0) {
-        copy_point(res2, P2);
-      } else {
-        if (n2 > 50) {
-          ec_curve_normalize_A24(
-#if DEBUG_MODINV
-              file_name, line_num, 
-#endif
-              curve2);
-        }
-      }
-      if (n3 == 0) {
-        copy_point(res3, P3);
-      } else {
-        if (n3 > 50) {
-          ec_curve_normalize_A24(
-#if DEBUG_MODINV
-              file_name, line_num, 
-#endif
-              curve3);
-        }
-      }
-    }
+        curve1, curve2, curve3);
     if (n1 != 0) {
       if (curve1->is_A24_computed_and_normalized) {
         assert(fp2_is_one(&curve1->A24.z));
@@ -501,7 +389,7 @@ static inline void ec_dbl_iter_3(
           xDBL(res1, res1, (const ec_point_t *)curve1);
         }
       }
-    }
+    } else copy_point(res1, P1);
     if (n2 != 0) {
       if (curve2->is_A24_computed_and_normalized) {
         assert(fp2_is_one(&curve2->A24.z));
@@ -516,7 +404,7 @@ static inline void ec_dbl_iter_3(
           xDBL(res2, res2, (const ec_point_t *)curve2);
         }
       }
-    }
+    } else copy_point(res2, P2);
     if (n3 != 0) {
       if (curve3->is_A24_computed_and_normalized) {
         assert(fp2_is_one(&curve3->A24.z));
@@ -531,7 +419,181 @@ static inline void ec_dbl_iter_3(
           xDBL(res3, res3, (const ec_point_t *)curve3);
         }
       }
-    }
+    } else copy_point(res3, P3);
+  }
+}
+
+static inline void ec_dbl_iter_4(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_point_t *res1, int n1, const ec_point_t *P1, ec_curve_t *curve1, ec_point_t *res2, int n2, const ec_point_t *P2, ec_curve_t *curve2, ec_point_t *res3, int n3, const ec_point_t *P3, ec_curve_t *curve3, ec_point_t *res4, int n4, const ec_point_t *P4, ec_curve_t *curve4) {
+  if (n1 == 0 && n2 == 0 && n3 == 0 && n4 == 0) {
+    copy_point(res1, P1);
+    copy_point(res2, P2);
+    copy_point(res3, P3);
+    copy_point(res4, P4);
+  } else {
+    ec_curve_normalize_A24_4(
+#if DEBUG_MODINV
+        file_name, line_num, 
+#endif
+        curve1, curve2, curve3, curve4);
+    if (n1 != 0) {
+      if (curve1->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve1->A24.z));
+        xDBL_A24(res1, P1, &curve1->A24, true);
+        for (int i = 0; i < n1 - 1; i++) {
+          assert(fp2_is_one(&curve1->A24.z));
+          xDBL_A24(res1, res1, &curve1->A24, true);
+        }
+      } else {
+        xDBL(res1, P1, (const ec_point_t *)curve1);
+        for (int i = 0; i < n1 - 1; i++) {
+          xDBL(res1, res1, (const ec_point_t *)curve1);
+        }
+      }
+    } else copy_point(res1, P1);
+    if (n2 != 0) {
+      if (curve2->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve2->A24.z));
+        xDBL_A24(res2, P2, &curve2->A24, true);
+        for (int i = 0; i < n2 - 1; i++) {
+          assert(fp2_is_one(&curve2->A24.z));
+          xDBL_A24(res2, res2, &curve2->A24, true);
+        }
+      } else {
+        xDBL(res2, P2, (const ec_point_t *)curve2);
+        for (int i = 0; i < n2 - 1; i++) {
+          xDBL(res2, res2, (const ec_point_t *)curve2);
+        }
+      }
+    } else copy_point(res2, P2);
+    if (n3 != 0) {
+      if (curve3->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve3->A24.z));
+        xDBL_A24(res3, P3, &curve3->A24, true);
+        for (int i = 0; i < n3 - 1; i++) {
+          assert(fp2_is_one(&curve3->A24.z));
+          xDBL_A24(res3, res3, &curve3->A24, true);
+        }
+      } else {
+        xDBL(res3, P3, (const ec_point_t *)curve3);
+        for (int i = 0; i < n3 - 1; i++) {
+          xDBL(res3, res3, (const ec_point_t *)curve3);
+        }
+      }
+    } else copy_point(res3, P3);
+    if (n4 != 0) {
+      if (curve4->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve4->A24.z));
+        xDBL_A24(res4, P3, &curve4->A24, true);
+        for (int i = 0; i < n4 - 1; i++) {
+          assert(fp2_is_one(&curve4->A24.z));
+          xDBL_A24(res4, res4, &curve4->A24, true);
+        }
+      } else {
+        xDBL(res4, P4, (const ec_point_t *)curve4);
+        for (int i = 0; i < n4 - 1; i++) {
+          xDBL(res4, res4, (const ec_point_t *)curve4);
+        }
+      }
+    } else copy_point(res4, P4);
+  }
+}
+
+static inline void ec_dbl_iter_5(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_point_t *res1, int n1, const ec_point_t *P1, ec_curve_t *curve1, ec_point_t *res2, int n2, const ec_point_t *P2, ec_curve_t *curve2, ec_point_t *res3, int n3, const ec_point_t *P3, ec_curve_t *curve3, ec_point_t *res4, int n4, const ec_point_t *P4, ec_curve_t *curve4, ec_point_t *res5, int n5, const ec_point_t *P5, ec_curve_t *curve5) {
+  if (n1 == 0 && n2 == 0 && n3 == 0 && n4 == 0 && n5 == 0) {
+    copy_point(res1, P1);
+    copy_point(res2, P2);
+    copy_point(res3, P3);
+    copy_point(res4, P4);
+    copy_point(res5, P5);
+  } else {
+    ec_curve_normalize_A24_5(
+#if DEBUG_MODINV
+        file_name, line_num, 
+#endif
+        curve1, curve2, curve3, curve4, curve5);
+    if (n1 != 0) {
+      if (curve1->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve1->A24.z));
+        xDBL_A24(res1, P1, &curve1->A24, true);
+        for (int i = 0; i < n1 - 1; i++) {
+          assert(fp2_is_one(&curve1->A24.z));
+          xDBL_A24(res1, res1, &curve1->A24, true);
+        }
+      } else {
+        xDBL(res1, P1, (const ec_point_t *)curve1);
+        for (int i = 0; i < n1 - 1; i++) {
+          xDBL(res1, res1, (const ec_point_t *)curve1);
+        }
+      }
+    } else copy_point(res1, P1);
+    if (n2 != 0) {
+      if (curve2->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve2->A24.z));
+        xDBL_A24(res2, P2, &curve2->A24, true);
+        for (int i = 0; i < n2 - 1; i++) {
+          assert(fp2_is_one(&curve2->A24.z));
+          xDBL_A24(res2, res2, &curve2->A24, true);
+        }
+      } else {
+        xDBL(res2, P2, (const ec_point_t *)curve2);
+        for (int i = 0; i < n2 - 1; i++) {
+          xDBL(res2, res2, (const ec_point_t *)curve2);
+        }
+      }
+    } else copy_point(res2, P2);
+    if (n3 != 0) {
+      if (curve3->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve3->A24.z));
+        xDBL_A24(res3, P3, &curve3->A24, true);
+        for (int i = 0; i < n3 - 1; i++) {
+          assert(fp2_is_one(&curve3->A24.z));
+          xDBL_A24(res3, res3, &curve3->A24, true);
+        }
+      } else {
+        xDBL(res3, P3, (const ec_point_t *)curve3);
+        for (int i = 0; i < n3 - 1; i++) {
+          xDBL(res3, res3, (const ec_point_t *)curve3);
+        }
+      }
+    } else copy_point(res3, P3);
+    if (n4 != 0) {
+      if (curve4->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve4->A24.z));
+        xDBL_A24(res4, P4, &curve4->A24, true);
+        for (int i = 0; i < n4 - 1; i++) {
+          assert(fp2_is_one(&curve4->A24.z));
+          xDBL_A24(res4, res4, &curve4->A24, true);
+        }
+      } else {
+        xDBL(res4, P4, (const ec_point_t *)curve4);
+        for (int i = 0; i < n4 - 1; i++) {
+          xDBL(res4, res4, (const ec_point_t *)curve4);
+        }
+      }
+    } else copy_point(res4, P4);
+    if (n5 != 0) {
+      if (curve5->is_A24_computed_and_normalized) {
+        assert(fp2_is_one(&curve5->A24.z));
+        xDBL_A24(res5, P5, &curve5->A24, true);
+        for (int i = 0; i < n5 - 1; i++) {
+          assert(fp2_is_one(&curve5->A24.z));
+          xDBL_A24(res5, res5, &curve5->A24, true);
+        }
+      } else {
+        xDBL(res5, P5, (const ec_point_t *)curve5);
+        for (int i = 0; i < n5 - 1; i++) {
+          xDBL(res5, res5, (const ec_point_t *)curve5);
+        }
+      }
+    } else copy_point(res5, P5);
   }
 }
 
@@ -598,7 +660,51 @@ static inline void ec_dbl_iter_basis_3(
 #if DEBUG_MODINV
       file_name, line_num, 
 #endif
-      &res1->PmQ, n1, &B1->PmQ, curve1, &res2->PmQ, n2, &B2->PmQ, curve2, &res3->PmQ, n2, &B3->PmQ, curve3);
+      &res1->PmQ, n1, &B1->PmQ, curve1, &res2->PmQ, n2, &B2->PmQ, curve2, &res3->PmQ, n3, &B3->PmQ, curve3);
+}
+
+static inline void ec_dbl_iter_basis_4(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_basis_t *res1, int n1, const ec_basis_t *B1, ec_curve_t *curve1, ec_basis_t *res2, int n2, const ec_basis_t *B2, ec_curve_t *curve2, ec_basis_t *res3, int n3, const ec_basis_t *B3, ec_curve_t *curve3, ec_basis_t *res4, int n4, const ec_basis_t *B4, ec_curve_t *curve4) {
+  ec_dbl_iter_4(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->P, n1, &B1->P, curve1, &res2->P, n2, &B2->P, curve2, &res3->P, n3, &B3->P, curve3, &res4->P, n4, &B4->P, curve4);
+  ec_dbl_iter_4(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->Q, n1, &B1->Q, curve1, &res2->Q, n2, &B2->Q, curve2, &res3->Q, n3, &B3->Q, curve3, &res4->Q, n4, &B4->Q, curve4);
+  ec_dbl_iter_4(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->PmQ, n1, &B1->PmQ, curve1, &res2->PmQ, n2, &B2->PmQ, curve2, &res3->PmQ, n3, &B3->PmQ, curve3, &res4->PmQ, n4, &B4->PmQ, curve4);
+}
+
+static inline void ec_dbl_iter_basis_5(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    ec_basis_t *res1, int n1, const ec_basis_t *B1, ec_curve_t *curve1, ec_basis_t *res2, int n2, const ec_basis_t *B2, ec_curve_t *curve2, ec_basis_t *res3, int n3, const ec_basis_t *B3, ec_curve_t *curve3, ec_basis_t *res4, int n4, const ec_basis_t *B4, ec_curve_t *curve4, ec_basis_t *res5, int n5, const ec_basis_t *B5, ec_curve_t *curve5) {
+  ec_dbl_iter_5(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->P, n1, &B1->P, curve1, &res2->P, n2, &B2->P, curve2, &res3->P, n3, &B3->P, curve3, &res4->P, n4, &B4->P, curve4, &res5->P, n5, &B5->P, curve5);
+  ec_dbl_iter_5(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->Q, n1, &B1->Q, curve1, &res2->Q, n2, &B2->Q, curve2, &res3->Q, n3, &B3->Q, curve3, &res4->Q, n4, &B4->Q, curve4, &res5->Q, n5, &B5->Q, curve5);
+  ec_dbl_iter_5(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &res1->PmQ, n1, &B1->PmQ, curve1, &res2->PmQ, n2, &B2->PmQ, curve2, &res3->PmQ, n3, &B3->PmQ, curve3, &res4->PmQ, n4, &B4->PmQ, curve4, &res5->PmQ, n5, &B5->PmQ, curve5);
 }
 
 static inline void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t *curve) {
@@ -691,6 +797,97 @@ static inline void test_point_order_twof_3(
   res->res1 = ec_is_zero(&test1);
   res->res2 = ec_is_zero(&test2);
   res->res3 = ec_is_zero(&test3);
+}
+
+static inline void test_point_order_twof_4(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    resu32_4_t *res, const ec_point_t *P1, const ec_curve_t *E1, int t1, const ec_point_t *P2, const ec_curve_t *E2, int t2, const ec_point_t *P3, const ec_curve_t *E3, int t3, const ec_point_t *P4, const ec_curve_t *E4, int t4) {
+  ec_point_t test1, test2, test3, test4;
+  ec_curve_t curve1, curve2, curve3, curve4;
+  test1 = *P1;
+  test2 = *P2;
+  test3 = *P3;
+  test4 = *P4;
+  copy_curve(&curve1, E1);
+  copy_curve(&curve2, E2);
+  copy_curve(&curve3, E3);
+  copy_curve(&curve4, E4);
+  res->res1 = 0;
+  res->res2 = 0;
+  res->res3 = 0;
+  res->res4 = 0;
+  if (ec_is_zero(&test1)) return;
+  if (ec_is_zero(&test2)) return;
+  if (ec_is_zero(&test3)) return;
+  if (ec_is_zero(&test4)) return;
+  ec_dbl_iter_4(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &test1, t1 - 1, &test1, &curve1, &test2, t2 - 1, &test2, &curve2, &test3, t3 - 1, &test3, &curve3, &test4, t4 - 1, &test4, &curve4);
+  if (ec_is_zero(&test1)) return;
+  if (ec_is_zero(&test2)) return;
+  if (ec_is_zero(&test3)) return;
+  if (ec_is_zero(&test4)) return;
+  ec_dbl(&test1, &test1, &curve1);
+  ec_dbl(&test2, &test2, &curve2);
+  ec_dbl(&test3, &test3, &curve3);
+  ec_dbl(&test4, &test4, &curve4);
+  res->res1 = ec_is_zero(&test1);
+  res->res2 = ec_is_zero(&test2);
+  res->res3 = ec_is_zero(&test3);
+  res->res4 = ec_is_zero(&test4);
+}
+
+static inline void test_point_order_twof_5(
+#if DEBUG_MODINV
+    const char *file_name, int line_num,
+#endif
+    resu32_5_t *res, const ec_point_t *P1, const ec_curve_t *E1, int t1, const ec_point_t *P2, const ec_curve_t *E2, int t2, const ec_point_t *P3, const ec_curve_t *E3, int t3, const ec_point_t *P4, const ec_curve_t *E4, int t4, const ec_point_t *P5, const ec_curve_t *E5, int t5) {
+  ec_point_t test1, test2, test3, test4, test5;
+  ec_curve_t curve1, curve2, curve3, curve4, curve5;
+  test1 = *P1;
+  test2 = *P2;
+  test3 = *P3;
+  test4 = *P4;
+  test5 = *P5;
+  copy_curve(&curve1, E1);
+  copy_curve(&curve2, E2);
+  copy_curve(&curve3, E3);
+  copy_curve(&curve4, E4);
+  copy_curve(&curve5, E5);
+  res->res1 = 0;
+  res->res2 = 0;
+  res->res3 = 0;
+  res->res4 = 0;
+  res->res5 = 0;
+  if (ec_is_zero(&test1)) return;
+  if (ec_is_zero(&test2)) return;
+  if (ec_is_zero(&test3)) return;
+  if (ec_is_zero(&test4)) return;
+  if (ec_is_zero(&test5)) return;
+  ec_dbl_iter_5(
+#if DEBUG_MODINV
+      file_name, line_num, 
+#endif
+      &test1, t1 - 1, &test1, &curve1, &test2, t2 - 1, &test2, &curve2, &test3, t3 - 1, &test3, &curve3, &test4, t4 - 1, &test4, &curve4, &test5, t5 - 1, &test5, &curve5);
+  if (ec_is_zero(&test1)) return;
+  if (ec_is_zero(&test2)) return;
+  if (ec_is_zero(&test3)) return;
+  if (ec_is_zero(&test4)) return;
+  if (ec_is_zero(&test5)) return;
+  ec_dbl(&test1, &test1, &curve1);
+  ec_dbl(&test2, &test2, &curve2);
+  ec_dbl(&test3, &test3, &curve3);
+  ec_dbl(&test4, &test4, &curve4);
+  ec_dbl(&test5, &test5, &curve5);
+  res->res1 = ec_is_zero(&test1);
+  res->res2 = ec_is_zero(&test2);
+  res->res3 = ec_is_zero(&test3);
+  res->res4 = ec_is_zero(&test4);
+  res->res5 = ec_is_zero(&test5);
 }
 
 static inline uint32_t ec_is_two_torsion(const ec_point_t *P, const ec_curve_t *E) {

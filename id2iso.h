@@ -728,20 +728,14 @@ static inline int dim2id2iso_ideal_to_isogeny_clapotis(
   double_couple_point_iter(&ker.T1, TORSION_EVEN_POWER - exp, &ker.T1, &E01);
   double_couple_point_iter(&ker.T2, TORSION_EVEN_POWER - exp, &ker.T2, &E01);
   double_couple_point_iter(&ker.T1m2, TORSION_EVEN_POWER - exp, &ker.T1m2, &E01);
-  test_point_order_twof_2(
+  assert(ibz_is_odd(u));
+  resu32_5_t ress;
+  test_point_order_twof_5(
 #if DEBUG_MODINV
       file_name, line_num, 
 #endif
-      &tpot2, &ker.T1.P1, &E01.E1, exp, &ker.T1m2.P2, &E01.E2, exp);
-  assert(tpot2.res1);
-  assert(tpot2.res2);
-  assert(ibz_is_odd(u));
-  test_point_order_twof_3(
-#if DEBUG_MODINV
-      __FILE__, __LINE__, 
-#endif
-      &res, &bas_u.P, &E01.E1, TORSION_EVEN_POWER, &bas_u.Q, &E01.E1, TORSION_EVEN_POWER, &bas_u.PmQ, &E01.E1, TORSION_EVEN_POWER);
-  assert(res.res1 & res.res2 & res.res3);
+      &ress, &ker.T1.P1, &E01.E1, exp, &ker.T1m2.P2, &E01.E2, exp, &bas_u.P, &E01.E1, TORSION_EVEN_POWER, &bas_u.Q, &E01.E1, TORSION_EVEN_POWER, &bas_u.PmQ, &E01.E1, TORSION_EVEN_POWER);
+  assert(ress.res1 & ress.res2 & ress.res3 & ress.res4 & ress.res5);
   copy_point(&pushed_points[0].P1, &bas_u.P);
   copy_point(&pushed_points[2].P1, &bas_u.PmQ);
   copy_point(&pushed_points[1].P1, &bas_u.Q);
