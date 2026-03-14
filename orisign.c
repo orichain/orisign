@@ -3,14 +3,6 @@
 #include "utilities.h"
 #include <stdint.h>
 
-void print_fp(uint64_t *a) {
-  for (int i=0;i<NWORDS_FIELD;i++) {
-    printf("0x%016llx%s", 
-        (unsigned long long)a[i], 
-        (i == NWORDS_FIELD - 1) ? "" : ", ");
-  }
-}
-
 int main () {
   unsigned char pk[CRYPTO_PUBLICKEYBYTES];
   unsigned char sk[CRYPTO_SECRETKEYBYTES];
@@ -25,7 +17,7 @@ int main () {
   print_hex("SK : ", sk, CRYPTO_SECRETKEYBYTES, 1);
   print_hex("PK : ", pk, CRYPTO_PUBLICKEYBYTES, 1);
 
-  const char *msg = "Test123";
+  const char *msg = "static inline int evaluate_random_aux_isogeny_signature(ec_curve_t *E_aux, ec_basis_t *B_aux, const ibz_t *norm, const quat_left_ideal_t *lideal_com_resp) {";
 #if DEBUG_MODINV
   const int N = 1;
 #else

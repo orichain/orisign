@@ -4,7 +4,7 @@ CFLAGS = -O3 -march=native -fomit-frame-pointer -funroll-loops -fno-tree-vectori
 LDFLAGS = -L/usr/local/lib -lm -lgmp
 LIBNAME = liborisign.a
 
-SRCS = globals.c fips202.c randombytes.c
+SRCS = globals.c fips202.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(LIBNAME)

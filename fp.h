@@ -5,6 +5,7 @@
 #include "types.h"
 #include "globals.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 static inline void fp_set_small(fp_t *x, const uint64_t val) {
@@ -197,3 +198,4 @@ static inline void fp_decode_reduce(fp_t *d, const void *src, size_t len) {
     fp_add(d, d, &a);
   }
 }
+

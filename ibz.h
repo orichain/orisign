@@ -1,7 +1,7 @@
 #pragma once
 #include "types.h"
-#include "randombytes.h"
 #include "globals.h"
+#include "utilities.h"
 #include <assert.h>
 #include <gmp.h>
 #include <stdint.h>
