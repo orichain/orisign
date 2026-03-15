@@ -20,7 +20,3 @@ static inline uint64_t get_time_monotonic_ns() {
   return ((uint64_t)ts.tv_sec * 1000000000ULL) + ts.tv_nsec;
 }
 
-static inline int randombytes(void *buf, size_t n) {
-  arc4random_buf(buf, n);
-  return 0;
-}

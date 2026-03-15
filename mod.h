@@ -1,7 +1,9 @@
 #pragma once
 #include <stdint.h>
 #include <string.h>
+#if !defined(__linux__)
 #include <sys/_null.h>
+#endif
 #include "constants.h"
 
 #if DEBUG_MODINV
