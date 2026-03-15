@@ -30,7 +30,7 @@ int main () {
   uint64_t t0 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {
-    int ret = sqisign_sign(sig, &siglen, msg, strlen(msg), sk);
+    int ret = sqisign_sign(sig, &siglen, (const unsigned char *)msg, strlen(msg), sk);
     if (ret == 0) ctr++;
   }
 
@@ -55,7 +55,7 @@ int main () {
   uint64_t t02 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {
-    int ret = sqisign_verify(msg, strlen(msg), sig, CRYPTO_BYTES, pk);
+    int ret = sqisign_verify((const unsigned char *)msg, strlen(msg), sig, CRYPTO_BYTES, pk);
     if (ret == 0) ctr++;
   }
 
