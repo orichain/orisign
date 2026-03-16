@@ -8,8 +8,8 @@ int main () {
   unsigned char sk[CRYPTO_SECRETKEYBYTES];
   unsigned char pk2[CRYPTO_PUBLICKEYBYTES];
   unsigned char sk2[CRYPTO_SECRETKEYBYTES];
-  unsigned char sig[CRYPTO_BYTES];
   unsigned long long siglen;
+  typedef unsigned char sig_t[CRYPTO_BYTES];
 
   sqisign_keypair(pk, sk);
   sqisign_keypair(pk2, sk2);
@@ -23,6 +23,7 @@ int main () {
 #else
   const int N = 100;
 #endif
+  sig_t sig[N];
   int ctr;
 #if DEBUG_MODINV
   printf("\n=== SIGN START ===\n");
@@ -30,13 +31,12 @@ int main () {
   uint64_t t0 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {
-    int ret = sqisign_sign(sig, &siglen, (const unsigned char *)msg, strlen(msg), sk);
+    int ret = sqisign_sign(sig[i], &siglen, (const unsigned char *)msg, strlen(msg), sk);
+    if (i == 0 || i == 1) print_hex("SIG: ", sig[i], CRYPTO_BYTES, 1);
     if (ret == 0) ctr++;
   }
 
   uint64_t t1 = get_time_monotonic_ns();
-
-  print_hex("SIG: ", sig, CRYPTO_BYTES, 1);
 
   uint64_t total_ns = t1 - t0;
 
@@ -55,7 +55,7 @@ int main () {
   uint64_t t02 = get_time_monotonic_ns();
   ctr = 0;
   for (int i = 0; i < N; i++) {
-    int ret = sqisign_verify((const unsigned char *)msg, strlen(msg), sig, CRYPTO_BYTES, pk);
+    int ret = sqisign_verify((const unsigned char *)msg, strlen(msg), sig[i], CRYPTO_BYTES, pk);
     if (ret == 0) ctr++;
   }
 
